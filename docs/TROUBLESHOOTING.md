@@ -50,7 +50,7 @@
 
 - 原因：MCP 是長駐 process，持有啟動時的 code。
 - 解法：在 Cherry Studio 把 `market-ai` **關掉再打開**（或重啟 Cherry Studio）。
-- 驗證：`health_check.build.build_id` 應等於目前版本（V1 Freeze = `25a9911d63c47636`）。
+- 驗證：`health_check.build.build_id` 應等於目前版本（V1 Freeze = `bbf3cb2f9a80d20e`）。
 
 ## XGBoost 相關
 

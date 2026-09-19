@@ -1,15 +1,17 @@
 # V1 FREEZE MANIFEST
 
 - **Freeze date**：2026-09-19
-- **Freeze build_id**：`25a9911d63c47636`
+- **Freeze build_id**：`bbf3cb2f9a80d20e`
 - **market_ai_version**：1.1.0（schema_version 1.1）
 - **Freeze tag**：`v1-freeze-2026-09-19`
 
-> **build_id 沿革**：公開發布前的本機驗收 build 為 `4742a33e5b17d1d0`。
-> 發布時對 `mcp/server.py` 做了一項**可攜性修復**（移除硬編碼 `D:\MARKET_AI_HUB\logs`
-> 路徑，改由專案根目錄推導，否則其他機器 clone 後 MCP 會啟動失敗）。
-> 該檔在 build_id 的 fingerprint 清單內，因此發布 build_id 變更為 `25a9911d63c47636`。
-> 兩者代表同一份已驗收邏輯；發布版另含可攜性修復。
+> **build_id 沿革**：本機驗收時（未發布）的 build 為 `4742a33e5b17d1d0`。
+> 公開發布前做了兩項**不改變研究邏輯**的整理，因此發布 build_id 為 `bbf3cb2f9a80d20e`：
+> 1. **可攜性修復**：移除 `mcp/server.py` 內硬編碼的 `D:\MARKET_AI_HUB\logs` 路徑
+>    （改由專案根目錄推導；否則其他機器 clone 後 MCP 會啟動失敗）。
+> 2. **換行正規化**：所有文字檔統一為 LF（`.gitattributes`），
+>    確保任何機器 clone 後得到相同位元組、相同 build_id。
+> 兩者代表同一份已驗收邏輯。
 
 ## 測試
 

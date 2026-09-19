@@ -1,7 +1,7 @@
 MARKET_AI_HUB — V1 FREEZE ENVIRONMENT SNAPSHOT
 ================================================
 Freeze date        : 2026-09-19
-Freeze build_id    : 25a9911d63c47636
+Freeze build_id    : bbf3cb2f9a80d20e
 market_ai_version  : 1.1.0
 
 OS                 : Windows 11 (10.0.26200)

@@ -13,7 +13,7 @@
 
 ## 1. V1 Freeze 狀態
 
-- **Freeze build_id**：`25a9911d63c47636`
+- **Freeze build_id**：`bbf3cb2f9a80d20e`
 - **Freeze 日期**：2026-09-19
 - **測試**：`154 passed`（pytest）；MCP smoke `PASS`（13 tools）
 - **Research Gates**：`ENGINEERING_GATE` 已通過（工程正確性）；`MODEL_PREDICTIVE_GATE` /

@@ -75,7 +75,7 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
   "cuda_available": true,
   "chronos": "ready",
   "timesfm": "ready",
-  "build": { "build_id": "25a9911d63c47636", ... }
+  "build": { "build_id": "bbf3cb2f9a80d20e", ... }
 }
 ```
 
@@ -84,7 +84,7 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
 ## 4. 如何確認 build id
 
 呼叫 `health_check` 或 `get_system_info`，看 `build.build_id`。
-本 V1 Freeze 應為 `25a9911d63c47636`。
+本 V1 Freeze 應為 `bbf3cb2f9a80d20e`。
 
 若 build_id 與你剛安裝的版本不符 → **你正在用舊 process**（見下一節）。
 
