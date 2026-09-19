@@ -1,0 +1,60 @@
+# MARKET_AI_HUB — Model Manifest (V1 Freeze)
+#
+# 目的：讓未來可以在不同機器上盡量重新取得「V1 當時真正使用的模型版本」，
+# 而不是下載最新模型。weights 不進 repository（見 .gitignore）。
+#
+# download_method 一律使用官方 Hugging Face / 官方 upstream；
+# scripts/download_models.py 會讀本檔並 pin revision。
+#
+# ⚠️ Repository 公開 ≠ 第三方模型權重可再散布。嚴禁把 weights 放進 GitHub。
+
+schema_version: 1
+
+models:
+  - logical_name: chronos-2
+    provider: amazon
+    upstream_repo: https://huggingface.co/amazon/chronos-2
+    model_id: amazon/chronos-2
+    revision: 29ec3766d36d6f73f0696f85560a422f50e8498c
+    model_task: PRICE_FORECAST
+    license: Apache-2.0
+    redistributable_weights: true
+    required: true
+    download_method: huggingface_hub snapshot_download (or chronos-forecasting from_pretrained)
+    estimated_size_mb: 456
+    notes: >
+      Deterministic quantile forecaster (21 native quantiles). Loaded via
+      chronos-forecasting BaseChronosPipeline. Apache-2.0 allows redistribution,
+      but本專案仍不把 weights 放入 GitHub。
+
+  - logical_name: timesfm-3.0
+    provider: google
+    upstream_repo: https://huggingface.co/google/timesfm-3.0-pytorch
+    model_id: google/timesfm-3.0-pytorch
+    revision: 43046b85ec22d584a13f8098c2ed39c889e129c2
+    model_task: PRICE_FORECAST
+    license: timesfm-non-commercial-license-v1.0
+    redistributable_weights: false
+    required: true
+    download_method: huggingface_hub snapshot_download (or timesfm TimesFM3Forecaster.from_pretrained)
+    estimated_size_mb: 1262
+    notes: >
+      ⚠️ NON-COMMERCIAL / RESEARCH ONLY. Weights license 為
+      timesfm-non-commercial-license-v1.0；repo source code 為 Apache-2.0。
+      不得商業部署、不得重新散布 weights。所有輸出帶 TIMESFM3_NON_COMMERCIAL_ONLY。
+
+  - logical_name: fincast
+    provider: vincent05r
+    upstream_repo: https://huggingface.co/Vincent05R/FinCast
+    model_id: Vincent05R/FinCast
+    revision: 2d7d90b159db8961d27c2cf165d51195902ef92b
+    model_task: PRICE_FORECAST
+    license: Apache-2.0 (repo); README 標示 research/education
+    redistributable_weights: false
+    required: false
+    download_method: huggingface_hub hf_hub_download("Vincent05R/FinCast", "v1.pth") + git clone vincent05r/FinCast-fts
+    estimated_size_mb: 3967
+    notes: >
+      OPTIONAL。FinCast 依賴（tensorflow/jax 舊版 pinned）與主 venv 衝突 →
+      使用隔離 .venv-fincast（見 docs/DEPENDENCIES.md）。非 V1 基本執行必需。
+      research/education 用途。

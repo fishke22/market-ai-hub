@@ -1,0 +1,84 @@
+# ── Secrets / credentials ──
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.crt
+credentials/
+secrets/
+
+# ── Virtual environments ──
+.venv/
+.venv-fincast/
+venv/
+ENV/
+
+# ── Python caches ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# ── Logs / reports ──
+logs/
+*.log
+reports/
+
+# ── Caches ──
+cache/
+.cache/
+.hf_cache/
+huggingface_cache/
+hf_cache/
+
+# ── Model weights / checkpoints (NEVER commit) ──
+models/cache/
+models/checkpoints/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+
+# ── Databases ──
+*.sqlite
+*.sqlite3
+*.db
+*.duckdb
+
+# ── Market data (licensed / provider data — NEVER commit) ──
+data/raw/
+data/processed/
+data/cache/
+data/private/
+*.parquet
+*.feather
+
+# ── Experiment tracking ──
+mlruns/
+output/
+outputs/
+
+# ── Third-party cloned repos (download on demand, not vendored) ──
+external/fincast/
+
+# ── Local backups / agent scratch ──
+.remediation_backup_20260919/
+.opencode/
+environment_export/
+MARKET_AI_BACKUP/
+
+# ── IDE / OS ──
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini

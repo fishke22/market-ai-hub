@@ -1,0 +1,47 @@
+# MARKET_AI_HUB — runtime dependencies (V1 Freeze, exact pins)
+#
+# 這是實際跑 MARKET_AI_HUB 所需的直接依賴（精確版本 = V1 Freeze 驗證過的版本）。
+# 安裝（Windows, venv 已啟用）：
+#   pip install -r requirements-runtime.txt
+#
+# 注意：torch 的 CUDA build 需要 PyTorch 官方 index，例如：
+#   pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cu130
+# 若只要 CPU：pip install torch==2.14.0（預設 PyPI CPU wheel）
+
+# Core data / compute
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+scikit-learn==1.9.1
+pyarrow==25.0.1
+
+# Traditional ML baselines
+xgboost==3.4.1
+lightgbm==4.7.0
+
+# Storage
+duckdb==1.5.5
+
+# Market data providers
+yfinance==1.7.0
+requests==2.34.2
+httpx==0.28.1
+pytz==2026.3.post1
+tzdata==2026.4
+PyYAML==6.0.3
+
+# Exchange calendars
+exchange-calendars==4.13.2
+pandas-market-calendars==5.4.0
+
+# Config / schema
+pydantic==2.13.5
+python-dotenv==1.2.3
+
+# MCP server
+mcp==2.2.0
+
+# Time-series foundation models (weights are downloaded separately — see config/model_manifest.yaml)
+chronos-forecasting==2.3.2
+timesfm==3.0.2
+torch==2.14.0

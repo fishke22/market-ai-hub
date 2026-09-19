@@ -1,0 +1,4 @@
+# MARKET_AI_HUB — development / test dependencies (V1 Freeze)
+# 安裝：pip install -r requirements-dev.txt
+
+pytest==9.1.1

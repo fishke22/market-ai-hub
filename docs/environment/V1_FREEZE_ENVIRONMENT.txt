@@ -1,0 +1,47 @@
+MARKET_AI_HUB — V1 FREEZE ENVIRONMENT SNAPSHOT
+================================================
+Freeze date        : 2026-09-19
+Freeze build_id    : 4742a33e5b17d1d0
+market_ai_version  : 1.1.0
+
+OS                 : Windows 11 (10.0.26200)
+CPU architecture   : AMD64 (x64)
+Python             : 3.12.13 (CPython, x64)
+Package manager    : uv 0.11.23 (pip not installed in uv venv)
+GPU                : NVIDIA GeForce RTX 4060 Ti (16 GB VRAM)
+GPU driver         : 616.56 (CUDA UMD 13.4)
+Torch              : 2.14.0+cu130
+CUDA (torch)       : 13.0 (torch.version.cuda), torch.cuda.is_available()=True
+
+Key libraries (exact):
+  numpy==2.5.3
+  pandas==3.0.6
+  scipy==1.18.1
+  scikit-learn==1.9.1
+  xgboost==3.4.1
+  lightgbm==4.7.0
+  duckdb==1.5.5
+  pyarrow==25.0.1
+  yfinance==1.7.0
+  mcp==2.2.0
+  pydantic==2.13.5
+  exchange-calendars==4.13.2
+  pandas-market-calendars==5.4.0
+  chronos-forecasting==2.3.2
+  timesfm==3.0.2
+  torch==2.14.0+cu130
+  transformers==5.17.0
+  huggingface-hub==1.32.0
+
+Models (logical → revision):
+  chronos-2         amazon/chronos-2              revision 29ec3766d36d6f73f0696f85560a422f50e8498c
+  timesfm-3.0       google/timesfm-3.0-pytorch    revision 43046b85ec22d584a13f8098c2ed39c889e129c2
+  fincast (optional) Vincent05R/FinCast           revision 2d7d90b159db8961d27c2cf165d51195902ef92b
+
+Tests              : 154 passed (pytest), MCP smoke PASS (13 tools)
+MCP tools          : health_check, get_system_info, get_data_source_status, get_market_data,
+                     predict_chronos, predict_timesfm, predict_ensemble, get_model_performance,
+                     backtest, analyze_osaka_nikkei, analyze_taiwan_stock,
+                     get_research_gates, run_ts_validation
+
+Note: 完整傳遞依賴清單見 requirements-lock-windows-x64.txt。
