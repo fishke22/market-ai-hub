@@ -13,6 +13,9 @@ import asyncio
 import json
 import os
 
+from pathlib import Path
+_REPO = Path(__file__).resolve().parents[1]
+
 HORIZONS = ["1d", "2d", "5d", "10d"]
 
 
@@ -36,7 +39,7 @@ async def run() -> dict:
 
     # 與 Cherry Studio mcp_server 表內完全相同：market-ai-mcp.exe 無 args
     params = StdioServerParameters(
-        command=r"D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe", args=[]
+        command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
     )
     report: dict = {}
     async with stdio_client(params) as (r, w):
@@ -47,7 +50,7 @@ async def run() -> dict:
             info = await call(s, "get_system_info", {})
             b = info.get("build", {})
             report["build_fingerprint"] = {
-                "PASS": bool(b.get("build_id") and b.get("source_root") == r"D:\MARKET_AI_HUB" and b.get("python_executable")),
+                "PASS": bool(b.get("build_id") and b.get("source_root") and b.get("python_executable")),
                 "detail": {k: b.get(k) for k in ("build_id", "market_ai_version", "source_root", "schema_version")},
             }
             hc = await call(s, "health_check", {})
@@ -156,7 +159,7 @@ async def run() -> dict:
 
 if __name__ == "__main__":
     report = asyncio.run(run())
-    out = r"D:\MARKET_AI_HUB\reports\v1_1_acceptance.json"
+    out = str(_REPO / "reports" / "v1_1_acceptance.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2, default=str)

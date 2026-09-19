@@ -5,6 +5,9 @@ import asyncio
 import json
 import os
 
+from pathlib import Path
+_REPO = Path(__file__).resolve().parents[1]
+
 HORIZONS = ["1d", "2d", "5d", "10d"]
 
 
@@ -27,7 +30,7 @@ async def run() -> dict:
     from mcp.client.stdio import stdio_client
 
     params = StdioServerParameters(
-        command=r"D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe", args=[]
+        command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
     )
     report: dict = {}
     async with stdio_client(params) as (r, w):
@@ -110,7 +113,7 @@ async def run() -> dict:
 
 if __name__ == "__main__":
     report = asyncio.run(run())
-    out = r"D:\MARKET_AI_HUB\reports\v1_2_acceptance.json"
+    out = str(_REPO / "reports" / "v1_2_acceptance.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2, default=str)

@@ -1,6 +1,9 @@
 """FinCast smoke（optional，integration）：隔離 venv subprocess bridge。"""
 import pytest
 
+from pathlib import Path
+_REPO = Path(__file__).resolve().parents[1]
+
 pytestmark = pytest.mark.integration
 
 
@@ -12,7 +15,7 @@ def test_status():
 
 
 @pytest.mark.skipif(
-    not __import__("pathlib").Path(r"D:\MARKET_AI_HUB\.venv-fincast\Scripts\python.exe").exists(),
+    not __import__("pathlib").Path(str(_REPO / ".venv-fincast" / "Scripts" / "python.exe")).exists(),
     reason="fincast venv not present",
 )
 def test_predict_bridge():

@@ -4,6 +4,9 @@ import json
 
 import pytest
 
+from pathlib import Path
+_REPO = Path(__file__).resolve().parents[1]
+
 pytestmark = pytest.mark.integration
 
 
@@ -12,7 +15,7 @@ async def _call_tool(name, args=None):
     from mcp.client.stdio import stdio_client
 
     params = StdioServerParameters(
-        command=r"D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe", args=[]
+        command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
@@ -27,7 +30,7 @@ def test_tools_list():
         from mcp.client.stdio import stdio_client
 
         params = StdioServerParameters(
-            command=r"D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe", args=[]
+            command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
         )
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
@@ -56,7 +59,7 @@ def test_health_check():
 def test_get_system_info():
     info = asyncio.run(_call_tool("get_system_info"))
     assert info["python"]
-    assert info["project_path"] == r"D:\MARKET_AI_HUB"
+    assert info["project_path"]  # non-empty (portable)
 
 
 def test_get_data_source_status():

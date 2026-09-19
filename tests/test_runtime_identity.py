@@ -19,7 +19,9 @@ def test_fingerprint_fields():
 
 
 def test_source_root_is_market_ai_hub():
-    assert str(SOURCE_ROOT) == r"D:\MARKET_AI_HUB"
+    # portable: source_root must be a real dir containing the package (not a hardcoded path)
+    assert (SOURCE_ROOT / "src" / "market_ai_hub").exists()
+    assert SOURCE_ROOT.name == "MARKET_AI_HUB" or (SOURCE_ROOT / "pyproject.toml").exists()
 
 
 def test_build_id_stable_within_process():

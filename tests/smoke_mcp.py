@@ -5,13 +5,16 @@ import asyncio
 import json
 import sys
 
+from pathlib import Path
+_REPO = Path(__file__).resolve().parents[1]
+
 
 async def run() -> int:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
     params = StdioServerParameters(
-        command=r"D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe",
+        command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"),
         args=[],
         env=None,
     )
@@ -34,7 +37,7 @@ async def run() -> int:
             sysinfo = await session.call_tool("get_system_info", {})
             results["system_info"] = json.loads(sysinfo.content[0].text) if sysinfo.content else None
 
-    out = r"D:\MARKET_AI_HUB\reports\mcp_smoke.json"
+    out = str(_REPO / "reports" / "mcp_smoke.json")
     import os
 
     os.makedirs(os.path.dirname(out), exist_ok=True)

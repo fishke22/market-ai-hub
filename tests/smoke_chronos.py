@@ -5,9 +5,12 @@ import json
 import sys
 from datetime import datetime, timezone
 
+from pathlib import Path
+_REPO = Path(__file__).resolve().parents[1]
+
 
 def main() -> int:
-    sys.path.insert(0, r"D:\MARKET_AI_HUB\src")
+    sys.path.insert(0, str(_REPO / "src"))
     import numpy as np
     import torch
 
@@ -58,7 +61,7 @@ def main() -> int:
         print("[3][4] forecast FAIL:", e)
 
     summary = {"test": "chronos_smoke", "at": datetime.now(timezone.utc).isoformat(), "results": results}
-    out = r"D:\MARKET_AI_HUB\reports\chronos_smoke.json"
+    out = str(_REPO / "reports" / "chronos_smoke.json")
     import os
 
     os.makedirs(os.path.dirname(out), exist_ok=True)
