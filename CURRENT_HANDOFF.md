@@ -2,7 +2,7 @@
 
 - Current phase: V1.1 FINAL VALIDATION & RUNTIME CONSISTENCY REMEDIATION — 完成
 - Gate: READY_FOR_V1_PROMPT_FREEZE
-- Current build_id: e77d9c9a2f0a015b（code 變更後會變，見 services/build_info.py）
+- Current build_id: 25a9911d63c47636（code 變更後會變，見 services/build_info.py）
 - Last updated: 2026-09-19
 
 ## 本輪完成重點（V1.1）
@@ -34,7 +34,7 @@
 
 ## 使用者下一步（重要）
 - 在 Cherry Studio 把 market-ai MCP 開關關掉再打開（或重啟 Cherry Studio）
-- 驗證：health_check → build.build_id == e77d9c9a2f0a015b
+- 驗證：health_check → build.build_id == 25a9911d63c47636
 
 ## Known limitations
 - TS 模型 UNVALIDATED（12-fold 未打敗 naive）；TW 日期 WEEKEND_ONLY_APPROX；

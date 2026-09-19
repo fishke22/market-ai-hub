@@ -1,9 +1,15 @@
 # V1 FREEZE MANIFEST
 
 - **Freeze date**：2026-09-19
-- **Freeze build_id**：`4742a33e5b17d1d0`
+- **Freeze build_id**：`25a9911d63c47636`
 - **market_ai_version**：1.1.0（schema_version 1.1）
 - **Freeze tag**：`v1-freeze-2026-09-19`
+
+> **build_id 沿革**：公開發布前的本機驗收 build 為 `4742a33e5b17d1d0`。
+> 發布時對 `mcp/server.py` 做了一項**可攜性修復**（移除硬編碼 `D:\MARKET_AI_HUB\logs`
+> 路徑，改由專案根目錄推導，否則其他機器 clone 後 MCP 會啟動失敗）。
+> 該檔在 build_id 的 fingerprint 清單內，因此發布 build_id 變更為 `25a9911d63c47636`。
+> 兩者代表同一份已驗收邏輯；發布版另含可攜性修復。
 
 ## 測試
 

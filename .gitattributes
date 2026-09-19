@@ -1,0 +1,18 @@
+# 本 repository 的 build_id 是「關鍵 source 檔內容的 sha256」。
+# 為確保任何機器 clone 後得到「完全相同」的位元組（進而得到相同 build_id），
+# 這裡停用 Git 的自動換行轉換（不做 LF<->CRLF 轉換），checkout 一律 byte-exact。
+#
+# 因此請勿依賴 autocrlf；也不要對這些檔案做未預期的換行改寫。
+* -text
+
+# 明確標示二進位（保險）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.parquet binary
+*.duckdb binary
+*.sqlite binary
+*.pth binary
+*.safetensors binary
