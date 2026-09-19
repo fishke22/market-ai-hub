@@ -1,4 +1,8 @@
-# CHERRY STUDIO 設定（MCP）
+# Cherry Studio 設定範例（MCP）
+
+> MARKET_AI_HUB **不是 Cherry Studio 專用**。它是一個 stdio MCP Server；本文件只是示範如何在 Cherry Studio 這個 MCP Client 中接入。
+>
+> 其他 MCP Client 請先看通用文件：[`MCP_CLIENT_SETUP.md`](MCP_CLIENT_SETUP.md)。
 
 本文件教你如何在 Cherry Studio 加入 MARKET_AI_HUB 的 MCP server。
 **所有路徑請換成你自己的實際路徑**（本文件用 `D:\MARKET_AI_HUB` 當範例，不含任何個人名稱）。
@@ -38,10 +42,10 @@ Test-Path "D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe"
 | Working directory | `D:\MARKET_AI_HUB`（若介面有此欄位才填） |
 | Environment | 可留空；或加 `FINMIND_TOKEN`、`FRED_API_KEY`（值放你的免費 token） |
 
-> **不要**把 token 寫進 command 或 args。若需要，用 Environment 欄位或 `.env`。
+> **不要**把 token 寫進 command、args 或聊天 Prompt。
 
 6. 儲存並**啟用**（打開開關）。
-7. 稍等數秒，Cherry Studio 應顯示工具清單（13 個工具）。
+7. 稍等數秒，Cherry Studio 應顯示工具清單（V1 Freeze 為 13 個 tools）。
 
 ### 關於 Python executable
 
@@ -66,7 +70,7 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
 
 ## 3. 如何確認 health_check
 
-在 Cherry Studio 對話中請 AI 呼叫 `health_check`，或在開發者工具查看工具輸出。預期：
+在 Cherry Studio 對話中請 AI 呼叫 `health_check`，或在開發者工具查看工具輸出。預期類似：
 
 ```json
 {
@@ -75,7 +79,7 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
   "cuda_available": true,
   "chronos": "ready",
   "timesfm": "ready",
-  "build": { "build_id": "bbf3cb2f9a80d20e", ... }
+  "build": { "build_id": "bbf3cb2f9a80d20e" }
 }
 ```
 
@@ -84,33 +88,58 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
 ## 4. 如何確認 build id
 
 呼叫 `health_check` 或 `get_system_info`，看 `build.build_id`。
-本 V1 Freeze 應為 `bbf3cb2f9a80d20e`。
 
-若 build_id 與你剛安裝的版本不符 → **你正在用舊 process**（見下一節）。
+公開 V1 Freeze：
 
----
+```text
+bbf3cb2f9a80d20e
+```
 
-## 5. ⚠️ MCP 是長駐 process：更新程式後一定要重啟
-
-Cherry Studio 的 MCP server 是**長駐（long-running）process**。
-它只在你「啟用 / 啟動」的那一刻載入程式碼；之後你改了檔案，**它不會自動重載**。
-
-**症狀**：明明修好了 bug，Cherry Studio 仍出現舊行為（例如舊的錯誤、舊的 build_id）。
-
-**解法**：在 Cherry Studio 把 `market-ai` MCP **關掉再打開**（或重啟 Cherry Studio），
-讓它重新 spawn process，然後用 `health_check.build.build_id` 確認已載入新版本。
+若你使用後續版本，build_id 可能不同；重點是同一個 runtime 的 tools 必須回傳一致版本。
 
 ---
 
-## 6. 常見錯誤
+## 5. MCP 是長駐 process：更新程式後一定要重啟
+
+Cherry Studio 啟動的 MCP server 是長駐 process。
+它只在啟動時載入程式碼；你後來改了檔案，它**不會自動 reload**。
+
+症狀：
+
+> 程式明明更新了，但 AI 還在回舊行為或舊 build_id。
+
+解法：
+
+1. 在 Cherry Studio 關閉 `market-ai` MCP。
+2. 再重新啟用。
+3. 呼叫 `health_check`。
+4. 確認 build_id。
+
+---
+
+## 6. 建議第一個 Prompt
+
+```text
+先不要分析市場。
+請呼叫 market-ai 的 health_check、get_system_info 與 get_research_gates。
+告訴我 MCP 是否正常、目前 build_id、哪些模型 ready、哪些 Research Gate 已通過，以及哪些能力尚未被證明。
+```
+
+更多範例：[`prompts/QUICK_PROMPTS.md`](prompts/QUICK_PROMPTS.md)
+
+完整 Agent 行為參考：[`prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md`](prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md)
+
+---
+
+## 7. 常見錯誤
 
 | 症狀 | 原因 / 解法 |
 |------|------------|
-| 工具清單是空的 / 連線失敗 | Command 路徑錯、`.venv` 未建、或未下載依賴。手動跑 `market-ai-mcp.exe` 看錯誤。 |
-| `Tool Not Found` | MCP 未啟用，或該工具名稱拼錯。重啟 MCP。 |
+| 工具清單是空的 / 連線失敗 | Command 路徑錯、`.venv` 未建、或未安裝依賴。手動跑 `market-ai-mcp.exe` 看錯誤。 |
+| `Tool Not Found` | MCP 未啟用，或 tool 名稱拼錯。重啟 MCP。 |
 | 回傳仍是舊行為 / build_id 不更新 | 長駐 process 持有舊 code → 關掉再打開 MCP。 |
 | `chronos: unavailable` | 模型未下載 → 跑 `download_models.py --download`。 |
-| 第一次呼叫很慢 | 模型首次載入（數十秒）；之後會快取。 |
-| GPU OOM | 關閉其他佔用 GPU 的程式，或改用 CPU（移除 CUDA torch）。 |
+| 第一次呼叫很慢 | 模型首次載入；後續同 process 通常會快很多。 |
+| GPU OOM | 關閉其他佔用 GPU 的程式，或使用 CPU。 |
 
-更多：`docs/TROUBLESHOOTING.md`。
+更多：[`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
