@@ -1,7 +1,7 @@
 [project]
 name = "market-ai-hub"
 version = "0.1.0"
-description = "台股 + 大阪日經 AI 預測中樞 (MCP for Cherry Studio) — 研究用途，非交易系統"
+description = "台股 + 大阪日經金融市場研究 MCP Server — 可供任何支援 stdio MCP 的 AI Client 使用，非交易系統"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = { text = "Apache-2.0" }
