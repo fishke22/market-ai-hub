@@ -112,13 +112,19 @@ def _index_proxy_reference() -> dict | None:
     """TAIEX cash index proxy（^TWII，RESEARCH_PROXY，非可成交 futures price）。"""
     try:
         from market_ai_hub.providers.yfinance_provider import YFinanceProvider
+        from market_ai_hub.services.calendar import sanitize_daily_exchange_sessions
 
         df = YFinanceProvider().fetch("^TWII", period="1mo")
         if df.empty:
             return None
+        df = sanitize_daily_exchange_sessions(df, "^TWII")  # 排除週末 invalid bars
+        if df.empty:
+            return None
         last = df.sort_values("timestamp_utc").iloc[-1]
         return {"price": float(last["close"]), "price_type": PRICE_TYPE_PROXY,
-                "price_timestamp": str(last["timestamp_utc"])}
+                "price_timestamp": str(last["timestamp_utc"]),
+                "reference_trading_date": str(last["timestamp_local"])[:10],
+                "reference_session_valid": True}
     except Exception:
         return None
 
@@ -167,13 +173,18 @@ def _taiwan_stock_reference(symbol: str) -> dict | None:
     # 3. yfinance fallback（RESEARCH_PROXY）
     try:
         from market_ai_hub.providers.yfinance_provider import YFinanceProvider
+        from market_ai_hub.services.calendar import sanitize_daily_exchange_sessions
 
         df = YFinanceProvider().fetch(symbol, period="6mo")
+        if df is not None and not df.empty:
+            df = sanitize_daily_exchange_sessions(df, symbol)
         if df is not None and not df.empty:
             last = df.sort_values("timestamp_utc").iloc[-1]
             return {"price": float(last["close"]), "price_type": PRICE_TYPE_PROXY,
                     "price_timestamp": str(last["timestamp_utc"]), "source": "yfinance",
-                    "data_grade": "RESEARCH_PROXY"}
+                    "data_grade": "RESEARCH_PROXY",
+                    "reference_trading_date": str(last["timestamp_local"])[:10],
+                    "reference_session_valid": True}
     except Exception:
         pass
 
@@ -390,6 +401,15 @@ def _fill_research_truth(packet: AnalysisPacket) -> None:
         "top_positive_drivers": packet.top_positive_drivers,
         "top_negative_drivers": packet.top_negative_drivers,
         "note": "explanatory features only; formal causal layer reads Phase2V-C.1 evidence (NON_EXECUTABLE_FORECAST_EDGE)",
+    }
+
+    # 2Q-F.4：display policy（answer layer 不需重建 safety logic）
+    packet.display_policy = {
+        "may_present_direction": False,          # 0 eligible votes → 無 formal direction
+        "may_present_probabilities": False,      # uncalibrated scores ≠ probability
+        "may_present_support_resistance": False,  # NOT_AVAILABLE；不由 P10/P90 生成
+        "may_present_as_direct_forecast": False,  # ^N225 只是 PROXY
+        "may_present_trading_advice": False,      # NO_ECONOMIC_EDGE
     }
 
 
