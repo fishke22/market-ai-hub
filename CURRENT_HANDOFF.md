@@ -1,6 +1,6 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2P-C（Remote Reconciliation + Client-Neutral + Phase2 Merge + GitHub Publication）**
+- Current phase: **Phase 2P-D（Agent Response Truthfulness Hotfix + Target Semantics Audit）**
 - Gate: **PHASE2VB2_PASS**（最近；前置 PHASE2VB_PASS + PHASE2VB1_PASS）
 - build_id：**ccabe1e1552d9ae7**（Phase 2H 起；V1 Freeze 為 `bbf3cb2f9a80d20e`）
 
@@ -28,6 +28,16 @@
 | **2P-A** | Final Publication Acceptance + Release Freeze + Clean Reconstruction Audit | **PHASE2PA_PASS** |
 | **2P-B** | Beginner Ops Docs + Cherry Studio Guide + Final Publication | **PHASE2PB_BLOCKED**（remote mismatch） |
 | **2P-C** | Remote Reconciliation + Client-Neutral Merge + GitHub Publication | **PHASE2PC_PUBLISHED** |
+| **2P-D** | Agent Response Truthfulness Hotfix + Target Semantics Audit | **PHASE2PD_PUBLISHED** |
+
+## 2P-D 本棒成果（Agent Response Truthfulness Hotfix，documentation/prompt only）
+- 新增 `docs/prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`（Phase 2 / v2.0.0-rc1 對齊，含 0A 語意保護 10 條）。
+- 10 條語意保護：continuous vs contract / settlement vs model target / direction eligibility（NO_VALIDATED_MODEL_CONSENSUS）/ uncalibrated probability / economic validation truth / support-resistance evidence / P10-P90 / holiday trading（2026-09-21~23 祝日交易）/ model-specific validation / forward registry（registered≠validated）。
+- V3.3 標 DEPRECATED AS PRIMARY / HISTORICAL COMPATIBILITY REFERENCE。
+- README / MCP_CLIENT_SETUP / CHERRY_STUDIO_SETUP / START_HERE_BEGINNER 推薦 System Prompt 改指 V4。
+- 新增 `tests/test_phase2pd.py`（8 tests）；全 suite 657 passed。
+- 不改 runtime / MCP tools / models / research conclusions / training defaults。
+- PR #4 merged；版本仍 v2.0.0-rc1。
 
 ## 2P-C 本棒成果（Remote Reconciliation + GitHub Publication）
 - Remote client-neutral 改寫（3922365）與 local Phase 2 工作**兩者全保留**（不二選一）。
