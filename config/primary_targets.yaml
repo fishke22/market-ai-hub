@@ -1,0 +1,112 @@
+# PRIMARY TARGET REGISTRY（Phase 2Q-C）
+# 三大 first-class target families。不 hardcode 私人資料路徑。
+# direct_sources / proxy_sources / historical_sources 只記 semantic 標籤，
+# 實際路徑/憑證由 runtime config / env 提供。
+
+target_families:
+  - OSAKA_MICRO
+  - TAIWAN_STOCK
+  - TAIWAN_INDEX
+
+targets:
+  - target_family: OSAKA_MICRO
+    target: OSE_NIKKEI225_MICRO_FUTURES
+    symbol: NK225MC
+    instrument_type: futures_micro
+    exchange: OSE
+    timezone: Asia/Tokyo
+    calendar: OSE/JPX_DERIVATIVES
+    currency: JPY
+    price_unit: index_points
+    tick_size_if_applicable: 5
+    multiplier_if_applicable: 100
+    direct_sources: [JPX_settlement]
+    proxy_sources: ["^N225 (Nikkei 225 index, PROXY only)"]
+    historical_sources: [JPX_settlement_history, 225LABO_continuous]
+    execution_instrument: OSE_NIKKEI225_MICRO_FUTURES
+    data_semantics: "Continuous != Contract; Settlement != Bar Close; Direct != Proxy"
+
+  - target_family: TAIWAN_STOCK
+    target: TAIWAN_INDIVIDUAL_STOCK
+    symbol: dynamic  # 2330 / 2317 / 2881 / 1301 / 8299 ...
+    instrument_type: cash_equity
+    exchange: TWSE
+    timezone: Asia/Taipei
+    calendar: XTAI
+    currency: TWD
+    price_unit: TWD_per_share
+    tick_size_if_applicable: dynamic
+    multiplier_if_applicable: 1000
+    direct_sources: [FinMind, TWSE_OpenAPI]
+    proxy_sources: ["yfinance (.TW) fallback"]
+    historical_sources: [FinMind_adjusted, TWSE_daily]
+    execution_instrument: equity_itself
+    data_semantics: "corporate actions (dividend/split/capital reduction) must be adjusted"
+
+  - target_family: TAIWAN_INDEX
+    target: TAIEX
+    symbol: "^TWII"   # TAIEX cash index（forecast target / reference，非可成交）
+    instrument_type: cash_index
+    exchange: TWSE
+    timezone: Asia/Taipei
+    calendar: XTAI
+    currency: TWD
+    price_unit: index_points
+    tick_size_if_applicable: null
+    multiplier_if_applicable: null
+    direct_sources: [TWSE_index]
+    proxy_sources: [yfinance "^TWII"]
+    historical_sources: [TWSE_TAIEX_history]
+    execution_instrument: null   # 非可成交；策略 execution 需明確指定 TX/MTX/TMF
+    data_semantics: "TAIEX 指數點位不可假裝實際成交；forecast target != execution instrument"
+
+  - target_family: TAIWAN_INDEX
+    target: TX
+    symbol: TX
+    instrument_type: futures_large
+    exchange: TAIFEX
+    timezone: Asia/Taipei
+    calendar: XTAI
+    currency: TWD
+    price_unit: index_points
+    tick_size_if_applicable: 1
+    multiplier_if_applicable: 200
+    direct_sources: [TAIFEX]
+    proxy_sources: []
+    historical_sources: [TAIFEX_history]
+    execution_instrument: TX
+    data_semantics: "execution instrument; forecast target 仍以 TAIEX 為 reference"
+
+  - target_family: TAIWAN_INDEX
+    target: MTX
+    symbol: MTX
+    instrument_type: futures_mini
+    exchange: TAIFEX
+    timezone: Asia/Taipei
+    calendar: XTAI
+    currency: TWD
+    price_unit: index_points
+    tick_size_if_applicable: 1
+    multiplier_if_applicable: 50
+    direct_sources: [TAIFEX]
+    proxy_sources: []
+    historical_sources: [TAIFEX_history]
+    execution_instrument: MTX
+    data_semantics: "execution instrument"
+
+  - target_family: TAIWAN_INDEX
+    target: TMF
+    symbol: TMF
+    instrument_type: futures_micro
+    exchange: TAIFEX
+    timezone: Asia/Taipei
+    calendar: XTAI
+    currency: TWD
+    price_unit: index_points
+    tick_size_if_applicable: 1
+    multiplier_if_applicable: 10
+    direct_sources: [TAIFEX]
+    proxy_sources: []
+    historical_sources: [TAIFEX_history]
+    execution_instrument: TMF
+    data_semantics: "execution instrument"
