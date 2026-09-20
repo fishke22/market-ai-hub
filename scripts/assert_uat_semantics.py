@@ -95,8 +95,28 @@ def _check_ensemble() -> list[str]:
     return errs
 
 
+def _check_position() -> list[str]:
+    from market_ai_hub.packet.builder import build_analysis_packet
+    from market_ai_hub.services.public_view import position_guidance_policy
+
+    errs = []
+    p = position_guidance_policy()
+    if p["mode"] != "RISK_ANALYSIS_ONLY":
+        errs.append("position: mode != RISK_ANALYSIS_ONLY")
+    if p["personalized_trade_action"] != "PROHIBITED":
+        errs.append("position: personalized_trade_action != PROHIBITED")
+    for f in ("ADD_POSITION", "REDUCE_POSITION", "STOP_PRICE", "TAKE_PROFIT_PRICE"):
+        if f not in p["forbidden"]:
+            errs.append(f"position: {f} not in forbidden")
+    # packet 也帶 position_guidance_policy
+    pkt = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
+    if pkt.get("position_guidance_policy", {}).get("mode") != "RISK_ANALYSIS_ONLY":
+        errs.append("packet: position_guidance_policy missing/wrong")
+    return errs
+
+
 def main() -> int:
-    errs = _check_osaka() + _check_2330() + _check_taiex() + _check_ensemble()
+    errs = _check_osaka() + _check_2330() + _check_taiex() + _check_ensemble() + _check_position()
     if errs:
         for e in errs:
             print("FAIL:", e)

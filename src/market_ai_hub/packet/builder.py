@@ -412,6 +412,11 @@ def _fill_research_truth(packet: AnalysisPacket) -> None:
         "may_present_trading_advice": False,      # NO_ECONOMIC_EDGE
     }
 
+    # 2Q-F.5：position-aware research guard（RISK_ANALYSIS_ONLY）
+    from market_ai_hub.services.public_view import position_guidance_policy
+
+    packet.position_guidance_policy = position_guidance_policy()
+
 
 def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MICRO_FUTURES",
                           horizon: str = "1d", detail_level: str = "compact",
