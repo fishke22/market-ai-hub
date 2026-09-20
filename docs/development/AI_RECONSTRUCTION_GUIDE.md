@@ -1,0 +1,110 @@
+# AI Reconstruction Guide
+
+給未來 AI Agent（ChatGPT / Codex / Claude / DeepSeek / OpenCode）重建整套系統。不假設你讀過專案歷史。
+
+## STEP 1 — Clone repository
+```bash
+git clone <repo-url> MARKET_AI_HUB
+cd MARKET_AI_HUB
+```
+- expected：看到 `README.md`、`SYSTEM_MANIFEST.yaml`、`docs/`、`src/`、`config/`。
+- failure：確認 repo 不含 weights/data（見 `PUBLICATION_EXCLUDE_MANIFEST.txt`）。
+
+## STEP 2 — Inspect SYSTEM_MANIFEST
+讀 `SYSTEM_MANIFEST.yaml`（machine-readable 能力/架構/target/安全）。讀 `config/capabilities.yaml`（feature 狀態）。
+
+## STEP 3 — Check OS / Python / GPU
+- Windows x64、Python 3.12.13、CUDA GPU（RTX 4060 Ti 16GB 或等效）。
+- 無 GPU 也可跑（模型 fallback CPU），但 heavy model 慢。
+
+## STEP 4 — Create environment
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+## STEP 5 — Install dependencies
+```powershell
+pip install -r requirements-runtime.txt
+# dev（tests）：
+pip install -r requirements-dev.txt
+```
+- failure：依賴衝突（如 FinCast 需 tensorflow/jax）→ 隔離獨立 venv，不要塞核心環境（見 `docs/reference/DEPENDENCIES.md`）。
+
+## STEP 6 — Download models
+```powershell
+python scripts/download_models.py --check     # 看缺哪些
+python scripts/download_models.py --required  # 只下 required
+python scripts/download_models.py --list
+python scripts/download_models.py --optional  # 使用者自選
+```
+- weights 永遠不進 Git；由 Hugging Face 下載並 pin revision（`config/model_manifest.yaml`）。
+
+## STEP 7 — Configure optional API keys
+複製 `.env.example` → `.env`，填需要用的（FRED / FinMind / BEA / e-Stat / EIA / EDINET）。
+- 不填也能跑；只影響對應 provider（標 NEEDS_CONFIG）。
+
+## STEP 8 — Initialize Data Lake
+```powershell
+python -c "from market_ai_hub.automation.data_lake import DataLakeManager; DataLakeManager()"
+```
+- expected：`data/` 出現 raw/normalized/features/predictions/analysis_archive/cache/manifests。
+
+## STEP 9 — Run validation
+```powershell
+pytest tests/
+```
+- expected：全 PASS（live tests 預設排除，`-m live` 才跑網路）。
+
+## STEP 10 — Start MCP Server
+```powershell
+.venv\Scripts\market-ai-mcp.exe
+# 或
+python -m market_ai_hub.mcp.server
+```
+
+## STEP 11 — Install / import MCP config
+用 `examples/mcp/generic-stdio.json` 或 `cherry-studio.json`（改 `<PROJECT>` 路徑）。
+
+## STEP 12 — Install Skills
+複製 `skills/{name}/` 到你的 Agent 平台（Cherry Studio / 手動當 instruction reference）。
+
+## STEP 13 — Run first Osaka Micro analysis
+MCP 呼叫 `get_analysis_packet(market="osaka", target="OSE_NIKKEI225_MICRO_FUTURES")`。
+- expected：`execution_target = OSE_NIKKEI225_MICRO_FUTURES`、`reference_price_type = SETTLEMENT`（若有官方 settlement）。
+
+## STEP 14 — Enable optional Research Scheduler
+```powershell
+scripts\register_research_tasks.ps1   # OPT-IN（不自動註冊）
+```
+
+## STEP 15 — Verify Prediction Registry / Archive
+MCP 呼叫 `get_analysis_archive_status` / `get_forward_test_status`。
+
+## STEP 16 — Optional integrations
+- TradingView：OPTIONAL，未安裝（`docs/integrations/TRADINGVIEW_OPTIONAL_BRIDGE.md`）。
+- Yuanta：RESERVED_QUOTE_ONLY，realtime recorder = false（`docs/YUANTA_DATA_CAPABILITY_MATRIX.md`）。
+
+## STEP 17 — Yuanta integration restoration（證券 ≠ 期貨；三條 path）
+
+先讀 `docs/YUANTA_SETUP_AND_LOGIN.md` + `docs/YUANTA_API_ARCHITECTURE.md`。
+
+**Yuanta prerequisites（不能假設 clone 就含 proprietary binaries）：**
+1. Apply API permission（期貨 SPARK 權限 / API 行情 / API 交易，各別申請）
+2. Obtain official component（SPARK x64 / Futures Quote OCX，官方頁下載）
+3. Install .NET 8 for SPARK（`dotnet --list-runtimes` 確認 8.x）
+4. Import certificate into Windows 11 when required（`docs/YUANTA_CERTIFICATE_WINDOWS11.md`）
+5. Verify certificate（`scripts/check_yuanta_certificate.ps1`）
+6. Setup WinCred account preset（`MARKET_AI_HUB/YUANTA/FUTURES`、`/SECURITIES`）
+7. Setup x86 legacy quote sidecar if used（`scripts/setup_yuanta_futures_x86.ps1`）
+8. Run diagnostics（`scripts/check_yuanta_futures_com.ps1` → READY_FOR_AUTH）
+9. Manual getpass auth（`scripts/yuanta_futures_auth.ps1` / `auth_probe --profile securities`）
+10. Verify quote capability（auth 成功後）
+
+**下載/憑證/權限/商品代碼：**
+- `docs/YUANTA_DOWNLOADS.md`、`docs/YUANTA_CERTIFICATE_WINDOWS11.md`
+- `docs/YUANTA_API_PERMISSIONS.md`、`docs/YUANTA_MARKET_DATA_PERMISSIONS.md`
+- `docs/YUANTA_PRODUCT_CODE_LOOKUP.md`、`config/yuanta_product_codes.yaml`
+
+**不要重走錯路**：期貨帳號 SPARK Login 回 0112 = 「無此權限使用功能」（需另申請期貨 SPARK 權限），
+不是「Wrong API family」。Legacy COM 是另一套 API（官方頁命名「國內行情 API」，scope 疑 DOMESTIC_ONLY）。
