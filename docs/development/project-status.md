@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 2Q-F.3（Manual UAT Truthfulness Remediation + OSE Direct/Proxy Separation + Validation Evidence Isolation + Answer Contract Hardening）**
-- Gate: **PHASE2QF3_RUNTIME_TRUTH_PASS**（最近；前置 PHASE2QF2_PREP_PASS）
-- build_id：**bc9bc59b0d970cab**（fingerprint 全部 runtime source + config）
+- Current phase: **Phase 2Q-F.4（Runtime Output Contract Enforcement + Proxy/Direct Presentation Hardening + Taiwan Session Filter Coverage）**
+- Gate: **PHASE2QF4_RUNTIME_OUTPUT_PASS**（最近；前置 PHASE2QF3_RUNTIME_TRUTH_PASS）
+- build_id：**cabed392964fb6de**（fingerprint 全部 runtime source + config）
 - Manual Cherry UAT：**RETEST_REQUIRED**
 
 ## Phase 2 全歷程 Gate
