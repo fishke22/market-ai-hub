@@ -1,0 +1,20 @@
+# OSE Nikkei 225 Derivatives calendar（JPX Holiday Trading）
+# 來源：JPX 官方 Holiday Trading schedule（OSE derivatives 於部分 TSE cash 休市日仍交易）。
+# 不得由 LLM 推測。以下為已人工核對之 holiday trading sessions。
+
+source: "JPX Holiday Trading (Osaka Exchange derivatives)"
+source_url: "https://www.jpx.co.jp/english/derivatives/rules/holiday-trading/"
+calendar_version: "2026-09"
+verified_at: "2026-09-21"
+calendar_kind: "OSE_DERIVATIVES"
+note: >
+  OSE derivatives 在若干 TSE cash (XTKS) 休市日仍進行 Holiday Trading。
+  此表列出「TSE cash 休市但 OSE derivatives OPEN」的日期。
+
+# TSE cash 休市但 OSE derivatives OPEN（holiday trading）
+holiday_trading_sessions:
+  - "2026-09-21"   # 敬老の日（Respect-for-the-Aged Day）
+  - "2026-09-22"   # 国民の休日
+  - "2026-09-23"   # 秋分の日（Autumnal Equinox）
+
+# 明確標記：這些日子 TSE cash（XTKS）休市，但 OSE derivatives OPEN。

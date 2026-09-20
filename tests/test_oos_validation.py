@@ -81,15 +81,15 @@ def test_evaluate_baselines_shapes():
 def test_ts_validation_store_roundtrip(tmp_path, monkeypatch):
     import market_ai_hub.services.validation as v
 
-    (tmp_path / "data").mkdir(exist_ok=True)
-    monkeypatch.setattr(v, "project_root", lambda: tmp_path)
     store = v.TsValidationStore()
     result = _good_result()
     result["model"] = "chronos-2"
     result["symbol"] = "^N225"
     result["interval"] = {"coverage": 0.75, "calibration_error": 0.05}
-    store.save(result, "EXPERIMENTAL")
-    rec = store.latest("chronos-2", "^N225")
+    store.save(result, "EXPERIMENTAL", run_kind="TEST_FIXTURE")
+    rec = store.latest("chronos-2", "^N225", include_test_fixture=True)
     assert rec is not None
     assert rec["model"] == "chronos-2"
     assert rec["result"]["eval"]["beats_naive_mae"] is True
+    # gate 讀取（不 include test fixture）應看不到 TEST_FIXTURE record
+    assert store.latest("chronos-2", "^N225") is None

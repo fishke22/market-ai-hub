@@ -20,12 +20,18 @@
 - 主動找反證，不只看支持結論的資料。
 - 明確失效條件。
 
-## Output structure
-- 偏多/偏空/盤整 + 主要區間 + 支撐/壓力 + 失效條件 + 重新分析時機。
+## Output structure（§24）
+- 方向：僅 `eligible_direction_vote_count > 0` 才正式輸出；0 → `NO_VALIDATED_MODEL_CONSENSUS`。
+- 主要區間（model statistical reference range）。
+- 支撐/壓力：`support_resistance_status == NOT_AVAILABLE` → 輸出 `NOT_AVAILABLE`，不得由 P10/P90 生成。
+- 失效條件：僅 explicit validated evidence 才提供。
+- TAIWAN_STOCK historical OOS = `NOT_YET_VALIDATED` → 只標 research reference，不得稱 validated。
+- **不得輸出：買點 / 加碼 / 減碼 / 停損價 / 做多 / 做空 / 獲利了結。**
 
 ## Failure handling
 - 資料不足明說；不得編數字。
 
 ## Do not rules
-- 不得製造假 probability。
+- 不得製造假 probability（uncalibrated 不得稱機率）。
 - 不得以「感覺會漲」當理由，需有證據分層。
+- 不得輸出任何交易建議（research reference only）。

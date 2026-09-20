@@ -247,8 +247,15 @@ class TsValidationStore:
                 )
                 """
             )
+            # §4：provenance / run_kind（RUNTIME_VALIDATION / TEST_FIXTURE / HISTORICAL_IMPORT）
+            try:
+                con.execute(
+                    "ALTER TABLE runs ADD COLUMN run_kind VARCHAR DEFAULT 'RUNTIME_VALIDATION'"
+                )
+            except Exception:
+                pass  # column already exists
 
-    def save(self, result: dict, status: str) -> None:
+    def save(self, result: dict, status: str, run_kind: str = "RUNTIME_VALIDATION") -> None:
         self.init()
         ev = result.get("eval", {})
         iv = result.get("interval", {})
@@ -257,8 +264,8 @@ class TsValidationStore:
                 """INSERT INTO runs
                    (model, symbol, validated_at, n_origins, n_oos, model_mae, naive_mae,
                     mase, direction_accuracy, interval_coverage, interval_calibration_error,
-                    beats_naive, beats_drift, result_json)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    beats_naive, beats_drift, result_json, run_kind)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 [
                     result.get("model"), result.get("symbol"),
                     datetime.now(timezone.utc),
@@ -268,16 +275,18 @@ class TsValidationStore:
                     iv.get("coverage"), iv.get("calibration_error"),
                     bool(ev.get("beats_naive_mae")), bool(ev.get("beats_drift_mae")),
                     json.dumps(result, ensure_ascii=False, default=str),
+                    run_kind,
                 ],
             )
 
-    def latest(self, model: str, symbol: str) -> dict | None:
+    def latest(self, model: str, symbol: str, include_test_fixture: bool = False) -> dict | None:
         self.init()
+        q = "SELECT * FROM runs WHERE model=? AND symbol=?"
+        if not include_test_fixture:
+            q += " AND (run_kind IS NULL OR run_kind != 'TEST_FIXTURE')"
+        q += " ORDER BY validated_at DESC LIMIT 1"
         with self._conn() as con:
-            df = con.execute(
-                "SELECT * FROM runs WHERE model=? AND symbol=? ORDER BY validated_at DESC LIMIT 1",
-                [model, symbol],
-            ).df()
+            df = con.execute(q, [model, symbol]).df()
         if df.empty:
             return None
         r = df.to_dict("records")[0]

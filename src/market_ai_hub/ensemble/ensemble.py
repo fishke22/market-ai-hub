@@ -289,6 +289,15 @@ def _combine(
     agree_ratio = directions.count(direction_legacy) / len(directions)
     agreement = "HIGH" if agree_ratio >= 0.75 else ("MEDIUM" if agree_ratio >= 0.5 else "LOW")
 
+    # ── V2 validated direction agreement（HIGH-4 fix）：只算 eligible voters ──
+    eligible_dir_voters = [f.direction for f in forecasts if f.eligible_for_direction_vote]
+    if eligible_dir_voters:
+        _, v_count = _plurality_deterministic(eligible_dir_voters)
+        v_ratio = v_count / len(eligible_dir_voters)
+        validated_direction_agreement = "HIGH" if v_ratio >= 0.75 else ("MEDIUM" if v_ratio >= 0.5 else "LOW")
+    else:
+        validated_direction_agreement = "N/A"
+
     any_validated = any(
         f.predictive_validation_status == PredictiveValidationStatus.VALIDATED.value for f in forecasts
     )
@@ -355,7 +364,11 @@ def _combine(
             "eligible_direction_vote_count": n_vote_eligible,
             "eligible_price_reference_count": n_price_eligible,
             "legacy_research_only": True,
-            "model_agreement": agreement,
+            # raw agreement（全部 component，含 unvalidated）→ 更名，不得當 direction consensus
+            "legacy_raw_unvalidated_agreement": agreement,
+            "model_agreement": agreement,  # backward compat alias（raw）
+            # validated agreement（只算 eligible voters；0 → N/A）
+            "validated_direction_agreement": validated_direction_agreement,
             # V1.2 direction resolution（final_direction 由固定規則產生，見 _resolve_direction）
             "final_direction": final_dir,
             "direction_resolution_method": resolution_method,

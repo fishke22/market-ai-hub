@@ -197,6 +197,18 @@ def get_research_gates() -> dict:
         "gates": gates,
         "note": "MODEL_PREDICTIVE_GATE=UNPROVEN 指 GENERAL_PRODUCTION_MODEL_GATE_UNPROVEN（非 NO_OOS_TEST_EXISTS）；"
                 "TRADING_EDGE_GATE.result=NO_ECONOMIC_EDGE：Phase2 cost/slippage strategy validation completed",
+        "training_review": {
+            "auto_train": False,
+            "auto_fine_tune": False,
+            "auto_promote": False,
+            "immediate_retrain_authorized": False,
+            "new_sample_sufficiency": "INSUFFICIENT",
+            "drift_evidence": "NONE",
+            "degradation_evidence": "NONE",
+            "hypothesis_defined": False,
+            "manual_approval_required": True,
+            "recommendation": "REVIEW_ONLY; no automatic/immediate retraining",
+        },
     }
 
 

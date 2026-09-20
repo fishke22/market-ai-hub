@@ -106,7 +106,7 @@ def test_cache_avoids_repeat_call(monkeypatch, tmp_path):
             return FakeResp()
 
     monkeypatch.setattr(hc, "httpx", Fake())
-    monkeypatch.setattr(hc, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(hc, "data_root", lambda: tmp_path)
     client = RateLimitedClient("t", default_ttl=3600)
     client.get_json("k", "http://x")
     client.get_json("k", "http://x")
@@ -122,7 +122,7 @@ def test_offline_failure_raises_provider_error(monkeypatch, tmp_path):
             raise ConnectionError("offline")
 
     monkeypatch.setattr(hc, "httpx", Fake())
-    monkeypatch.setattr(hc, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(hc, "data_root", lambda: tmp_path)
     client = RateLimitedClient("t", max_retries=2, base_backoff=0.01, default_ttl=0)
     with pytest.raises(ProviderError):
         client.request("k", "http://x", ttl=0)
@@ -136,7 +136,7 @@ def test_ustreasury_parse(monkeypatch, tmp_path):
            '09/17/2026,4.67,4.78,4.94,5.29\n')
     import market_ai_hub.providers.http_client as hc
 
-    monkeypatch.setattr(hc, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(hc, "data_root", lambda: tmp_path)
     p = USTreasuryProvider()
 
     class FakeResp:

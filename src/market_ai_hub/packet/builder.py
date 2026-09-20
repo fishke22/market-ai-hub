@@ -47,8 +47,18 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _select_front_contract(contracts: list[str]) -> str:
+    """FRONT_NEAREST_LISTED：選最早到期（YYYYMM 字串 min），deterministic，不依 row order。"""
+    valid = sorted({str(c) for c in contracts if str(c).isdigit() and len(str(c)) == 6})
+    return valid[0] if valid else ""
+
+
 def _load_latest_micro_settlement() -> dict | None:
-    """從 Data Lake 讀最新 Micro settlement（FUT_225MC）。進程級 cache（避免重複讀 parquet）。"""
+    """從 Data Lake 讀最新 Micro settlement（FUT_225MC）。進程級 cache（避免重複讀 parquet）。
+
+    HIGH-5 fix：同一天多 active contracts 時，用 FRONT_NEAREST_LISTED 選最早到期，
+    不依 DataFrame row order（202610/202611/202612/202703 → 202610，非 202703）。
+    """
     from market_ai_hub.services.provider_metrics import tracked
 
     cached = _cached("micro_settlement", _settlement_cache, _TTL_SECONDS)
@@ -67,12 +77,17 @@ def _load_latest_micro_settlement() -> dict | None:
                 df = pd.concat(frames, ignore_index=True)
                 micro = df[df["product"] == "Nikkei 225 Micro Futures"]
                 if not micro.empty:
-                    latest = micro.sort_values("date").iloc[-1]
+                    latest_date = str(micro["date"].max())
+                    same_day = micro[micro["date"].astype(str) == latest_date]
+                    contract = _select_front_contract(same_day["contract"].astype(str).tolist())
+                    row = same_day[same_day["contract"].astype(str) == contract].iloc[0]
                     result = {
-                        "price": float(latest["settlement_price"]),
-                        "contract": str(latest["contract"]),
-                        "date": str(latest["date"]),
+                        "price": float(row["settlement_price"]),
+                        "contract": contract,
+                        "date": latest_date,
                         "price_type": PRICE_TYPE_SETTLEMENT,
+                        "selection_policy": "FRONT_NEAREST_LISTED",
+                        "available_contracts": sorted(same_day["contract"].astype(str).tolist()),
                     }
         _settlement_cache["micro_settlement"] = (time.time(), result)
         return result
@@ -315,25 +330,32 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
             "note": "TAIEX index points are NOT executable; strategy execution must pick TX/MTX/TMF explicitly",
         }
 
-    # §7：direct 與 proxy 各別 session/bar。
+    # §13：direct Micro 目前無真正 direct 5d model path
+    if family == "OSAKA_MICRO":
+        packet.target_semantics["direct_micro_forecast_status"] = "NOT_AVAILABLE"
+        packet.target_semantics["direct_micro_forecast_note"] = (
+            "no true Direct Micro model path; ^N225 forecast is PROXY_MODEL_REFERENCE only"
+        )
+
+    # §7/§12：direct 與 proxy 各別 session/bar，輸出 machine-readable dates（HIGH-1 fix）
     try:
-        from market_ai_hub.services.calendar import next_trading_sessions, trading_date_of
+        from market_ai_hub.services.calendar import next_ose_derivatives_sessions, next_trading_sessions, trading_date_of
 
         today_utc = pd.Timestamp.now("UTC")
         last_proxy = trading_date_of(today_utc, proxy_model_target)
-        proxy_bars = next_trading_sessions(proxy_model_target, last_proxy, 1)
+        proxy_bars = next_trading_sessions(proxy_model_target, last_proxy, 5)
         packet.proxy_next_model_bar = proxy_bars[0] if proxy_bars else ""
+        packet.target_semantics["proxy_model_target_dates"] = proxy_bars
+        if family == "OSAKA_MICRO":
+            ose_sessions = next_ose_derivatives_sessions(last_proxy, 5)
+            packet.target_semantics["direct_next_sessions"] = ose_sessions
+            packet.direct_next_session = ose_sessions[0] if ose_sessions else ""
+        else:
+            packet.target_semantics["direct_next_sessions"] = proxy_bars
+            packet.direct_next_session = proxy_bars[0] if proxy_bars else ""
     except Exception:  # noqa: BLE001
         packet.proxy_next_model_bar = ""
-    if family == "OSAKA_MICRO":
-        packet.direct_next_session = (
-            f"OSE/JPX derivatives session (may differ from TSE cash on holiday trading); "
-            f"proxy next bar = {packet.proxy_next_model_bar or 'N/A'}"
-        )
-    else:
-        packet.direct_next_session = (
-            f"{direct_calendar} session; proxy next bar = {packet.proxy_next_model_bar or 'N/A'}"
-        )
+        packet.direct_next_session = ""
 
 
 def _fill_research_truth(packet: AnalysisPacket) -> None:

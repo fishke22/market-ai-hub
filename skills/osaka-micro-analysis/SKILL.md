@@ -29,13 +29,27 @@
 - Micro 只有 settlement → 標 `SETTLEMENT`，不得稱 LIVE_PRICE/CLOSE。
 - ensemble 未 forward-validated → 標 `RESEARCH_ENSEMBLE / UNVALIDATED_FORWARD`。
 
+## Direction（§23）
+- **只有 `eligible_direction_vote_count > 0` 才可正式輸出方向。**
+- `= 0` → `NO_VALIDATED_MODEL_CONSENSUS`，不得輸出 Up / Down / Flat。
+- `model_agreement=HIGH`（raw）在 votes=0 時**不是** validated consensus，不得引用。
+
+## Support / resistance（§23）
+- `support_resistance_status == NOT_AVAILABLE` → 直接輸出 `NOT_AVAILABLE`。
+- **不得由 P10/P90 quantile 生成支撐/壓力/停損/失效點。**
+- P10/P90 只能叫「模型統計參考區間（model statistical reference range）」。
+
 ## Output structure
-- 偏多/偏空/盤整
-- 主要區間（model_range）
-- 支撐/壓力（support_levels / resistance_levels）
-- 失效條件（invalidation_levels）
-- 何種情況可研究型進場、何種情況 WAIT
+- 方向（僅 eligible votes > 0 時）
+- 主要區間（model_range，標 statistical reference）
+- 支撐/壓力：`NOT_AVAILABLE`（無正式 evidence 時）
+- 失效條件：僅 explicit validated invalidation evidence 才提供
 - 何時重新分析（reanalysis_conditions）
+- **不得輸出：進場 / 買點 / 黃金買點 / 加碼 / 減碼 / 做多 / 做空 / 停損價 / 獲利了結**
+
+## Calendar（§43）
+- TSE cash（XTKS）休市日與 OSE derivatives Holiday Trading 不同，不得混。
+- 2026-09-21/22/23：TSE cash closed，但 OSE derivatives OPEN（依 `next_ose_derivatives_sessions`）。
 
 ## Failure handling
 - 資料不足 → 明說缺口，不編數字。
@@ -43,5 +57,7 @@
 
 ## Do not rules
 - 不得把 ^N225 寫成「大阪微型日經成交價」。
-- 不得製造假 probability。
+- 不得製造假 probability（uncalibrated 不得稱上漲/下跌機率）。
 - 不得虛構 Micro OHLC。
+- 不得把 ^N225 forecast 冒充 Direct Micro forecast（`direct_micro_forecast_status=NOT_AVAILABLE`）。
+- 不得輸出任何交易建議（research reference only）。
