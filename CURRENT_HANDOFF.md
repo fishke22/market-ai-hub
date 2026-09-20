@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2P-E（System Prompt Compaction + Skill Responsibility Cleanup）**
-- Gate: **PHASE2VB2_PASS**（最近；前置 PHASE2VB_PASS + PHASE2VB1_PASS）
-- build_id：**ccabe1e1552d9ae7**（Phase 2H 起；V1 Freeze 為 `bbf3cb2f9a80d20e`）
+- Current phase: **Phase 2Q-A（Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path）**
+- Gate: **PHASE2QA_PASS**（最近；前置 PHASE2PE_PUBLISHED）
+- build_id：**cd33ef1c14839b7d**（Phase 2Q-A source runtime 修正起；Phase 2H~2P-E 為 `ccabe1e1552d9ae7`）
 
 ## Phase 2 全歷程 Gate
 
@@ -30,6 +30,16 @@
 | **2P-C** | Remote Reconciliation + Client-Neutral Merge + GitHub Publication | **PHASE2PC_PUBLISHED** |
 | **2P-D** | Agent Response Truthfulness Hotfix + Target Semantics Audit | **PHASE2PD_PUBLISHED** |
 | **2P-E** | System Prompt Compaction + Skill Responsibility Cleanup | **PHASE2PE_PUBLISHED** |
+| **2Q-A** | Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path | **PHASE2QA_PASS** |
+
+## 2Q-A 本棒成果（Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path）
+- 修正 Cherry Studio 驗收問題 A–G：direction 只收 eligible vote（0 票 → NO_VALIDATED_MODEL_CONSENSUS）；deterministic tie（平手 → NO_CONSENSUS，cross-process 一致）；uncalibrated 不稱 probability；direct/proxy calendar 分離；research truth 單一來源；forward count 統一；fast path + forecast cache。
+- 新模組：`services/research_truth.py`（讀 PHASE2_RESEARCH_FREEZE）、`services/forecast_cache.py`、`services/perf_trace.py`（MCP_PERF_TRACE）。
+- packet 加 target_semantics / calendar 分離 / support_resistance_status / validation_truth / market_environment / driver_panel。
+- gate wording 修正（MODEL_PREDICTIVE_GATE=GENERAL_PRODUCTION_MODEL_GATE_UNPROVEN；TRADING_EDGE_GATE.result=NO_ECONOMIC_EDGE）。
+- build_info 加 release_version / runtime_build_id。benchmark `scripts/benchmark_mcp_fastpath.py`（fastpath_acceptance=true，warm QUICK 1 call + 0 dup inference ~3ms）。
+- 新增 `tests/test_phase2qa.py`（22 tests，含 subprocess cross-process determinism）；全 suite **691 passed**。
+- build_id → `cd33ef1c14839b7d`（source runtime 修正，fingerprinted files 變更）。禁區未動：不新增模型 / 不重訓 / 不 strategy optimization / 不 broker / 不 live trading。PR #6 merged；版本仍 v2.0.0-rc1。
 
 ## 2P-E 本棒成果（System Prompt Compaction + Skill Responsibility Cleanup，doc-only）
 - 新增 `docs/prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`（~260 行，RECOMMENDED FOR CHERRY STUDIO AND NORMAL MCP CLIENT USE）。
