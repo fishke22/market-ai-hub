@@ -20,7 +20,7 @@ print('created:', len(result['created']), 'forecasts')
 for f in result['created']:
     print('  ', f)
 fs.build_status()
-print('status updated: FORWARD_SHADOW_STATUS.json')
+print('status updated: research/phase2/status/FORWARD_SHADOW_STATUS.json')
 "@
 
 if ($LASTEXITCODE -ne 0) {

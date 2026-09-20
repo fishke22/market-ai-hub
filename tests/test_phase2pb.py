@@ -7,15 +7,15 @@ sys.path.insert(0, "src")
 ROOT = Path(__file__).resolve().parents[1]
 
 BEGINNER_DOCS = [
-    "START_HERE_BEGINNER.md",
+    "getting-started/quickstart.md",
     "HOW_MARKET_AI_HUB_WORKS.md",
-    "CHERRY_STUDIO_BEGINNER_GUIDE.md",
-    "DATA_UPDATE_FOR_BEGINNERS.md",
-    "AUTO_LEARNING_FOR_BEGINNERS.md",
-    "SAFE_TRAINING_FOR_BEGINNERS.md",
-    "TRADING_READINESS_FOR_BEGINNERS.md",
-    "DAILY_WORKFLOW_FOR_BEGINNERS.md",
-    "FAQ_BEGINNER.md",
+    "getting-started/cherry-studio.md",
+    "guides/data-updates.md",
+    "guides/model-training-and-retraining.md",
+    "guides/resource-safety.md",
+    "guides/trading-readiness.md",
+    "guides/daily-workflow.md",
+    "guides/faq.md",
 ]
 
 
@@ -41,14 +41,14 @@ def test_beginner_docs_truthful_no_trade_claim():
 
 
 def test_auto_learning_flags_truthful():
-    c = (ROOT / "docs" / "AUTO_LEARNING_FOR_BEGINNERS.md").read_text(encoding="utf-8")
+    c = (ROOT / "docs" / "guides/model-training-and-retraining.md").read_text(encoding="utf-8")
     assert "AUTO_TRAIN" in c and "FALSE" in c
     assert "AUTO_FINE_TUNE" in c and "FALSE" in c
     assert "AUTO_PROMOTE" in c and "FALSE" in c
 
 
 def test_cherry_studio_guide_no_secret():
-    c = (ROOT / "docs" / "CHERRY_STUDIO_BEGINNER_GUIDE.md").read_text(encoding="utf-8")
+    c = (ROOT / "docs" / "getting-started/cherry-studio.md").read_text(encoding="utf-8")
     assert "<ProjectRoot>" in c
     assert "market-ai-mcp.exe" in c
     for bad in ["password", "token", "帳號", "密碼"]:
@@ -57,6 +57,6 @@ def test_cherry_studio_guide_no_secret():
 
 
 def test_trading_readiness_research_only():
-    c = (ROOT / "docs" / "TRADING_READINESS_FOR_BEGINNERS.md").read_text(encoding="utf-8")
+    c = (ROOT / "docs" / "guides/trading-readiness.md").read_text(encoding="utf-8")
     assert "RESEARCH_ONLY" in c
     assert "NON_EXECUTABLE" in c or "不可執行" in c

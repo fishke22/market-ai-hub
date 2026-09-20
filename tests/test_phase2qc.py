@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_three_target_families_defined():
     import yaml
 
-    mission = yaml.safe_load((ROOT / "PRIMARY_MARKET_MISSION.yaml").read_text(encoding="utf-8"))
+    mission = yaml.safe_load((ROOT / "config/primary_market_mission.yaml").read_text(encoding="utf-8"))
     families = {f["name"] for f in mission["target_families"]}
     assert families == {"OSAKA_MICRO", "TAIWAN_STOCK", "TAIWAN_INDEX"}
 

@@ -19,17 +19,17 @@ def _yaml(p: str) -> dict:
 
 # --- API family 修正 ---
 def test_spark_supports_futures_by_official_contract():
-    d = _doc("docs/YUANTA_API_ARCHITECTURE.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_API_ARCHITECTURE.md")
     assert "Futures account" in d and "SPARK" in d
 
 
 def test_spark_0112_means_permission_not_wrong_family():
-    d = _doc("docs/YUANTA_API_ARCHITECTURE.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_API_ARCHITECTURE.md")
     assert "0112" in d and "無此權限" in d
 
 
 def test_yuanta_api_family_three_way_split():
-    d = _doc("docs/YUANTA_API_ARCHITECTURE.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_API_ARCHITECTURE.md")
     assert "SPARK" in d and "Quote COM" in d and "Trading API" in d
 
 
@@ -50,23 +50,23 @@ def test_public_jnu_not_auto_quote_symbol():
 
 
 def test_legacy_com_scope_not_assumed():
-    d = _doc("docs/YUANTA_MARKET_DATA_PERMISSIONS.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_MARKET_DATA_PERMISSIONS.md")
     assert "DOMESTIC_ONLY" in d or "國內行情" in d
 
 
 # --- docs completeness ---
 def test_downloads_doc_complete():
-    d = _doc("docs/YUANTA_DOWNLOADS.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_DOWNLOADS.md")
     assert "x64" in d and "交易 API" in d and "PUBLIC_PAGE_VERSION" in d
 
 
 def test_certificate_doc_complete():
-    d = _doc("docs/YUANTA_CERTIFICATE_WINDOWS11.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_CERTIFICATE_WINDOWS11.md")
     assert "憑證" in d and "Import" in d and "1 年" in d
 
 
 def test_certificate_no_private_export():
-    d = _doc("docs/YUANTA_CERTIFICATE_WINDOWS11.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_CERTIFICATE_WINDOWS11.md")
     assert "不得" in d or "不" in d
     script = _doc("scripts/check_yuanta_certificate.ps1")
     # 不得有私鑰匯出 cmdlet（Export-PfxCertificate）
@@ -75,17 +75,17 @@ def test_certificate_no_private_export():
 
 
 def test_permission_doc_complete():
-    d = _doc("docs/YUANTA_API_PERMISSIONS.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_API_PERMISSIONS.md")
     assert "API 行情服務" in d and "API 交易服務" in d
 
 
 def test_product_code_lookup_doc_complete():
-    d = _doc("docs/YUANTA_PRODUCT_CODE_LOOKUP.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_PRODUCT_CODE_LOOKUP.md")
     assert "下單代碼與訂閱報價商品代碼可能不同" in d or "JNU" in d
 
 
 def test_trading_api_future_documented():
-    d = _doc("docs/YUANTA_FUTURES_TRADING_API_FUTURE.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_FUTURES_TRADING_API_FUTURE.md")
     assert "1.6.1.3" in d and ("NOT_IMPLEMENTED" in d or "NOT IMPLEMENTED" in d)
 
 
@@ -106,7 +106,7 @@ def test_order_guard_still_passes():
 
 
 def test_publication_manifest_contains_all_yuanta_docs():
-    pub = _doc("PUBLICATION_FILE_MANIFEST.txt")
+    pub = _doc("research/phase2/publication/PUBLICATION_FILE_MANIFEST.txt")
     for d in ("YUANTA_DOWNLOADS.md", "YUANTA_API_PERMISSIONS.md", "YUANTA_CERTIFICATE_WINDOWS11.md",
               "YUANTA_MARKET_DATA_PERMISSIONS.md", "YUANTA_PRODUCT_CODE_LOOKUP.md",
               "YUANTA_SUPPORT_CHECKLIST.md", "YUANTA_FUTURES_TRADING_API_FUTURE.md",

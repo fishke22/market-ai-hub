@@ -1,6 +1,6 @@
 """Phase 2Q-A — single-source research evidence summary（ValidationTruth）。
 
-以 `PHASE2_RESEARCH_FREEZE.yaml`（權威 historical research state）為單一來源。
+以 `research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml`（權威 historical research state）為單一來源。
 所有 packet / gate / leaderboard 引用此函式，避免不同 tool 各說各話：
 - 不再輸出「尚未做 OOS」→ OOS 已做，結論 NO_EVIDENCE / STATISTICAL_FORECAST_EVIDENCE。
 - 不再輸出「cost model missing」→ cost/slippage 已做，結論 NO_ECONOMIC_EDGE。
@@ -16,7 +16,7 @@ from market_ai_hub.config.settings import project_root
 
 log = logging.getLogger(__name__)
 
-_FREEZE_PATH = project_root() / "PHASE2_RESEARCH_FREEZE.yaml"
+_FREEZE_PATH = project_root() / "research" / "phase2" / "freeze" / "PHASE2_RESEARCH_FREEZE.yaml"
 
 # 證據層級（§8）：DATA → HISTORICAL → CAUSAL → ECONOMIC → FORWARD
 EVIDENCE_LAYERS = ("proxy_historical", "direct_micro_historical", "causal", "economic", "forward")
@@ -24,7 +24,7 @@ EVIDENCE_LAYERS = ("proxy_historical", "direct_micro_historical", "causal", "eco
 
 def _load_freeze() -> dict:
     if not _FREEZE_PATH.exists():
-        log.warning("PHASE2_RESEARCH_FREEZE.yaml not found; research truth unavailable")
+        log.warning("research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml not found; research truth unavailable")
         return {}
     return yaml.safe_load(_FREEZE_PATH.read_text(encoding="utf-8")) or {}
 

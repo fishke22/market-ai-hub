@@ -11,8 +11,8 @@ def _doc(p): return (ROOT / p).read_text(encoding="utf-8")
 def _yaml(p): return yaml.safe_load((ROOT / p).read_text(encoding="utf-8"))
 def _csv(p): return pd.read_csv(ROOT / p)
 
-PROTO = _yaml("GAP_EXECUTION_PROTOCOL.yaml")
-REPORT = _doc("PHASE2VC1_GAP_CAUSALITY_REPORT.md")
+PROTO = _yaml("research/phase2/protocols/GAP_EXECUTION_PROTOCOL.yaml")
+REPORT = _doc("research/phase2/reports/PHASE2VC1_GAP_CAUSALITY_REPORT.md")
 
 def test_signal_strictly_before_entry():
     assert "signal_created_at strictly < entry_timestamp" in PROTO["causality_rule"]
@@ -30,7 +30,7 @@ def test_gap_calendar_not_midnight():
     assert "不用 calendar midnight" in PROTO["session_calendar"]
 
 def test_gap_return_decomposition():
-    decomp = _csv("GAP_RETURN_DECOMPOSITION.csv")
+    decomp = _csv("research/phase2/results/GAP_RETURN_DECOMPOSITION.csv")
     assert "R_CC" in decomp.columns and "R_GAP" in decomp.columns and "R_OC" in decomp.columns
     # identity R_CC == R_GAP + R_OC
     import numpy as np
@@ -38,7 +38,7 @@ def test_gap_return_decomposition():
     assert err < 1.0
 
 def test_preclose_component_separate():
-    res = _csv("PRECLOSE_SIGNAL_RESULTS.csv")
+    res = _csv("research/phase2/results/PRECLOSE_SIGNAL_RESULTS.csv")
     assert "full_close_signal" in res.columns and "pre_close_signal" in res.columns
 
 def test_cost_scenarios_reused():

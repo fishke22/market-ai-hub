@@ -26,19 +26,19 @@ def _doc(p: str) -> str:
 
 # --- API split ---
 def test_securities_uses_spark():
-    d = _doc("docs/YUANTA_SECURITIES_SPARK.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_SECURITIES_SPARK.md")
     assert "YuantaSparkAPITrader" in d and "pythonnet" in d
 
 
 def test_futures_does_not_use_spark():
-    d = _doc("docs/YUANTA_FUTURES_COM.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_FUTURES_COM.md")
     assert "SetMktLogon" in d          # futures 登入是 SetMktLogon
     assert "禁止" in d or "❌" in d    # 明確禁止用 Spark 登期貨
     assert "登期貨帳號" in d or "登期貨" in d
 
 
 def test_futures_uses_com():
-    d = _doc("docs/YUANTA_API_ARCHITECTURE.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_API_ARCHITECTURE.md")
     assert "YuantaQuote" in d and ("ActiveX" in d or "OCX" in d or "Quote COM" in d)
 
 
@@ -92,13 +92,13 @@ def test_futures_symbol_no_guess():
 
 # --- docs / manifest ---
 def test_yuanta_docs_api_split():
-    nav = _doc("docs/YUANTA_SETUP_AND_LOGIN.md")
+    nav = _doc("docs/integrations/yuanta/YUANTA_SETUP_AND_LOGIN.md")
     assert "SECURITIES" in nav and "FUTURES" in nav
     assert "0112" in nav  # decision tree 明確寫 0112 = wrong API family
 
 
 def test_system_manifest_yuanta_split():
-    d = yaml.safe_load((ROOT / "SYSTEM_MANIFEST.yaml").read_text(encoding="utf-8"))
+    d = yaml.safe_load((ROOT / "config/system_manifest.yaml").read_text(encoding="utf-8"))
     yuanta = d["integrations"]["yuanta"]
     assert yuanta["spark"]["securities"]["auth_verified"] is True
     assert yuanta["spark"]["futures"]["status"] in ("NEEDS_ACCOUNT_API_PERMISSION", "CONTRADICTION")
@@ -106,7 +106,7 @@ def test_system_manifest_yuanta_split():
 
 
 def test_publication_manifest_contains_yuanta_docs():
-    pub = (ROOT / "PUBLICATION_FILE_MANIFEST.txt").read_text(encoding="utf-8")
+    pub = (ROOT / "research/phase2/publication/PUBLICATION_FILE_MANIFEST.txt").read_text(encoding="utf-8")
     for d in ("YUANTA_SETUP_AND_LOGIN.md", "YUANTA_SECURITIES_SPARK.md",
               "YUANTA_FUTURES_COM.md", "YUANTA_FUTURES_ERROR_CODES.md"):
         assert d in pub

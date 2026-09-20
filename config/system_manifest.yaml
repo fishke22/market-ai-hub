@@ -4,13 +4,18 @@ schema_version: 3
 
 system:
   name: MARKET_AI_HUB
-  version: "Phase 2"
-  phase: "2I-B"
+  version: "v2.0.0-rc1"
+  phase: "Phase 2Q"
   role: "Financial Research Backend + MCP Server + Local Model Research System"
-  build_id: "ccabe1e1552d9ae7"
+  build_id: "runtime_introspected"   # 動態值：由 build_info/runtime introspection 取得，不在此 hardcode
   python: "3.12.13"
   primary_os: "Windows"
   tested_platforms: ["Windows x64"]
+
+target_families:
+  - OSAKA_MICRO
+  - TAIWAN_STOCK
+  - TAIWAN_INDEX
 
 targets:
   primary: "OSE_NIKKEI225_MICRO_FUTURES"

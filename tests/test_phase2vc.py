@@ -11,10 +11,10 @@ def _doc(p): return (ROOT / p).read_text(encoding="utf-8")
 def _yaml(p): return yaml.safe_load((ROOT / p).read_text(encoding="utf-8"))
 def _csv(p): return pd.read_csv(ROOT / p)
 
-PROTO = _yaml("STRATEGY_VALIDATION_PROTOCOL.yaml")
-COST = _yaml("STRATEGY_COST_ASSUMPTIONS.yaml")
-MANIFEST = _yaml("STRATEGY_VALIDATION_MANIFEST.yaml")
-REPORT = _doc("PHASE2VC_STRATEGY_VALIDATION_REPORT.md")
+PROTO = _yaml("research/phase2/protocols/STRATEGY_VALIDATION_PROTOCOL.yaml")
+COST = _yaml("research/phase2/protocols/STRATEGY_COST_ASSUMPTIONS.yaml")
+MANIFEST = _yaml("research/phase2/manifests/STRATEGY_VALIDATION_MANIFEST.yaml")
+REPORT = _doc("research/phase2/reports/PHASE2VC_STRATEGY_VALIDATION_REPORT.md")
 
 def test_strategy_protocol_frozen():
     assert PROTO["protocol_version"] == 1
@@ -45,7 +45,7 @@ def test_tick_slippage_applied():
     assert COST["tick_size_index_points"] == 5
 
 def test_break_even_cost_calculated():
-    be = _csv("BREAK_EVEN_COST_TABLE.csv")
+    be = _csv("research/phase2/results/BREAK_EVEN_COST_TABLE.csv")
     assert len(be) >= 3
 
 def test_fixed_unit_position():
@@ -63,11 +63,11 @@ def test_long_short_separate():
     assert "LONG" in sides and "SHORT" in sides
 
 def test_regime_results_present():
-    reg = _csv("STRATEGY_REGIME_RESULTS.csv")
+    reg = _csv("research/phase2/results/STRATEGY_REGIME_RESULTS.csv")
     assert len(reg) >= 4
 
 def test_subperiod_stability():
-    sp = _csv("STRATEGY_SUBPERIOD_RESULTS.csv")
+    sp = _csv("research/phase2/results/STRATEGY_SUBPERIOD_RESULTS.csv")
     assert len(sp) >= 5
 
 def test_block_bootstrap_strategy():
@@ -75,7 +75,7 @@ def test_block_bootstrap_strategy():
 
 def test_trade_ledger_reconciles():
     ledger = _csv("data/strategy/var_trade_ledger.csv")
-    results = _csv("VAR_STRATEGY_RESULTS.csv")
+    results = _csv("research/phase2/results/VAR_STRATEGY_RESULTS.csv")
     # gross expectancy from ledger should match C0 net expectancy (zero cost)
     ledger_gross_mean = ledger["gross_pts"].mean()
     c0 = results[results["cost_scenario"] == "C0"].iloc[0]
