@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 import yaml
 import pandas as pd
+import pytest
 
 sys.path.insert(0, "src")
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +58,7 @@ def test_no_test_threshold_optimization():
 def test_roll_period_analyzed():
     assert "roll" in PROTO["roll_treatment"].lower()
 
+@pytest.mark.private_data
 def test_long_short_separate():
     ls = _csv("data/strategy/long_short_split.csv")
     sides = set(ls["side"])
@@ -73,6 +75,7 @@ def test_subperiod_stability():
 def test_block_bootstrap_strategy():
     assert "block" in PROTO["metrics"].__str__().lower() or "bootstrap" in REPORT.lower()
 
+@pytest.mark.private_data
 def test_trade_ledger_reconciles():
     ledger = _csv("data/strategy/var_trade_ledger.csv")
     results = _csv("research/phase2/results/VAR_STRATEGY_RESULTS.csv")

@@ -13,6 +13,7 @@ POLICY = _yaml("research/phase2/protocols/FORWARD_DATA_SOURCE_POLICY.yaml")
 FREEZE = _yaml("research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml")
 
 from market_ai_hub.data import ylab225_ingest as ing
+import pytest
 
 def test_manual_225labo_import_idempotent():
     # build_daily_bars is idempotent (deterministic aggregation)
@@ -44,6 +45,7 @@ def test_incremental_import_no_duplicates():
     merged = pd.concat([existing, new]).drop_duplicates(subset="trading_date")
     assert len(merged) == 3
 
+@pytest.mark.private_data
 def test_stale_data_skips_forecast():
     from market_ai_hub.research import forward_shadow as fs
     r = fs.create_daily_forecasts()
@@ -66,6 +68,7 @@ def test_daily_cycle_no_broker():
     assert "broker" not in d.lower() or "no broker" in d.lower()
     assert "order" not in d.lower() or "no broker" in d.lower()
 
+@pytest.mark.private_data
 def test_forward_status_counts_missed():
     import json
     st = json.loads(_doc("research/phase2/status/FORWARD_SHADOW_STATUS.json"))

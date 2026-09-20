@@ -1,0 +1,65 @@
+{
+  "verified_at": "2026-09-19",
+  "source": "TRADINGVIEW_SCANNER (guest, delayed_streaming_900)",
+  "instruments": [
+    {
+      "logical_instrument": "OSE_NIKKEI225_MICRO_FUTURES",
+      "tradingview_symbol": "OSE:NK225MC1!",
+      "display_symbol": "OSE_DLY:NK225MC1!",
+      "exchange": "OSE",
+      "description": "Nikkei 225 micro Futures",
+      "multiplier": 10,
+      "availability": "AVAILABLE",
+      "delay_status": "DELAYED_900S",
+      "verified_at": "2026-09-19"
+    },
+    {
+      "logical_instrument": "OSE_NIKKEI225_MINI_FUTURES",
+      "tradingview_symbol": "OSE:NK225M1!",
+      "exchange": "OSE",
+      "description": "Nikkei 225 Mini Futures",
+      "multiplier": 100,
+      "availability": "AVAILABLE",
+      "delay_status": "DELAYED_900S",
+      "verified_at": "2026-09-19"
+    },
+    {
+      "logical_instrument": "OSE_NIKKEI225_LARGE_FUTURES",
+      "tradingview_symbol": "OSE:NK2251!",
+      "exchange": "OSE",
+      "description": "Nikkei 225 Futures",
+      "multiplier": 1000,
+      "availability": "AVAILABLE",
+      "delay_status": "DELAYED_900S",
+      "verified_at": "2026-09-19"
+    },
+    {
+      "logical_instrument": "NIKKEI_SPOT",
+      "tradingview_symbol": null,
+      "exchange": "TSE",
+      "description": "Nikkei 225 index (spot)",
+      "availability": "NOT_VERIFIED",
+      "delay_status": null,
+      "verified_at": "2026-09-19"
+    },
+    {
+      "logical_instrument": "CME_NIKKEI",
+      "tradingview_symbol": null,
+      "exchange": "CME",
+      "description": "CME Nikkei 225 (USD/JPY)",
+      "availability": "NOT_VERIFIED",
+      "delay_status": null,
+      "verified_at": "2026-09-19"
+    },
+    {
+      "logical_instrument": "SGX_NIKKEI",
+      "tradingview_symbol": null,
+      "exchange": "SGX",
+      "description": "SGX Nikkei 225",
+      "availability": "NOT_VERIFIED",
+      "delay_status": null,
+      "verified_at": "2026-09-19"
+    }
+  ],
+  "note": "OSE Micro/Mini/Large 由 contract-chain 工具實測確認；Spot/CME/SGX 未做 symbol_search，標 NOT_VERIFIED（不猜 ticker）。免費方案為 DELAYED 15 分鐘（delayed_streaming_900），非 realtime。"
+}

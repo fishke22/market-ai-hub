@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 import yaml
+import pytest
 
 sys.path.insert(0, "src")
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +58,7 @@ def test_same_origins_crossasset_compare():
     assert PROTO["horizons"] is not None
     assert PROTO["warmup_history"] == 128
 
+@pytest.mark.private_data
 def test_roll_days_not_deleted():
     import pandas as pd
     df = pd.read_parquet("data/normalized/ose_micro/ose_micro_daily_bar_v1.parquet")
