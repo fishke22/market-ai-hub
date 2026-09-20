@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2Q-C.1（Product Spec Truth + Local Data Root Hygiene + Filesystem Side-Effect Remediation）**
-- Gate: **PHASE2QC1_PASS**（最近；前置 PHASE2QC_PASS）
-- build_id：**1afb6888eec3fbdc**（2Q-C.1 起；2Q-C 為 `026a18a9d46832f8`）
+- Current phase: **Phase 2Q-C.2（Target-Family Runtime Isolation + Taiwan Packet Correctness + Historical OOS Metric Correctness）**
+- Gate: **PHASE2QC2_PASS**（最近；前置 PHASE2QC1_PASS）
+- build_id：**1afb6888eec3fbdc**（未變；2Q-C.1 起）
 
 ## Phase 2 全歷程 Gate
 
@@ -34,6 +34,16 @@
 | **2Q-B** | Whole System Validation + Clean-Room Audit + Failure Injection + E2E MCP | **PHASE2QB_PASS** |
 | **2Q-C** | Primary Market Parity + Historical Learning + OOS Validation Framework | **PHASE2QC_PASS** |
 | **2Q-C.1** | Product Spec Truth + Local Data Root Hygiene + Filesystem Side-Effect Remediation | **PHASE2QC1_PASS** |
+| **2Q-C.2** | Target-Family Runtime Isolation + Taiwan Packet Correctness + Historical OOS Metric Correctness | **PHASE2QC2_PASS** |
+
+## 2Q-C.2 本棒成果（Target-Family Isolation + Taiwan Packet + MASE metric，correctness hotfix）
+- 修 HIGH cross-market contamination：taiwan packet 不再引用 OSE Micro settlement（root cause = reference routing 二分法）。
+- 新 `resolve_market_family()`（OSAKA_MICRO / TAIWAN_STOCK / TAIWAN_INDEX，未知 market fail clearly）。
+- reference/regime/coverage/archive 全按 family 隔離；`_taiwan_stock_reference()`（FinMind→TWSE→yfinance）；TAIEX = ^TWII proxy + DIRECT_NOT_IMPLEMENTED。
+- 修 MASE：每 fold scale 只用 TRAINING naive in-sample（不跨 fold、不含 future）；新增 baseline_scores + fold-level metrics。
+- 修 yfinance tz-naive timestamp 雙重解讀（先 localize 到 local tz 再 convert UTC）。
+- 新增 `test_phase2qc2.py`（22 tests）；全 suite **765 passed**（743→765）。MCP E2E 驗證三 market 無污染。
+- build_id 未變（`1afb6888eec3fbdc`）。禁區未動：不 performance / 不新模型 / 不 training / 不 broker。PR #10 merged；版本仍 v2.0.0-rc1。
 
 ## 2Q-C.1 本棒成果（Product Spec Truth + Data Root Hygiene + Filesystem Side-Effect，correctness/hygiene hotfix）
 - 修 OSE Micro multiplier 100→10（JPX official：Contract Unit = Nikkei 225 × JPY 10，tick 5）。TX/MTX/TMF = 200/50/10 authoritative verified。
