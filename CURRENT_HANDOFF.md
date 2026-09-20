@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2Q-C.2（Target-Family Runtime Isolation + Taiwan Packet Correctness + Historical OOS Metric Correctness）**
-- Gate: **PHASE2QC2_PASS**（最近；前置 PHASE2QC1_PASS）
-- build_id：**1afb6888eec3fbdc**（未變；2Q-C.1 起）
+- Current phase: **Phase 2Q-D（Full Performance Engineering + Model/Data Runtime Acceleration + MCP/Cherry Latency Hardening + Build Identity Correction）**
+- Gate: **PHASE2QD_PASS**（最近；前置 PHASE2QC2_PASS）
+- build_id：**badba314b7e119c0**（2Q-D 起：fingerprint 全部 runtime source + config）
 
 ## Phase 2 全歷程 Gate
 
@@ -35,6 +35,17 @@
 | **2Q-C** | Primary Market Parity + Historical Learning + OOS Validation Framework | **PHASE2QC_PASS** |
 | **2Q-C.1** | Product Spec Truth + Local Data Root Hygiene + Filesystem Side-Effect Remediation | **PHASE2QC1_PASS** |
 | **2Q-C.2** | Target-Family Runtime Isolation + Taiwan Packet Correctness + Historical OOS Metric Correctness | **PHASE2QC2_PASS** |
+| **2Q-D** | Full Performance Engineering + Runtime Acceleration + MCP/Cherry Latency + Build Identity Correction | **PHASE2QD_PASS** |
+
+## 2Q-D 本棒成果（Performance Engineering，不改 research truth）
+- build identity 修正：`build_info` 現在 fingerprint 全部 `src/market_ai_hub/**/*.py` + runtime config（175 files）；docs/tests 不改 build_id。
+- health/system_info/gates shallow（不 load 模型）：health 15.9s→0.706s（-95.6%）、system_info 16.5s→0.593s（-96.4%）、gates 0.139s。
+- 新 `services/model_status.py`（find_spec+cache presence，不 import torch）+ `services/instrumentation.py`（真 counters）。
+- classifier fit cache（`services/fit_cache.py`）：XGB/LGBM 不再每 request 重 fit；bounded n_jobs（`interactive_n_jobs()` 1~4，取代 -1）。
+- provider shallow status：`status_all(deep=False)` 不 network probe（TWSE 3.4s probe 移除）。
+- benchmark 修掉 hardcode `model_inference_count=0`。新增 PERFORMANCE_2QD_{BEFORE,AFTER}.json + DIFF + 報告。
+- 新增 `test_phase2qd.py`（13 tests）；全 suite **778 passed**（765→778）。build_id → `badba314b7e119c0`。
+- 禁區未動：不改 research truth / 不 leakage / 不 AUTO_TRAIN / 不 broker。PR #11 merged；版本仍 v2.0.0-rc1。
 
 ## 2Q-C.2 本棒成果（Target-Family Isolation + Taiwan Packet + MASE metric，correctness hotfix）
 - 修 HIGH cross-market contamination：taiwan packet 不再引用 OSE Micro settlement（root cause = reference routing 二分法）。
