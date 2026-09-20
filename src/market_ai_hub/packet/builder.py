@@ -93,6 +93,21 @@ def _proxy_reference() -> dict | None:
         return None
 
 
+def _index_proxy_reference() -> dict | None:
+    """TAIEX cash index proxy（^TWII，RESEARCH_PROXY，非可成交 futures price）。"""
+    try:
+        from market_ai_hub.providers.yfinance_provider import YFinanceProvider
+
+        df = YFinanceProvider().fetch("^TWII", period="1mo")
+        if df.empty:
+            return None
+        last = df.sort_values("timestamp_utc").iloc[-1]
+        return {"price": float(last["close"]), "price_type": PRICE_TYPE_PROXY,
+                "price_timestamp": str(last["timestamp_utc"])}
+    except Exception:
+        return None
+
+
 # 可用 yfinance symbols（避免 404 的 US10Y/US2Y）→ regime 引擎欄位名
 REGIME_SYMBOLS = {"^N225": "^N225", "^VIX": "^VIX", "USDJPY=X": "USDJPY=X",
                   "^TNX": "US10Y", "^FVX": "US5Y"}
@@ -174,24 +189,46 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
         proxy_model_target = "^N225"
         direct_calendar = "OSE/JPX_DERIVATIVES"
         proxy_calendar = "XTKS"
+        execution_instrument = "OSE_NIKKEI225_MICRO_FUTURES"
+        direct_target = "OSE_NIKKEI225_MICRO_FUTURES"
+        continuous = "225LABO (CENTER_MONTH_CONTINUOUS_MICRO)"
+    elif market in ("taiwan_index",):
+        proxy_model_target = "^TWII"
+        direct_calendar = "XTAI"
+        proxy_calendar = "XTAI"
+        execution_instrument = None  # TAIEX 非可成交；策略需明確 TX/MTX/TMF
+        direct_target = target or "TAIEX"
+        continuous = "N/A"
     else:
         proxy_model_target = target
         direct_calendar = "XTAI"
         proxy_calendar = "XTAI"
+        execution_instrument = target  # 個股本身可成交
+        direct_target = target
+        continuous = "N/A"
 
     packet.target_semantics = {
-        "direct_target": "OSE_NIKKEI225_MICRO_FUTURES" if market == "osaka" else target,
+        "direct_target": direct_target,
         "direct_market_fact": (
             {"contract": packet.contract_month, "price_type": packet.reference_price_type}
             if packet.contract_month else {"status": "NOT_AVAILABLE"}
         ),
         "direct_contract_if_applicable": packet.contract_month or "N/A",
-        "continuous_research_series": "225LABO (CENTER_MONTH_CONTINUOUS_MICRO)" if market == "osaka" else "N/A",
+        "continuous_research_series": continuous,
         "proxy_model_target": proxy_model_target,
         "proxy_model_calendar": proxy_calendar,
         "direct_market_calendar": direct_calendar,
         "model_forecast_target_dates": packet.forecast_target_dates,
+        "execution_instrument": execution_instrument,
     }
+
+    # §28：TAIEX 指數點位不可假裝實際成交；execution 需明確 TX/MTX/TMF 之一
+    if market == "taiwan_index":
+        packet.target_semantics["forecast_vs_execution"] = {
+            "forecast_target": direct_target,
+            "execution_instruments": ["TX", "MTX", "TMF"],
+            "note": "TAIEX index points are NOT executable; strategy execution must pick TX/MTX/TMF explicitly",
+        }
 
     # §7：direct 與 proxy 各別 session/bar。OSE derivatives 可能 Holiday Trading，與 XTKS cash 不同。
     try:
@@ -260,14 +297,33 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
     if market == "osaka":
         packet.execution_target = "OSE_NIKKEI225_MICRO_FUTURES"
         packet.exchange = "OSE"
-    elif market == "taiwan":
+    elif market == "taiwan" or market == "taiwan_stock":
         packet.execution_target = target  # 台股直接以代碼
+        packet.exchange = "TWSE"
+    elif market == "taiwan_index":
+        # TAIEX = forecast target / reference（cash index，非可成交）；execution 需明確 TX/MTX/TMF
+        packet.execution_target = target or "TAIEX"
         packet.exchange = "TWSE"
     else:
         packet.execution_target = target
 
     # 2. reference price（Micro settlement 優先 → proxy fallback）
-    micro = _t("provider_micro_settlement", _load_latest_micro_settlement)
+    if market == "taiwan_index":
+        # TAIEX 走 ^TWII proxy（RESEARCH_PROXY），不冒充可成交 futures price
+        idx_proxy = _t("provider_index_proxy", lambda: _index_proxy_reference())
+        if idx_proxy:
+            packet.reference_price = idx_proxy["price"]
+            packet.reference_price_type = PRICE_TYPE_PROXY
+            packet.price_timestamp = idx_proxy.get("price_timestamp", "")
+            packet.target_data_status = "RESEARCH_PROXY"
+            packet.target_price_source = "proxy_index"
+        else:
+            packet.target_data_status = "MISSING"
+            packet.target_price_source = "unavailable"
+            packet.data_missing.append("taiwan_index")
+        micro = None
+    else:
+        micro = _t("provider_micro_settlement", _load_latest_micro_settlement)
     if profiler is not None and micro is not None:
         profiler.datalake_reads += 1
     if micro:
@@ -278,7 +334,7 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         packet.target_data_status = "LIVE_VERIFIED"
         packet.target_price_source = "settlement"
         packet.data_reused.append("jpx_micro_settlement")
-    else:
+    elif market != "taiwan_index":
         proxy = _t("provider_proxy_reference", _proxy_reference)
         if proxy:
             packet.reference_price = proxy["price"]

@@ -64,6 +64,56 @@ def validation_truth() -> dict:
     }
 
 
+# ── Phase 2Q-C §21：evidence per target family/target ──
+# 證據必須按市場隔離，禁止用 Osaka evidence 替 Taiwan 背書。
+
+def evidence_by_target() -> dict:
+    """以 target_family → target → 各證據層 的結構回 evidence。
+
+    OSAKA_MICRO 映射 frozen evidence；TAIWAN_STOCK / TAIWAN_INDEX 尚未 historical-validated，
+    誠實標 NO_EVIDENCE / NOT_YET_VALIDATED（不可假裝已驗證）。
+    """
+    s = research_evidence_summary()
+    return {
+        "OSAKA_MICRO": {
+            "OSE_NIKKEI225_MICRO_FUTURES": {
+                "proxy_historical": s["proxy_historical"],
+                "direct_micro_historical": s["direct_micro_historical"],
+                "causal": s["causal"],
+                "economic": s["economic"],
+                "forward": s["forward"]["evidence_status"],
+            },
+        },
+        "TAIWAN_STOCK": {
+            "TAIWAN_INDIVIDUAL_STOCK": {
+                "proxy_historical": "NO_EVIDENCE",
+                "direct_historical": "NOT_YET_VALIDATED",
+                "causal": "NOT_YET_VALIDATED",
+                "economic": "NO_ECONOMIC_EDGE",
+                "forward": "NOT_YET_VALIDATED",
+            },
+        },
+        "TAIWAN_INDEX": {
+            "TAIEX": {
+                "proxy_historical": "NO_EVIDENCE",
+                "direct_historical": "NOT_YET_VALIDATED",
+                "causal": "NOT_YET_VALIDATED",
+                "economic": "NO_ECONOMIC_EDGE",
+                "forward": "NOT_YET_VALIDATED",
+            },
+        },
+    }
+
+
+def evidence_for(family: str, target: str = "") -> dict:
+    """取單一 target 的 evidence（找不到 → 全 NO_EVIDENCE / NOT_YET_VALIDATED）。"""
+    by = evidence_by_target().get(family, {})
+    if target:
+        return by.get(target, {"status": "UNKNOWN_TARGET"})
+    # 回 family 下第一個 target（通常唯一）
+    return next(iter(by.values()), {"status": "UNKNOWN_TARGET"})
+
+
 def economic_gate_explanation() -> str:
     """TRADING_EDGE_GATE 的誠實解釋（§9）。不得說 cost model missing。"""
     return (

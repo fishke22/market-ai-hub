@@ -1,0 +1,53 @@
+# UNIFIED RESEARCH EVIDENCE SCHEMA（Phase 2Q-C）
+# 每個 evidence 綁 target_family / target / horizon / dataset_version /
+# feature_version / model_version / protocol_version / build_id。
+# 證據按市場隔離，禁止 cross-market 背書。
+
+version: 1
+
+evidence_entity:
+  required_identity:
+    - target_family          # OSAKA_MICRO | TAIWAN_STOCK | TAIWAN_INDEX
+    - target                  # OSE_NIKKEI225_MICRO_FUTURES | TAIEX | 2330 ...
+    - horizon                 # 1d / 5d / 10d ...
+  required_reproducibility:
+    - dataset_version
+    - feature_version
+    - model_version
+    - protocol_version        # pre-registered protocol hash
+    - build_id
+  evidence_layers:
+    - DATA
+    - HISTORICAL
+    - CAUSAL
+    - ECONOMIC
+    - FORWARD
+    - RISK
+    - PRODUCTION
+
+evidence_layer_semantics:
+  HISTORICAL:
+    - kind: NO_EVIDENCE | STATISTICAL_FORECAST_EVIDENCE | NOT_YET_VALIDATED
+    - must_bind_baselines: [LAST_VALUE, ZERO_RETURN, SEASONAL_NAIVE, DRIFT]
+    - no_random_shuffle: true
+  CAUSAL:
+    - kind: NON_EXECUTABLE_FORECAST_EDGE | NOT_YET_VALIDATED
+  ECONOMIC:
+    - kind: NO_ECONOMIC_EDGE | NOT_YET_VALIDATED
+    - strategy_separate_from_forecast: true
+  FORWARD:
+    - kind: NONE_YET | ACCUMULATING | VALIDATED
+    - runtime_truth_source: get_forward_test_status
+    - registered_pending != validated
+
+isolation_rule: >
+  OSAKA_MICRO evidence 不得替 TAIWAN_STOCK / TAIWAN_INDEX 背書；
+  每市場分別統計，不把三市場 N 混成一個 sample count。
+
+promotion_rule: >
+  Historical OOS PASS 最多標 CHAMPION_CANDIDATE / 研究等價狀態；
+  不得 auto production promotion；仍需 causal / economic / forward / risk。
+
+final_oos_discipline: >
+  Final OOS 若被反覆查看並據此改模型 → OOS_CONTAMINATED，不得稱 untouched holdout；
+  須移到新 future holdout 或 Forward Shadow。

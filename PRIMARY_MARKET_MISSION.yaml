@@ -1,0 +1,47 @@
+# PRIMARY MARKET MISSION（Phase 2Q-C）
+# MARKET_AI_HUB 不是 Osaka-only system。
+# 三個同等重要的 first-class research target families。
+
+version: 1
+established: "2026-09-20"
+phase: PHASE2QC
+
+principle: >
+  MARKET_AI_HUB 有三大同等重要 first-class research target families，
+  不得把 Osaka 視為唯一 primary market。
+
+target_families:
+  - name: OSAKA_MICRO
+    primary_target: OSE_NIKKEI225_MICRO_FUTURES
+    scope: OSE Nikkei 225 Micro futures + proxy + continuous research series
+    invariants: [Direct != Proxy, Continuous != Contract, Settlement != Bar Close]
+    forward: enabled
+    note: 225LABO 為 LOCAL_ONLY，不得重新發布。
+
+  - name: TAIWAN_STOCK
+    primary_target: TAIWAN_INDIVIDUAL_STOCK
+    scope: 台股個股（FinMind/TWSE 直連，corporate action adjusted）
+    invariants: [corporate action adjustment, per-stock historical OOS, basket 不只有 2330]
+    forward: planned
+    note: 個股 strategy execution 以股票本身可成交條件研究。
+
+  - name: TAIWAN_INDEX
+    primary_target: TAIEX
+    scope: TAIEX cash index（forecast/reference）+ TX / MTX / TMF（execution instruments）
+    invariants: [TAIEX 指數點位 != 可成交 futures price, forecast target != execution instrument]
+    forward: planned
+    note: TAIEX forecast accuracy 不直接等於 MTX/TMF strategy edge。
+
+each_family_owns:
+  - data
+  - features
+  - models
+  - historical_validation
+  - analysis_packet
+  - forward_validation
+  - strategy_research_path
+
+trading_state: RESEARCH_ONLY   # 禁止 broker login / order / live execution
+auto_train: false
+auto_fine_tune: false
+auto_promote: false

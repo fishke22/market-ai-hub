@@ -553,9 +553,11 @@ def get_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MICR
                         save_analysis: bool = True) -> dict:
     """正式分析封包（backend 先完成大部分工作）。
 
-    market: osaka | taiwan。target 例：OSE_NIKKEI225_MICRO_FUTURES / 3706.TW。
+    market: osaka | taiwan（=taiwan_stock）| taiwan_index。
+    target 例：OSE_NIKKEI225_MICRO_FUTURES / 3706.TW / TAIEX。
     horizon: 1d/2d/5d/10d。detail_level: compact | normal | audit。
     ^N225 只能是 PROXY/REFERENCE，不得當 execution target。
+    taiwan_index 的 TAIEX 為 forecast/reference（非可成交）；execution 需明確 TX/MTX/TMF。
     """
     from market_ai_hub.packet.builder import build_analysis_packet
 
