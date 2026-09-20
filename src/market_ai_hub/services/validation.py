@@ -225,7 +225,10 @@ class TsValidationStore:
     """TS validation run 持久化（非破壞性：新 table）。"""
 
     def __init__(self) -> None:
-        self.db_path = project_root() / "data" / "ts_validation.duckdb"
+        from market_ai_hub.config.runtime_paths import resolve_db_path
+
+        self.db_path = resolve_db_path("ts_validation.duckdb")
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _conn(self):
         return duckdb.connect(str(self.db_path))

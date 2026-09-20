@@ -38,9 +38,16 @@ class MarketStore:
         self.root = root or _project_root()
         self.raw_dir = self.root / "data" / "raw"
         self.processed_dir = self.root / "data" / "processed"
-        self.db_path = self.root / "data" / "market.duckdb"
+        if root is not None:
+            # test isolation：自訂 root 時 DB 放該 root 下 db/
+            self.db_path = root / "db" / "market.duckdb"
+        else:
+            from market_ai_hub.config.runtime_paths import resolve_db_path
+
+            self.db_path = resolve_db_path("market.duckdb")
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _conn(self) -> duckdb.DuckDBPyConnection:
         return duckdb.connect(str(self.db_path))

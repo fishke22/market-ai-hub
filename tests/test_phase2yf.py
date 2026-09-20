@@ -115,5 +115,5 @@ def test_publication_manifest_contains_all_yuanta_docs():
 
 
 def test_ai_reconstruction_yuanta_prerequisites():
-    d = _doc("docs/AI_RECONSTRUCTION_GUIDE.md")
+    d = _doc("docs/development/AI_RECONSTRUCTION_GUIDE.md")
     assert "Apply API permission" in d and "Import certificate" in d and "WinCred" in d

@@ -113,7 +113,10 @@ class ResourceGovernor:
         self._lock = threading.Lock()
         self._heavy_job: dict | None = None
         self._queue: list[dict] = []
-        self._status_path = project_root() / "RESOURCE_GOVERNOR_STATUS.json"
+        # 2Q-F：status 輸出改到 DATA_ROOT/research_outputs/status/
+        from market_ai_hub.config.runtime_paths import status_outputs_root
+
+        self._status_path = status_outputs_root() / "RESOURCE_GOVERNOR_STATUS.json"
         self._usage_log = project_root() / "data" / "resource_usage_log.jsonl"
 
     # ── limits ──
@@ -261,6 +264,7 @@ class ResourceGovernor:
         }
 
     def write_status(self) -> None:
+        self._status_path.parent.mkdir(parents=True, exist_ok=True)
         self._status_path.write_text(json.dumps(self.status(), indent=2, default=str), encoding="utf-8")
 
 

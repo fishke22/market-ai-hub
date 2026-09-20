@@ -203,7 +203,9 @@ def run_daily_cycle() -> dict:
 
 
 def write_daily_summary(cov: dict, created: dict, settled: dict, status: dict) -> str:
-    """Write FORWARD_DAILY_SUMMARY.md (human-readable, no BUY/SELL)."""
+    """Write FORWARD_DAILY_SUMMARY.md (human-readable, no BUY/SELL)。輸出到 DATA_ROOT/research_outputs/forward/。"""
+    from market_ai_hub.config.runtime_paths import forward_outputs_root
+
     lines = [
         "# FORWARD DAILY SUMMARY",
         f"- Data: {cov['freshness']} (last bar {cov.get('last_bar_date', 'N/A')})",
@@ -213,6 +215,8 @@ def write_daily_summary(cov: dict, created: dict, settled: dict, status: dict) -
         f"- Evidence label: RESEARCH_FORECAST_ONLY / NON_EXECUTABLE_FORECAST_EDGE",
         f"- Generated: {_now().isoformat()}",
     ]
-    out = project_root() / "FORWARD_DAILY_SUMMARY.md"
+    out_dir = forward_outputs_root()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "FORWARD_DAILY_SUMMARY.md"
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return "\n".join(lines)

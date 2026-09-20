@@ -27,7 +27,8 @@ def _mcp_tool_names() -> set[str]:
 def test_system_manifest_valid():
     d = yaml.safe_load(_read("config/system_manifest.yaml"))
     assert d["system"]["build_id"] == "runtime_introspected"  # 動態值不再 hardcode
-    assert d["targets"]["primary"] == "OSE_NIKKEI225_MICRO_FUTURES"
+    assert d["first_class_targets"]["OSAKA_MICRO"]["primary_target"] == "OSE_NIKKEI225_MICRO_FUTURES"
+    assert set(d["first_class_targets"]) == {"OSAKA_MICRO", "TAIWAN_STOCK", "TAIWAN_INDEX"}
     assert set(d["target_families"]) == {"OSAKA_MICRO", "TAIWAN_STOCK", "TAIWAN_INDEX"}
     assert d["safety"]["live_trading"] is False
     assert d["automation"]["auto_promote_champion"] is False
@@ -85,7 +86,7 @@ def test_model_manifest_registry_consistency():
 
 # --- 8/9: docs no stale values ---
 def test_docs_no_stale_tool_count():
-    for p in ("README.md", "config/system_manifest.yaml", "docs/MCP_TOOL_REFERENCE.md", "docs/development/project-status.md"):
+    for p in ("README.md", "config/system_manifest.yaml", "docs/reference/MCP_TOOL_REFERENCE.md", "docs/development/project-status.md"):
         txt = _read(p)
         assert "13 tools" not in txt and "13 個 tool" not in txt
 
@@ -135,13 +136,13 @@ def test_license_present():
 # --- 14: reconstruction required files ---
 def test_reconstruction_required_files():
     required = [
-        "README.md", "config/system_manifest.yaml", "docs/AI_RECONSTRUCTION_GUIDE.md",
+        "README.md", "config/system_manifest.yaml", "docs/development/AI_RECONSTRUCTION_GUIDE.md",
         "docs/development/project-status.md", "config/model_registry.yaml", "config/model_manifest.yaml",
         "config/capabilities.yaml", "LICENSE", "SECURITY.md", ".env.example", ".gitignore",
         "pyproject.toml", "examples/mcp/generic-stdio.json", "examples/mcp/cherry-studio.json",
         "scripts/download_models.py", "scripts/setup_windows.ps1",
         "scripts/register_research_tasks.ps1", "scripts/unregister_research_tasks.ps1",
-        "scripts/reconstruct_verify.ps1", "docs/MCP_TOOL_REFERENCE.md", "docs/ARCHITECTURE.md",
+        "scripts/reconstruct_verify.ps1", "docs/reference/MCP_TOOL_REFERENCE.md", "docs/concepts/ARCHITECTURE.md",
     ]
     for p in required:
         assert (ROOT / p).exists(), f"missing required file: {p}"

@@ -20,7 +20,7 @@ def _doc(p: str) -> str:
 
 # --- permission contradiction ---
 def test_user_permission_claim_preserved():
-    r = _doc("YUANTA_PERMISSION_CONTRADICTION_REPORT.md")
+    r = _doc("research/phase2/integrations/yuanta/YUANTA_PERMISSION_CONTRADICTION_REPORT.md")
     assert "全部開通" in r
 
 
@@ -63,14 +63,14 @@ def test_legacy_quote_and_trading_independent():
 
 # --- spark futures 0112 ---
 def test_spark_futures_0112_not_auto_permission_denied():
-    d = _doc("YUANTA_PERMISSION_CONTRADICTION_REPORT.md")
+    d = _doc("research/phase2/integrations/yuanta/YUANTA_PERMISSION_CONTRADICTION_REPORT.md")
     assert "CONTRADICTION" in d
     assert "不得" in d or "不直接" in d
 
 
 def test_spark_account_format_validation():
     # 不從聊天記憶 hardcode futures account format；矛盾報告列「待營業員確認」
-    d = _doc("YUANTA_PERMISSION_CONTRADICTION_REPORT.md")
+    d = _doc("research/phase2/integrations/yuanta/YUANTA_PERMISSION_CONTRADICTION_REPORT.md")
     assert "CONTRADICTION" in d and "0112" in d
 
 
@@ -99,7 +99,7 @@ def test_legacy_overseas_scope_evidence_based():
 
 # --- support packet ---
 def test_support_packet_no_pii():
-    p = _doc("YUANTA_SUPPORT_EVIDENCE_PACKET.md")
+    p = _doc("research/phase2/integrations/yuanta/YUANTA_SUPPORT_EVIDENCE_PACKET.md")
     # 不得含實際 PII 值（假帳號/密碼格式）
     for kw in ("A123", "F123", "密碼:", "身份證:", "FF0"):
         assert kw not in p

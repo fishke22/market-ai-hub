@@ -10,7 +10,7 @@ function Check($cond, $msg) {
 
 Write-Host "== required files =="
 $required = @(
-  "README.md", "config/system_manifest.yaml", "docs/AI_RECONSTRUCTION_GUIDE.md",
+  "README.md", "config/system_manifest.yaml", "docs/development/AI_RECONSTRUCTION_GUIDE.md",
   "docs/development/project-status.md", "config/model_registry.yaml", "config/model_manifest.yaml",
   "config/capabilities.yaml", "LICENSE", "SECURITY.md", ".env.example", ".gitignore",
   "pyproject.toml", "requirements-runtime.txt",
@@ -19,7 +19,7 @@ $required = @(
   "skills/model-validation-audit/SKILL.md",
   "scripts/download_models.py", "scripts/setup_windows.ps1",
   "scripts/register_research_tasks.ps1", "scripts/unregister_research_tasks.ps1",
-  "docs/MCP_TOOL_REFERENCE.md", "docs/ARCHITECTURE.md"
+  "docs/reference/MCP_TOOL_REFERENCE.md", "docs/concepts/ARCHITECTURE.md"
 )
 foreach ($f in $required) {
   Check (Test-Path (Join-Path $Root $f)) "file: $f"

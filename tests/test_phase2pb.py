@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 BEGINNER_DOCS = [
     "getting-started/quickstart.md",
-    "HOW_MARKET_AI_HUB_WORKS.md",
+    "concepts/HOW_MARKET_AI_HUB_WORKS.md",
     "getting-started/cherry-studio.md",
     "guides/data-updates.md",
     "guides/model-training-and-retraining.md",

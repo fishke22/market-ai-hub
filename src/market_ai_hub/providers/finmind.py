@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 API = "https://api.finmindtrade.com/api/v4/data"
 
-# 常用 dataset tier 標註（詳細見 docs/DATA_SOURCE_MATRIX.md）
+# 常用 dataset tier 標註（詳細見 docs/reference/DATA_SOURCE_MATRIX.md）
 DATASET_TIER: dict[str, str] = {
     "TaiwanStockPrice": "FREE",
     "TaiwanStockPriceAdj": "FREE",

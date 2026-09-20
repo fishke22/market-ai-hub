@@ -28,7 +28,13 @@ V2_COLUMNS = [
 class PerformanceStore:
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or project_root()
-        self.db_path = self.root / "data" / "performance.duckdb"
+        if root is not None:
+            self.db_path = root / "db" / "performance.duckdb"
+        else:
+            from market_ai_hub.config.runtime_paths import resolve_db_path
+
+            self.db_path = resolve_db_path("performance.duckdb")
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _conn(self) -> duckdb.DuckDBPyConnection:
         return duckdb.connect(str(self.db_path))

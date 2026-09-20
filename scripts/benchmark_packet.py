@@ -19,6 +19,15 @@ from market_ai_hub.packet.benchmark import estimate_tokens  # noqa: E402
 from market_ai_hub.packet.profiler import PerformanceProfiler, patch_http_counters  # noqa: E402
 
 
+def _default_out() -> Path:
+    """預設輸出到 DATA_ROOT/research_outputs/performance/，不落 project root。"""
+    from market_ai_hub.config.runtime_paths import performance_outputs_root
+
+    d = performance_outputs_root()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "PERFORMANCE_BASELINE.json"
+
+
 def measure(market: str, target: str, detail: str, cold: bool) -> dict:
     profiler = PerformanceProfiler()
     patch_http_counters(profiler)
@@ -50,7 +59,7 @@ def measure(market: str, target: str, detail: str, cold: bool) -> dict:
 
 
 def main() -> int:
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--out" else ROOT / "PERFORMANCE_BASELINE.json"
+    out = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--out" else _default_out()
     runs = [
         ("osaka", "OSE_NIKKEI225_MICRO_FUTURES", "compact"),
         ("osaka", "OSE_NIKKEI225_MICRO_FUTURES", "normal"),

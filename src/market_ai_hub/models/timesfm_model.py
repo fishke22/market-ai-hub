@@ -3,7 +3,7 @@
 - 官方 repository: google-research/timesfm, package timesfm (3.0.x)
 - 模型: google/timesfm-3.0-pytorch
 - 授權：code Apache-2.0；weights = timesfm-non-commercial-license-v1.0
-  → 僅 non-commercial / research / evaluation，詳見 docs/LICENSE_MATRIX.md
+  → 僅 non-commercial / research / evaluation，詳見 docs/reference/LICENSE_MATRIX.md
 - API：TimesFM3Forecaster.predict(context, horizon, return_quantiles=True)
   原生 quantiles = [0.1..0.9]，median_quantile_index=4 (0.5)
 

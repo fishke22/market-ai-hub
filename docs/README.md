@@ -9,6 +9,7 @@ Documentation index for MARKET_AI_HUB.
 - [MCP clients](getting-started/mcp-clients.md)
 - [Cherry Studio](getting-started/cherry-studio.md)
 - [Cherry Studio technical setup](getting-started/cherry-studio-setup.md)
+- [User acceptance checklist](getting-started/user-acceptance-checklist.md)
 
 ## User guides
 
@@ -17,43 +18,43 @@ Documentation index for MARKET_AI_HUB.
 - [Model training and retraining](guides/model-training-and-retraining.md)
 - [Resource safety](guides/resource-safety.md)
 - [Trading readiness](guides/trading-readiness.md)
-- [Troubleshooting](TROUBLESHOOTING.md)
+- [Troubleshooting](guides/TROUBLESHOOTING.md)
 - [FAQ](guides/faq.md)
 
 ## Concepts
 
-- [Architecture](ARCHITECTURE.md)
-- [Analysis packet](ANALYSIS_PACKET.md)
-- [Data lake](data_lake_and_retention.md)
-- [Feature store](FEATURE_STORE.md)
-- [Model pipeline](MODEL_PIPELINE.md)
-- [Model tournament](MODEL_TOURNAMENT.md)
-- [Prediction registry](PREDICTION_REGISTRY.md)
-- [Regime engine](REGIME_ENGINE.md)
-- [Ensemble](DYNAMIC_ENSEMBLE.md)
+- [Architecture](concepts/ARCHITECTURE.md)
+- [Analysis packet](concepts/ANALYSIS_PACKET.md)
+- [Data lake](concepts/data_lake_and_retention.md)
+- [Feature store](concepts/FEATURE_STORE.md)
+- [Model pipeline](concepts/MODEL_PIPELINE.md)
+- [Model tournament](concepts/MODEL_TOURNAMENT.md)
+- [Prediction registry](concepts/PREDICTION_REGISTRY.md)
+- [Regime engine](concepts/REGIME_ENGINE.md)
+- [Ensemble](concepts/DYNAMIC_ENSEMBLE.md)
 - [Validation](concepts/validation.md)
-- [Forward shadow](FORWARD_SHADOW_OPERATIONS.md)
+- [Forward shadow](concepts/FORWARD_SHADOW_OPERATIONS.md)
 
 ## Integrations
 
 - [Yuanta](integrations/yuanta/README.md)
-- [TradingView](TRADINGVIEW_OPTIONAL_BRIDGE.md)
+- [TradingView](integrations/TRADINGVIEW_OPTIONAL_BRIDGE.md)
 
 ## Reference
 
-- [MCP tools](MCP_TOOL_REFERENCE.md)
-- [Data sources](DATA_SOURCE_MATRIX.md)
-- [Model licenses](MODEL_LICENSE_MATRIX.md)
-- [Skills](SKILLS_REFERENCE.md)
+- [MCP tools](reference/MCP_TOOL_REFERENCE.md)
+- [Data sources](reference/DATA_SOURCE_MATRIX.md)
+- [Model licenses](reference/MODEL_LICENSE_MATRIX.md)
+- [Skills](reference/SKILLS_REFERENCE.md)
 - [Known limitations](reference/known-limitations.md)
 - [Current status](reference/current-status.md)
 
 ## Development
 
 - [Project status](development/project-status.md)
-- [Reconstruction](AI_RECONSTRUCTION_GUIDE.md)
-- [Backup and restore](BACKUP_AND_RESTORE.md)
-- [Automation](AUTOMATED_LEARNING.md)
+- [Reconstruction](development/AI_RECONSTRUCTION_GUIDE.md)
+- [Backup and restore](development/BACKUP_AND_RESTORE.md)
+- [Automation](development/AUTOMATED_LEARNING.md)
 
 ## Prompts
 

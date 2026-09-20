@@ -30,6 +30,20 @@ def _t(fn):
     return r, (time.perf_counter() - t0) * 1000
 
 
+def _validation_out():
+    """provider validation 輸出目錄（DATA_ROOT/research_outputs/validation/，不落 project root）。"""
+    import sys
+    from pathlib import Path
+
+    ROOT = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(ROOT / "src"))
+    from market_ai_hub.config.runtime_paths import validation_outputs_root
+
+    d = validation_outputs_root()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 # ───────────────────────────────────────────────────────────── C. Provider validation
 def section_c():
     from market_ai_hub.providers.base import ProviderStatus
@@ -452,7 +466,7 @@ def main():
             rec("_section_errors", name, str(e)[:300])
 
     from market_ai_hub.config.settings import project_root
-    out_p = project_root() / "REAL_PROVIDER_VALIDATION.json"
+    out_p = _validation_out() / "REAL_PROVIDER_VALIDATION.json"
     out_p.write_text(json.dumps(RESULTS, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     full_p = project_root() / "data" / "phase2va_results.json"
     full_p.parent.mkdir(parents=True, exist_ok=True)

@@ -17,16 +17,27 @@ target_families:
   - TAIWAN_STOCK
   - TAIWAN_INDEX
 
-targets:
-  primary: "OSE_NIKKEI225_MICRO_FUTURES"
-  references:
-    - "OSE Nikkei 225 mini"
-    - "OSE Nikkei 225 Futures (Large)"
-    - "Nikkei Spot"
-    - "SGX Nikkei"
-    - "CME Nikkei"
-  proxies:
-    - "^N225"
+# 三個 first-class families；不得再以單一 global primary 強化 Osaka-only。
+first_class_targets:
+  OSAKA_MICRO:
+    primary_target: "OSE_NIKKEI225_MICRO_FUTURES"
+    maturity: "most mature historical research track"
+  TAIWAN_STOCK:
+    target_type: "listed_equity"
+    maturity: "runtime analysis AVAILABLE; historical OOS NOT_YET_VALIDATED"
+  TAIWAN_INDEX:
+    forecast_target: "TAIEX"
+    execution_instruments: ["TX", "MTX", "TMF"]
+    maturity: "semantics/registry exist; direct pipeline PARTIAL"
+
+references:
+  - "OSE Nikkei 225 mini"
+  - "OSE Nikkei 225 Futures (Large)"
+  - "Nikkei Spot"
+  - "SGX Nikkei"
+  - "CME Nikkei"
+proxies:
+  - "^N225"
 
 architecture:
   data_layer: "automation/data_lake.py"
@@ -49,7 +60,7 @@ models:
 
 data:
   lake_root: "data/"
-  provider_matrix: "docs/DATA_SOURCE_MATRIX.md"
+  provider_matrix: "docs/reference/DATA_SOURCE_MATRIX.md"
   authoritative_sources: ["JPX", "BLS", "Cboe", "SEC EDGAR", "BOJ"]
   proxy_sources: ["yfinance", "^N225"]
 
@@ -63,7 +74,7 @@ mcp:
   transport: "stdio"
   entrypoint: "market_ai_hub.mcp.server:main_sync"
   executable: ".venv\\Scripts\\market-ai-mcp.exe"
-  tool_reference: "docs/MCP_TOOL_REFERENCE.md"
+  tool_reference: "docs/reference/MCP_TOOL_REFERENCE.md"
   tool_count: 21
 
 skills:

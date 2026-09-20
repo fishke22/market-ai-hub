@@ -23,7 +23,7 @@ def _json(p: str):
 
 
 def test_local_sdk_inventory_schema():
-    d = _json("YUANTA_LOCAL_SDK_INVENTORY.json")
+    d = _json("tests/fixtures/yuanta_sdk_inventory.sample.json")
     assert "files" in d and isinstance(d["files"], list)
     f = d["files"][0]
     for k in ("root", "relative_path", "filename", "size", "modified_utc", "extension", "sha256"):

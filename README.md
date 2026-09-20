@@ -91,8 +91,8 @@ Start here: [docs/README.md](docs/README.md) (documentation index).
 Key entry points:
 
 - [Quick start](docs/getting-started/quickstart.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [MCP tools reference](docs/MCP_TOOL_REFERENCE.md)
+- [Architecture](docs/concepts/ARCHITECTURE.md)
+- [MCP tools reference](docs/reference/MCP_TOOL_REFERENCE.md)
 - [System prompt (recommended)](docs/prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)
 - [Known limitations](docs/reference/known-limitations.md)
 

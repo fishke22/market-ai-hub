@@ -82,7 +82,7 @@ def test_tradingview_optional_failure():
 
 # --- symbol map schema ---
 def test_tradingview_symbol_map_schema():
-    d = json.loads((ROOT / "TRADINGVIEW_SYMBOL_MAP.json").read_text(encoding="utf-8"))
+    d = json.loads((ROOT / "config" / "tradingview_symbol_map.json").read_text(encoding="utf-8"))
     required_fields = {"logical_instrument", "tradingview_symbol", "exchange",
                        "description", "availability", "delay_status", "verified_at"}
     for inst in d["instruments"]:

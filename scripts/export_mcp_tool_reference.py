@@ -1,6 +1,6 @@
 """Phase 2I-B — 從 runtime introspection 輸出 MCP tool reference。
 
-用法：python scripts/export_mcp_tool_reference.py [--out docs/MCP_TOOL_REFERENCE.md]
+用法：python scripts/export_mcp_tool_reference.py [--out docs/reference/MCP_TOOL_REFERENCE.md]
 禁止手寫與 runtime 不一致的假清單。
 """
 from __future__ import annotations

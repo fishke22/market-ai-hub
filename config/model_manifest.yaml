@@ -56,5 +56,5 @@ models:
     estimated_size_mb: 3967
     notes: >
       OPTIONAL。FinCast 依賴（tensorflow/jax 舊版 pinned）與主 venv 衝突 →
-      使用隔離 .venv-fincast（見 docs/DEPENDENCIES.md）。非 V1 基本執行必需。
+      使用隔離 .venv-fincast（見 docs/reference/DEPENDENCIES.md）。非 V1 基本執行必需。
       research/education 用途。
