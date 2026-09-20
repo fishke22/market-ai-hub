@@ -1,8 +1,9 @@
-# MARKET_AI_HUB — CURRENT HANDOFF
+# MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 2Q-D（Full Performance Engineering + Model/Data Runtime Acceleration + MCP/Cherry Latency Hardening + Build Identity Correction）**
-- Gate: **PHASE2QD_PASS**（最近；前置 PHASE2QC2_PASS）
-- build_id：**badba314b7e119c0**（2Q-D 起：fingerprint 全部 runtime source + config）
+- Current phase: **Phase 2Q-F.3（Manual UAT Truthfulness Remediation + OSE Direct/Proxy Separation + Validation Evidence Isolation + Answer Contract Hardening）**
+- Gate: **PHASE2QF3_RUNTIME_TRUTH_PASS**（最近；前置 PHASE2QF2_PREP_PASS）
+- build_id：**bc9bc59b0d970cab**（fingerprint 全部 runtime source + config）
+- Manual Cherry UAT：**RETEST_REQUIRED**
 
 ## Phase 2 全歷程 Gate
 
