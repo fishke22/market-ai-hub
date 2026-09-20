@@ -15,11 +15,12 @@ from pathlib import Path
 import httpx
 
 from market_ai_hub.config.settings import project_root
+from market_ai_hub.config.runtime_paths import data_root
 from market_ai_hub.providers.base import ProviderError
 
 log = logging.getLogger(__name__)
 
-CACHE_ROOT = project_root() / "data" / "cache"
+CACHE_ROOT = data_root() / "cache"
 
 
 class RateLimitedClient:

@@ -17,14 +17,19 @@ from market_ai_hub.config.settings import project_root
 
 _LOG_DIR = project_root() / "logs"
 
-# 用 delay=True 的 FileHandler：import 不建立目錄/檔案，side effect 只在 server 真正啟動時發生。
+# import 完全無 filesystem side effect：檔案 log 只在 main_sync() 真正啟動 server 時才配置。
 _root_logger = logging.getLogger()
 _root_logger.setLevel(logging.WARNING)
-_log_handler = logging.FileHandler(str(_LOG_DIR / "mcp.log"), delay=True)
-_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
-_root_logger.addHandler(_log_handler)
 
 mcp = MCPServer("market-ai-hub")
+
+
+def _configure_file_logging() -> None:
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+    if not any(getattr(h, "baseFilename", None) == str(_LOG_DIR / "mcp.log") for h in _root_logger.handlers):
+        h = logging.FileHandler(str(_LOG_DIR / "mcp.log"), delay=True)
+        h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        _root_logger.addHandler(h)
 
 
 def _torch_info() -> dict:
@@ -704,7 +709,7 @@ def get_analysis_archive_status() -> dict:
 
 
 def main_sync() -> None:
-    _LOG_DIR.mkdir(parents=True, exist_ok=True)  # 只有真正啟動 server 才建立 log 目錄
+    _configure_file_logging()  # 只有真正啟動 server 才建立 log 目錄/檔案
     import asyncio
 
     asyncio.run(mcp.run_stdio_async())
