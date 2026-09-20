@@ -1,4 +1,4 @@
-# PUBLICATION FILE MANIFEST (rebuilt, Phase 2P-B)
+# PUBLICATION FILE MANIFEST (rebuilt after remote reconciliation, Phase 2P-C)
 .env.example
 .gitattributes
 .github/workflows/ci.yml
@@ -49,6 +49,7 @@ PHASE2PA_CRASH_RECOVERY_AUDIT.md
 PHASE2PA_CRASH_RECOVERY_REPORT.md
 PHASE2PA_FINAL_PUBLICATION_ACCEPTANCE_REPORT.md
 PHASE2PA_RECOVERY_CHECKLIST.json
+PHASE2PB_BEGINNER_PUBLICATION_REPORT.md
 PHASE2T_TRADINGVIEW_REPORT.md
 PHASE2VA_REAL_WORLD_VALIDATION_REPORT.md
 PHASE2VB1_LOCAL_DATA_DISCOVERY_REPORT.md
@@ -148,6 +149,7 @@ docs/HOW_MARKET_AI_HUB_WORKS.md
 docs/INSTALL_WINDOWS.md
 docs/JOINT_FORECAST.md
 docs/LICENSE_MATRIX.md
+docs/MCP_CLIENT_SETUP.md
 docs/MCP_TOOL_REFERENCE.md
 docs/MODEL_ADAPTERS.md
 docs/MODEL_LICENSE_MATRIX.md
@@ -194,6 +196,8 @@ docs/automated_learning_policy.md
 docs/autonomous_research_loop.md
 docs/data_lake_and_retention.md
 docs/environment/V1_FREEZE_ENVIRONMENT.txt
+docs/prompts/QUICK_PROMPTS.md
+docs/prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md
 docs/windows_scheduler.md
 examples/mcp/README.md
 examples/mcp/cherry-studio.json
