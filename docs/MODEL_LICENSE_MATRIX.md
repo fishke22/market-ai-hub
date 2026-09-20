@@ -1,0 +1,30 @@
+# MODEL LICENSE MATRIX（模型授權矩陣）
+
+Phase 2D 盤點的模型授權。**code license 與 weight license 分開**；weights 一律不入 Git。
+
+| 模型 | Code License | Weight License | 商用 | 公開再散布 | 目前用途 | 目前狀態 |
+|------|--------------|----------------|------|-----------|----------|----------|
+| Chronos-2 | Apache-2.0 | Apache-2.0 | ✅ | ✅（本專案仍不散布） | 價格預測（V1） | AVAILABLE |
+| TimesFM-3.0 | Apache-2.0 | **timesfm-non-commercial-license-v1.0** | ❌ | ❌ | 價格預測（V1，research only） | AVAILABLE |
+| XGBoost | Apache-2.0 | n/a（無 pretrained） | ✅ | n/a | 方向分類 | AVAILABLE |
+| LightGBM | MIT | n/a | ✅ | n/a | 方向分類 | AVAILABLE |
+| FinCast | Apache-2.0（repo） | research/education | ❌ | ❌ | 價格（bridge，point only） | PARTIAL |
+| Kronos-TW | UNKNOWN | UNKNOWN | ❌ | ❌ | 台股價格 challenger | CHALLENGER |
+| Sundial | UNKNOWN | UNKNOWN | ❌ | ❌ | 價格 challenger | BLOCKED_LICENSE（gated） |
+| TinyTimeMixer (TTM) | Apache-2.0 | Apache-2.0 | ✅ | ✅ | 價格 challenger | CHALLENGER |
+| NHITS / NBEATSx | Apache-2.0 | n/a（fit-on-the-fly） | ✅ | n/a | 價格 challenger | CHALLENGER |
+| Moirai-2 | Apache-2.0（uni2ts） | **NONCOMMERCIAL** | ❌ | ❌ | 價格 challenger | BLOCKED_LICENSE（gated + 非商業） |
+
+## 重要
+
+- **TimesFM-3.0 weights 為非商業授權**：禁止商業部署、禁止再散布。所有輸出帶 `TIMESFM3_NON_COMMERCIAL_ONLY`。
+- **Moirai-2 / Sundial 為 gated repo**：需登入 HF 接受條款；本專案標 `BLOCKED_LICENSE`，未下載。
+- **FinCast**：repo Apache-2.0，但官方 README 標 research/education。
+- **NONCOMMERCIAL_RESEARCH_ONLY** 的權重：允許個人研究使用，但不得放入公開 GitHub model files、不得再散布、
+  不得誤寫成 Apache weight license。
+
+## 硬體限制
+
+RTX 4060 Ti **16GB** 為本機上限。禁止為硬跑模型造成長時間 OOM / swap；OOM → `BLOCKED_HARDWARE`。
+
+模型估計 VRAM 見 `config/model_registry.yaml`（`estimated_vram_mb` 欄位）。

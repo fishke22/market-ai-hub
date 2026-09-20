@@ -12,6 +12,7 @@ secrets/
 # ── Virtual environments ──
 .venv/
 .venv-fincast/
+.venv-yuanta-futures-x86/
 venv/
 ENV/
 
@@ -59,6 +60,16 @@ data/raw/
 data/processed/
 data/cache/
 data/private/
+data/registry/
+data/tournament/
+data/feature_store/
+data/analysis_archive/
+data/strategy/
+data/events/
+data/normalized/
+data/features/
+data/predictions/
+data/manifests/
 *.parquet
 *.feather
 
@@ -69,6 +80,13 @@ outputs/
 
 # ── Third-party cloned repos (download on demand, not vendored) ──
 external/fincast/
+external/tradingview-mcp/
+
+# ── Yuanta vendor binaries (NEVER commit) ──
+vendor/
+*.dll
+*.pfx
+*.p12
 
 # ── Local backups / agent scratch ──
 .remediation_backup_20260919/
@@ -76,9 +94,36 @@ external/fincast/
 environment_export/
 MARKET_AI_BACKUP/
 
+# ── Phase 2 runtime artifacts (regenerated / machine-specific / private) ──
+data/*.json
+data/*.jsonl
+FORWARD_SHADOW_STATUS.json
+FORWARD_DAILY_SUMMARY.md
+RESOURCE_GOVERNOR_STATUS.json
+REAL_PROVIDER_VALIDATION.json
+PERFORMANCE_AFTER.json
+PERFORMANCE_BASELINE.json
+TRADINGVIEW_SYMBOL_MAP.json
+LOCAL_DATA_INVENTORY.json
+LOCAL_OSE_MICRO_COVERAGE.json
+LOCAL_DATA_DUPLICATES.csv
+YUANTA_LOCAL_SDK_INVENTORY.json
+YUANTA_FUTURES_AUTH_RESULT.json
+YUANTA_REAL_AUTH_RESULT.json
+YUANTA_FUTURES_COM_DIAGNOSTIC.json
+YUANTA_INTEROP_DIAGNOSTIC.json
+MICRO_HISTORY_COVERAGE_REPORT.md
+YUANTA_COMPONENT_INVENTORY.md
+YUANTA_SUPPORT_EVIDENCE_PACKET.md
+YUANTA_PERMISSION_CONTRADICTION_REPORT.md
+
 # ── IDE / OS ──
 .idea/
 .vscode/
 *.swp
 Thumbs.db
 desktop.ini
+
+# Experiment tracking
+lightning_logs/
+mlruns/

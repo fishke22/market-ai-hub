@@ -1,0 +1,11 @@
+# MARKET_AI_HUB — 外部整合版本 pinning（不自動 pull latest）
+tradingview_mcp:
+  repo: https://github.com/tradesdontlie/tradingview-mcp
+  commit_sha: c05b8f5755ed8e64ea242de88ddbf46aa24d56a4
+  license: MIT
+  node_requirement: ">=18"
+  install_location: external/tradingview-mcp
+  tested_date: "2026-09-19"
+  tested_node: "v24.16.0"
+  tested_tradingview_version: "3.4.0.8149"
+  note: "TradingView data/software 不屬於 MIT license；升級需重新 smoke test，不自動 pull latest"

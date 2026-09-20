@@ -1,0 +1,52 @@
+# MARKET_AI_HUB — 元大官方來源 Ground Truth（2026-09-19 checked）
+# 只記錄官方來源；第三方只能 SUPPLEMENTARY_REFERENCE，不得當 authoritative。
+schema_version: 1
+
+sources:
+  - name: Yuanta SPARK API (platform/download)
+    purpose: 證券/期貨 SPARK API 套件與文件
+    official_url: "https://www.yuanta.com.tw (Yuanta Securities API 專區)"
+    checked_at: "2026-09-19"
+    observed_version: "2.2026.0918.0"
+    local_version: "2.2026.0918.0"
+    status: LOCAL_VERIFIED
+
+  - name: Yuanta SPARK API documentation
+    purpose: SPARK 功能/登入/錯誤碼/商品代碼說明
+    official_url: "SPARK package 內 PDF (操作說明/安裝說明)"
+    checked_at: "2026-09-19"
+    observed_version: "2.2026.0918.0"
+    local_version: "2.2026.0918.0"
+    status: LOCAL_VERIFIED
+
+  - name: Yuanta Futures API download page
+    purpose: 期貨行情/交易 API 元件下載
+    official_url: "https://www.yuantafutures.com.tw (期貨 API 下載頁)"
+    checked_at: "2026-09-19"
+    observed_version: "行情 API 公開頁 2.1.2.7；交易 API 1.6.1.3"
+    local_version: "YuantaQuote_v2.1.2.9.ocx (LOCAL)"
+    status: PUBLIC_PAGE_VERSION_NE_LOCAL
+
+  - name: Yuanta Futures Certificate Center
+    purpose: 元大憑證申請/更新/匯出/匯入/簽驗
+    official_url: "https://www.yuantafutures.com.tw 憑證中心"
+    checked_at: "2026-09-19"
+    status: NEEDS_USER_VERIFICATION
+
+  - name: Yuanta Futures online services / API application
+    purpose: API 行情服務 / API 交易服務申請聲明書
+    official_url: "期貨線上服務 → 線上服務 → API 行情/交易服務申請"
+    checked_at: "2026-09-19"
+    status: NEEDS_BROKER_CONFIRMATION
+
+  - name: Yuanta Futures contract/product pages
+    purpose: 商品代碼(public product code)與保證金表
+    official_url: "期貨商品/保證金表"
+    checked_at: "2026-09-19"
+    status: NEEDS_BROKER_CONFIRMATION
+
+  - name: Yuanta MultiCharts symbol/data-source documentation
+    purpose: YuantaFutures QuoteManager Symbol List
+    official_url: "元大期貨 MultiCharts 說明"
+    checked_at: "2026-09-19"
+    status: NOT_INSTALLED

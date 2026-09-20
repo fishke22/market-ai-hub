@@ -1,0 +1,55 @@
+# RESOURCE PROFILES — Compute Resource Governor (Phase 2V-F)
+# MARKET_AI_HUB 不是獨占式 training server；預設 INTERACTIVE_DESKTOP_PRIORITY。
+default_profile: DESKTOP_SAFE     # 不是 TRAINING_MAX
+
+profiles:
+  DESKTOP_SAFE:
+    label: "Interactive desktop priority (default)"
+    gpu_vram_soft_frac: 0.65      # soft target <= 65%
+    gpu_vram_hard_frac: 0.75      # hard stop <= 75%
+    gpu_vram_reserve_mb: 4096     # 保留至少 ~4GB 給 desktop/browser/Cherry/other CUDA
+    cpu_reserve_frac: 0.25        # 保留 25% logical cores 給系統
+    ram_soft_frac: 0.65
+    ram_hard_frac: 0.75
+    process_priority: "BelowNormal"
+    optuna_n_jobs: 1
+    auto_train: false
+    auto_fine_tune: false
+
+  BALANCED:
+    label: "Balanced (heavier research, user-aware)"
+    gpu_vram_soft_frac: 0.80
+    gpu_vram_hard_frac: 0.90
+    gpu_vram_reserve_mb: 2048
+    cpu_reserve_frac: 0.15
+    ram_soft_frac: 0.75
+    ram_hard_frac: 0.85
+    process_priority: "BelowNormal"
+    optuna_n_jobs: 1
+    auto_train: false
+    auto_fine_tune: false
+
+  TRAINING_MAX:
+    label: "Maximum training throughput (NOT default)"
+    gpu_vram_soft_frac: 0.90
+    gpu_vram_hard_frac: 0.95
+    gpu_vram_reserve_mb: 1024
+    cpu_reserve_frac: 0.05
+    ram_soft_frac: 0.85
+    ram_hard_frac: 0.95
+    process_priority: "BelowNormal"
+    optuna_n_jobs: 1
+    auto_train: false
+    auto_fine_tune: false
+
+temperature_guard:
+  warning_c: 80
+  pause_c: 85
+  sensor_unavailable_ok: true   # 無 sensor 不 BLOCK
+
+training_windows:
+  default: MANUAL_ONLY          # 安裝後不自動 nightly training
+  quiet_hours: DISABLED         # 只有使用者明確啟用才排程
+
+emergency_stop:
+  behavior: "checkpoint_then_exit"   # 不是 kill -9

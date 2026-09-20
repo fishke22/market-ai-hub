@@ -1,0 +1,136 @@
+# LOCAL OSE DATA PROVENANCE MANIFEST (Phase 2V-B.2)
+generated_at: "2026-09-20"
+phase: "2V-B.2"
+
+# ── Listing date ground truth ──
+micro_listing_date: "2023-05-29"
+micro_contract_unit: "Nikkei 225 x JPY 10"
+micro_tick_size: 5
+micro_exchange: "OSE (Osaka Exchange / JPX)"
+
+# ── Micro datasets (D:\data) ──
+datasets:
+  - dataset: "N225microf_2023"
+    source_path: "D:\\data\\N225microf_2023.zip"
+    sha256: "d5622e9bd2c263141135471c91b29745d2afa224336343daae58238e478aed43"
+    instrument: "OSE_NIKKEI225_MICRO_FUTURES"
+    provider_symbol: "N225microf"          # 225LABO vendor symbol (NOT Yuanta JNU code)
+    logical_instrument: "JNU"              # logical mapping to SPARK order code
+    first_date: "2023-07-24"
+    last_date: "2024-01-03"
+    trading_days: 115
+    minute_rows: 137839
+    listing_date_check: "PASS (all >= 2023-05-29)"
+    timezone: "Asia/Tokyo (JST)"
+    price_semantics: "BAR_OHLC"
+    close_semantics: "BAR_CLOSE"
+    volume_semantics: "PER_MINUTE_CONTRACT_VOLUME"
+    tick_size_validated: true
+    authority: "DATA_VENDOR_225LABO"
+    import_status: "VERIFIED_OSE_MICRO"
+
+  - dataset: "N225microf_2024"
+    source_path: "D:\\data\\N225microf_2024.zip"
+    sha256: "913df08ebebe029c"
+    instrument: "OSE_NIKKEI225_MICRO_FUTURES"
+    provider_symbol: "N225microf"
+    logical_instrument: "JNU"
+    first_date: "2024-01-03"
+    last_date: "2025-01-03"
+    trading_days: 256
+    minute_rows: 307321
+    listing_date_check: "PASS"
+    timezone: "Asia/Tokyo (JST)"
+    price_semantics: "BAR_OHLC"
+    close_semantics: "BAR_CLOSE"
+    volume_semantics: "PER_MINUTE_CONTRACT_VOLUME"
+    tick_size_validated: true
+    authority: "DATA_VENDOR_225LABO"
+    import_status: "VERIFIED_OSE_MICRO"
+
+  - dataset: "N225microf_2025"
+    source_path: "D:\\data\\N225microf_2025.zip"
+    sha256: "908d7db8ff69fe3b"
+    instrument: "OSE_NIKKEI225_MICRO_FUTURES"
+    provider_symbol: "N225microf"
+    logical_instrument: "JNU"
+    first_date: "2024-12-30"
+    last_date: "2026-01-05"
+    trading_days: 258
+    minute_rows: 309695
+    listing_date_check: "PASS"
+    timezone: "Asia/Tokyo (JST)"
+    price_semantics: "BAR_OHLC"
+    close_semantics: "BAR_CLOSE"
+    volume_semantics: "PER_MINUTE_CONTRACT_VOLUME"
+    tick_size_validated: true
+    authority: "DATA_VENDOR_225LABO"
+    import_status: "VERIFIED_OSE_MICRO"
+
+  - dataset: "N225microf_2026"
+    source_path: "D:\\data\\N225microf_2026.zip"
+    sha256: "e6149c02097814f8"
+    instrument: "OSE_NIKKEI225_MICRO_FUTURES"
+    provider_symbol: "N225microf"
+    logical_instrument: "JNU"
+    first_date: "2025-12-30"
+    last_date: "2026-08-31"
+    trading_days: 172
+    minute_rows: 206744
+    listing_date_check: "PASS"
+    timezone: "Asia/Tokyo (JST)"
+    price_semantics: "BAR_OHLC"
+    close_semantics: "BAR_CLOSE"
+    volume_semantics: "PER_MINUTE_CONTRACT_VOLUME"
+    tick_size_validated: true
+    authority: "DATA_VENDOR_225LABO"
+    import_status: "VERIFIED_OSE_MICRO"
+
+  - dataset: "N225minif_2012..2026"
+    source_path: "D:\\data\\N225minif_*.zip"
+    instrument: "OSE_NIKKEI225_MINI_FUTURES"
+    provider_symbol: "N225minif"
+    logical_instrument: "JNM"
+    first_date: "2012-01-03"
+    last_date: "2026-08-31"
+    listing_date_check: "N/A (Mini listed 2006)"
+    timezone: "Asia/Tokyo (JST)"
+    price_semantics: "BAR_OHLC"
+    close_semantics: "BAR_CLOSE"
+    volume_semantics: "PER_MINUTE_CONTRACT_VOLUME"
+    authority: "DATA_VENDOR_225LABO"
+    import_status: "REFERENCE_ONLY"
+
+# ── Cross-validation ──
+micro_mini_duplication:
+  overlap_count: 137839
+  ohlc_exact_match_rate: 0.2124
+  close_exact_match_rate: 0.6335
+  volume_exact_match_rate: 0.0118
+  conclusion: "Micro and Mini are INDEPENDENT instruments (volume differs 98.8%)"
+
+# ── Session validation ──
+session:
+  night_session: "16:30 - 06:00 JST"
+  day_session: "08:45 - 15:15 JST (no lunch break)"
+  gap_night_to_day: "06:00 - 08:45 (165 min)"
+  gap_day_to_night: "15:15 - 16:30 (75 min)"
+  bars_per_day: 1202
+  validation: "PASS (matches OSE session structure exactly)"
+
+# ── Settlement ──
+settlement:
+  official_settlement_history: "NOT FOUND"
+  only_day: "2026-09-18 (from Phase 2V-B)"
+  qros_manifests: "53 test artifacts, all 33-byte failed downloads"
+  status: "DIRECT_SETTLEMENT_INSUFFICIENT"
+
+# ── Summary ──
+summary:
+  verified_micro_trading_days: 796
+  verified_micro_minute_rows: 1159829
+  pre_listing_micro_rows: 0
+  gap_from_listing_days: 56
+  substantial_sample_threshold: 250
+  decision: "DIRECT_MICRO_BAR_OOS_POSSIBLE"
+  flag: "SUBSTANTIAL_DIRECT_BAR_SAMPLE_AVAILABLE"

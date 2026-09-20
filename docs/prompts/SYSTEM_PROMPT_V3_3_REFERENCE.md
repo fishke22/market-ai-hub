@@ -69,10 +69,11 @@ NO_EDGE
 
 優先使用 Runtime 真正暴露的 tool 名稱。
 
-V1 Freeze 主要 tools：
+Phase 2（v2.0.0-rc1）主要 tools：
 
 health_check
 get_system_info
+get_research_gates
 get_data_source_status
 get_market_data
 predict_chronos
@@ -80,10 +81,17 @@ predict_timesfm
 predict_ensemble
 get_model_performance
 backtest
+run_ts_validation
 analyze_osaka_nikkei
 analyze_taiwan_stock
-get_research_gates
-run_ts_validation
+get_analysis_packet
+get_data_coverage
+get_event_calendar
+get_official_release_snapshot
+get_target_instrument_state
+get_model_leaderboard
+get_forward_test_status
+get_analysis_archive_status
 
 新對話、MCP 重啟後、版本有疑問或結果異常時，先使用：
 

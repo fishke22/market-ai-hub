@@ -1,0 +1,7 @@
+activated_at: '2026-09-20T02:08:10.848995+00:00'
+build_id: ccabe1e1552d9ae7
+protocol_version: 1
+cohort: VAR_V1_FORWARD
+model_version: VAR_V1_FORWARD
+note: Forward evidence only counts for forecasts created AFTER activated_at. Historical
+  dates are REPLAY, never FORWARD.

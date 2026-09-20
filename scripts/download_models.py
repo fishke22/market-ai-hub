@@ -77,12 +77,26 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="MARKET_AI_HUB model downloader")
     ap.add_argument("--check", action="store_true", help="只檢查模型是否存在")
     ap.add_argument("--download", action="store_true", help="下載缺少的模型")
+    ap.add_argument("--list", action="store_true", help="列出 manifest 所有模型")
+    ap.add_argument("--required", action="store_true", help="只處理 required 模型")
+    ap.add_argument("--optional", action="store_true", help="只處理 optional 模型")
     args = ap.parse_args()
-    if not args.check and not args.download:
+    if not (args.check or args.download or args.list):
         ap.print_help()
         return 1
 
     models = load_manifest()
+    if args.required:
+        models = [m for m in models if m.get("required")]
+    elif args.optional:
+        models = [m for m in models if not m.get("required")]
+
+    if args.list:
+        for m in models:
+            print(f"{m['logical_name']:<14} {'REQUIRED' if m.get('required') else 'OPTIONAL':<9} "
+                  f"~{m.get('estimated_size_mb','?')}MB  {m['model_id']}")
+        return 0
+
     print("=" * 70)
     print("MARKET_AI_HUB model manifest")
     print("=" * 70)

@@ -1,0 +1,51 @@
+# GAP EXECUTION PROTOCOL v1 (frozen before results)
+protocol_version: 1
+frozen_at: "2026-09-20"
+purpose: >
+  Determine whether VAR(1)'s overnight-gap predictive edge is causal/executable
+  (signal computable before T close) or requires full T close (non-executable).
+candidate: {model: "VAR(1)", target: DIRECT_MICRO_CONTINUOUS_BAR, horizon: 1}
+ground_truth:
+  close_to_close_dir_acc: 0.622
+  mase: 0.958
+  mcc: 0.241
+  strategy_v1_status: NO_ECONOMIC_EDGE   # open-to-close anti-correlated -0.378
+causality_rule: "signal_created_at strictly < entry_timestamp"
+forbidden: "full T close signal filled at same T close (INVALID_NON_CAUSAL_STRATEGY)"
+
+decomposition:
+  R_CC: "Close[T+1] - Close[T]"
+  R_GAP: "Open[T+1] - Close[T]"
+  R_OC: "Close[T+1] - Open[T+1]"
+  identity: "R_CC == R_GAP + R_OC (mod roll/continuous effects)"
+
+pre_close_cutoffs:
+  primary: [PRE_CLOSE_30M, PRE_CLOSE_15M]
+  secondary: [PRE_CLOSE_60M, PRE_CLOSE_5M]
+  # 不得跑 1..120 分鐘全掃描再挑最好（parameter mining 禁止）
+
+target:
+  primary: NEXT_SESSION_GAP_RETURN    # Open[T+1] - Close[T]
+  secondary: NEXT_TRADING_DAY_CLOSE_RETURN  # Close[T+1] - Close[T]
+
+entry_semantics: "NEXT_BAR_OPEN after cutoff（signal_bar != execution_bar）"
+gap_capture_strategy: "entry pre-close → hold through close → exit T+1 first eligible bar open"
+session_calendar: "OSE date-versioned；night session 16:30-06:00, day 08:45-15:15；不用 calendar midnight"
+baselines: [ALWAYS_LONG_GAP, ALWAYS_SHORT_GAP, PREVIOUS_GAP_DIRECTION, PREVIOUS_CLOSE_DIRECTION, ZERO_RETURN, MA_TREND]
+cost_scenarios: {C0: 0, C1: 1, C2: 2, C3: 4}   # ticks each side
+tick_size: 5
+position: "fixed 1 unit, sign only (+1/-1), no threshold optimization"
+metrics: [gap_dir_accuracy, gap_return_corr, MCC, close_to_close_dir_accuracy, net_expectancy, ci_95]
+statistical_tests: "moving block bootstrap 95% CI"
+primary_comparison: "pre-close signal vs PREVIOUS_GAP_DIRECTION baseline"
+regimes: [HIGH_VOL, LOW_VOL, TREND_UP, TREND_DOWN]
+subperiods: [2023H2, 2024H1, 2024H2, 2025H1, 2025H2, 2026H1, 2026H2]
+roll: [PRE_ROLL, ROLL, POST_ROLL]
+final_classification: [CAUSAL_EXECUTABLE_EDGE, TENTATIVE_CAUSAL_EDGE, STATISTICAL_ONLY_EDGE, NO_EDGE, INSUFFICIENT_EVIDENCE]
+no_auto_promote: true
+block_conditions:
+  - non_causal_signal
+  - full_close_same_close_fill
+  - preclose_feature_leakage
+  - parameter_mining_over_cutoffs
+  - roll_contamination

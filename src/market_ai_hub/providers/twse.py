@@ -78,30 +78,59 @@ class TWSEProvider(BaseProvider):
         return df
 
     def fetch_symbol_daily(self, symbol: str, start: str, end: str) -> pd.DataFrame:
-        """symbol 日線（by iterating STOCK_DAY_ALL；免費端無單股歷史 endpoint 時的正確做法）。
+        """symbol 日線（用 TWSE 官方單股 `STOCK_DAY` endpoint，逐月拉取）。
 
-        start/end 為西元 YYYYMMDD；STOCK_DAY_ALL 的 date 參數用民國年（民國 = 西元 - 1911）。
+        start/end 為西元 YYYYMMDD。STOCK_DAY 以 R.O.C. 月為單位回傳該月每日 OHLC。
+        注意：不能用 STOCK_DAY_ALL 逐日迭代（該 endpoint 對歷史日期只回最新一日，
+        會製造重複序列）；此為資料層修正。
         """
-        d = datetime.strptime(start, "%Y%m%d")
-        e = datetime.strptime(end, "%Y%m%d")
-        frames = []
-        while d <= e:
-            roc_day = f"{d.year - 1911:04d}{d:%m%d}"
+        from datetime import datetime as _dt, timedelta as _td
+
+        s = _dt.strptime(start, "%Y%m%d")
+        e = _dt.strptime(end, "%Y%m%d")
+        frames: list[dict] = []
+        cursor = s.replace(day=1)
+        while cursor <= e:
+            # TWSE STOCK_DAY 的 date 參數是西元年月（YYYYMM01），不是民國年；
+            # 回應的 data[0] 才是民國年（113/01/02 → +1911）。
+            roc_month = f"{cursor.year:04d}{cursor.month:02d}01"
             try:
-                all_df = self.fetch_stock_day_all(roc_day)
+                payload = self._get_stock_day_json(symbol, roc_month)
             except ProviderError:
-                d += timedelta(days=1)
+                cursor = _next_month(cursor)
                 continue
-            row = all_df[all_df["Code"] == symbol]
-            if not row.empty:
-                row = row.copy()
-                row["Date"] = d.strftime("%Y%m%d")
-                frames.append(row)
-            d += timedelta(days=1)
+            if payload.get("stat") != "OK" or not payload.get("data"):
+                cursor = _next_month(cursor)
+                continue
+            for r in payload["data"]:
+                try:
+                    y, m, d = str(r[0]).split("/")
+                    iso = f"{int(y) + 1911:04d}-{int(m):02d}-{int(d):02d}"
+                    o, h, l, c = _num(r[3]), _num(r[4]), _num(r[5]), _num(r[6])
+                    v = _num(r[1])
+                except Exception:
+                    continue
+                if c is None:
+                    continue
+                frames.append({"Date": iso, "Open": o, "High": h, "Low": l, "Close": c, "TradeVolume": v})
+            cursor = _next_month(cursor)
+
         if not frames:
             raise ProviderError(f"no twse data for {symbol} {start}..{end}")
-        df = pd.concat(frames).sort_values("Date").reset_index(drop=True)
+        df = pd.DataFrame(frames).drop_duplicates(subset=["Date"]).sort_values("Date")
+        lo = s.strftime("%Y-%m-%d")
+        hi = e.strftime("%Y-%m-%d")
+        df = df[(df["Date"] >= lo) & (df["Date"] <= hi)].reset_index(drop=True)
+        if df.empty:
+            raise ProviderError(f"no twse data for {symbol} {start}..{end}")
         return self._to_uniform(df, symbol)
+
+    def _get_stock_day_json(self, symbol: str, roc_month: str) -> dict:
+        url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+        params = {"response": "json", "date": roc_month, "stockNo": symbol}
+        resp = httpx.get(url, params=params, timeout=self._timeout)
+        resp.raise_for_status()
+        return resp.json()
 
     def _to_uniform(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
         local = pd.to_datetime(df["Date"]).dt.tz_localize("Asia/Taipei", ambiguous="infer")
@@ -149,3 +178,25 @@ def _load_json(path: Path) -> list[dict] | dict:
 
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def _next_month(d):
+    """回傳下一個月的 1 號。"""
+    from datetime import timedelta
+
+    if d.month == 12:
+        return d.replace(year=d.year + 1, month=1, day=1)
+    return d.replace(month=d.month + 1, day=1)
+
+
+def _num(x):
+    """把 TWSE 字串數字轉 float；"--" / 空 → None。"""
+    if x is None:
+        return None
+    s = str(x).replace(",", "").strip()
+    if s in ("", "--", "-"):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None

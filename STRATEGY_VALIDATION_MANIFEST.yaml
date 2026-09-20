@@ -1,0 +1,10 @@
+candidate: VAR(1)
+exam_hash: 59b36f6949675351
+execution_quality: APPROXIMATE_RESEARCH_EXECUTION
+generated_at: '2026-09-20T00:57:01.538421+00:00'
+horizon: 1
+note: RESEARCH_PNL; not live replicable; continuous series
+origins: 831
+protocol_version: 1
+python: 3.12.13
+target: DIRECT_MICRO_CONTINUOUS_BAR

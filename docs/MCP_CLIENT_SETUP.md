@@ -91,11 +91,12 @@ market-ai-mcp.exe
 
 ## 4. 啟動後應該看到的 tools
 
-V1 Freeze 暴露 13 個 tools：
+Phase 2（v2.0.0-rc1）暴露 21 個 tools：
 
 ```text
 health_check
 get_system_info
+get_research_gates
 get_data_source_status
 get_market_data
 predict_chronos
@@ -103,10 +104,17 @@ predict_timesfm
 predict_ensemble
 get_model_performance
 backtest
+run_ts_validation
 analyze_osaka_nikkei
 analyze_taiwan_stock
-get_research_gates
-run_ts_validation
+get_analysis_packet
+get_data_coverage
+get_event_calendar
+get_official_release_snapshot
+get_target_instrument_state
+get_model_leaderboard
+get_forward_test_status
+get_analysis_archive_status
 ```
 
 如果 Client 支援 MCP tool discovery，連線成功後應能看到這些工具。
@@ -126,10 +134,10 @@ run_ts_validation
 5. 哪些資料來源需要設定
 ```
 
-公開 V1 Freeze 的發布 build_id：
+Phase 2（v2.0.0-rc1）的 build_id：
 
 ```text
-bbf3cb2f9a80d20e
+ccabe1e1552d9ae7
 ```
 
 如果你使用的是更新後 main branch，build_id 可能因正式程式碼改動而不同；這時應以同一次 runtime 回傳的一致 build_id 為準。

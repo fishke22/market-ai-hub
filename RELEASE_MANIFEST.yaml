@@ -1,0 +1,79 @@
+# RELEASE MANIFEST
+version: "v2.0.0-rc1"
+release_type: "Phase 2 Research Release Candidate"
+build_id: "ccabe1e1552d9ae7"
+
+test_count:
+  passed: 634          # 最後已知良好（2V-F 後；publication tests 可再增）
+  baseline: ">= 634"
+
+mcp_tool_count: 21     # runtime introspection（非手寫）
+skill_count: 3         # osaka-micro-analysis / taiwan-stock-v28 / model-validation-audit
+
+primary_target: OSE_NIKKEI225_MICRO_FUTURES   # 不是 ^N225
+
+validation_gates:
+  - PHASE2Z_PASS
+  - PHASE2Z1_PASS
+  - PHASE2VA_PASS
+  - PHASE2YH_PASS
+  - PHASE2VB_PASS
+  - PHASE2VB1_PASS
+  - PHASE2VB2_PASS
+  - PHASE2VB3_PASS
+  - PHASE2VC_PASS
+  - PHASE2VC1_PASS
+  - PHASE2VD_PASS
+  - PHASE2VE_PASS
+  - PHASE2VF_PASS
+
+research_state:
+  proxy_oos: NO_EVIDENCE
+  direct_micro_forecast: "VAR(1) = STATISTICAL_FORECAST_EVIDENCE (MASE 0.958, dir 62.2%, non-executable)"
+  executability: NON_EXECUTABLE_FORECAST_EDGE
+  strategy: NO_ECONOMIC_EDGE
+  causality: "edge 85.2% in gap, but requires full close (pre-close collapses to 41.3%)"
+
+forward_state:
+  activated: "2026-09-20"
+  evidence: NONE_YET
+  infrastructure: ready
+
+resource_governor:
+  default_profile: DESKTOP_SAFE
+  auto_train: false
+  auto_fine_tune: false
+  auto_promote: false
+  heavy_gpu_jobs_max: 1
+  optuna_default_n_jobs: 1
+  training_windows: MANUAL_ONLY
+  training_process_priority: BelowNormal
+  monitor_fail_closed: true
+  forward_shadow_above_training: true
+
+strategy_candidate: NONE
+production_candidate: NONE
+
+known_limitations:
+  - "No validated executable edge"
+  - "Forward evidence none yet"
+  - "OSE settlement history insufficient (JPX current-day only)"
+  - "225LABO local-only dataset (center-month continuous, not contract-level)"
+  - "Yuanta Futures SPARK 0112 unresolved (external)"
+  - "Yuanta Legacy Quote T session pending retest"
+  - "some providers need config (BEA/e-Stat/EIA/EDINET/FinMind/FRED/J-Quants)"
+  - "NHITS/NBEATSx runtime blocked (training-only)"
+  - "TradingView delayed data optional"
+
+security:
+  live_trading: PROHIBITED
+  order_mcp: NONE
+  broker_credentials: NONE
+  auto_promote: false
+  resource_guard: DESKTOP_SAFE
+
+licenses:
+  root: Apache-2.0
+  third_party_notices: THIRD_PARTY_NOTICES.md
+
+publication_ready: true   # 待本棒 acceptance report 完成後確認

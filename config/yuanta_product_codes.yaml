@@ -1,0 +1,42 @@
+# MARKET_AI_HUB — 元大期貨商品代碼 Ground Truth（四種代碼分離）
+# public_product_code ≠ spark_quote_code ≠ legacy_com_quote_symbol ≠ trading_order_code
+# 2026-09 由 FunctionList.xlsx 股票代碼總表 實證（OSE=207）：
+#   OSE Micro  商品代碼(報價StkCode) = JNU<YYMM>（如 JNU2609）；下單代碼 = JNU
+#   OSE Mini   商品代碼 = 192609...（數字）；下單代碼 = JNM
+#   OSE Large  商品代碼 = 182609...（數字）；下單代碼 = JNI
+schema_version: 2
+checked_at: "2026-09-19"
+verified_at: "2026-09-20"
+source: "FunctionList.xlsx 股票代碼總表 (SPARK package v2.2026.0918.0)"
+functionlist_sha256: "39b0f2244981258399b840e9d4c9e9b3cc85d2425fdc14f4058f328bb8fd4ea5"
+functionlist_sheet: "股票代碼總表 (74559 rows; 欄位=市場別|市場代碼|商品代碼|商品名稱|下單代碼)"
+legacy_quote_progid: "YUANTAQUOTE.YuantaQuoteCtrl.1"
+legacy_quote_ocx: "YuantaQuote_v2.1.2.9.ocx (2022-11-29)"
+legacy_trading_progid_32: "Yuanta.YuantaOrdCtrl.1"
+legacy_trading_progid_64: "Yuanta.YuantaOrdCtrl.64"
+
+OSE_NIKKEI225_LARGE_FUTURES:
+  public_product_code: JNI
+  display_name: "大阪日經"
+  spark_quote_code: "182609 (contract-specific, 數字型)"
+  trading_order_code: "JNI"
+  legacy_com_quote_symbol: UNVERIFIED
+  verified: true
+
+OSE_NIKKEI225_MINI_FUTURES:
+  public_product_code: JNM
+  display_name: "大阪小日經"
+  spark_quote_code: "192609 (contract-specific, 數字型)"
+  trading_order_code: "JNM"
+  legacy_com_quote_symbol: UNVERIFIED
+  verified: true
+
+OSE_NIKKEI225_MICRO_FUTURES:
+  public_product_code: JNU
+  display_name: "大阪微日經"
+  contract_multiplier: "Nikkei 225 × JPY 10"
+  spark_quote_code: "JNU<YYMM> (contract-specific: JNU2609/JNU2612/JNU2703/JNUPM2609...)"
+  trading_order_code: "JNU"
+  legacy_com_quote_symbol: UNVERIFIED
+  verified: true
+  note: "下單代碼(JNU)與訂閱報價商品代碼(JNU2609)不同；PM 為盤後變體(JNUPM2609)。"

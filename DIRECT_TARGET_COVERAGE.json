@@ -1,0 +1,47 @@
+{
+  "target": "OSE_NIKKEI225_MICRO_FUTURES",
+  "semantic": "future_settlement_return",
+  "source": "JPX official settlement rbYYYYMMDD.csv",
+  "first_available_date": "20260918",
+  "last_available_date": "20260918",
+  "available_trading_days": 1,
+  "contract_months_available": [
+    "202610",
+    "202611",
+    "202612",
+    "202703"
+  ],
+  "missing_ratio": null,
+  "backfill_status": "BLOCKED_CURRENT_DAY_ONLY",
+  "backfill_detail": {
+    "20230529": {
+      "http": 404,
+      "has_settlement_data": false
+    },
+    "20230901": {
+      "http": 404,
+      "has_settlement_data": false
+    },
+    "20240301": {
+      "http": 404,
+      "has_settlement_data": false
+    },
+    "20240902": {
+      "http": 404,
+      "has_settlement_data": false
+    },
+    "20250303": {
+      "http": 404,
+      "has_settlement_data": false
+    },
+    "20250901": {
+      "http": 404,
+      "has_settlement_data": false
+    },
+    "20260601": {
+      "http": 404,
+      "has_settlement_data": false
+    }
+  },
+  "note": "JPX public settlement CSV 僅提供當日（hashed URL）；歷史日期回 404。完整歷史需 J-Quants API key（NEEDS_CONFIG）或授權來源。不得用 proxy 補 Micro settlement。"
+}

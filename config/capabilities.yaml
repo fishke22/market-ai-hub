@@ -1,0 +1,82 @@
+# MARKET_AI_HUB — Machine-readable capabilities（供未來 AI 不需讀 README 猜能力）
+schema_version: 1
+
+osaka_micro_research:
+  status: AVAILABLE
+  gate: PHASE2H_PASS
+
+taiwan_stock_research:
+  status: AVAILABLE
+  gate: PHASE2A_PASS
+
+analysis_packet:
+  status: AVAILABLE
+  gate: PHASE2H_PASS
+
+prediction_registry:
+  status: AVAILABLE
+  gate: PHASE2A_PASS
+
+model_tournament:
+  status: AVAILABLE
+  gate: PHASE2D_PASS
+
+strategy_research_engine:
+  status: AVAILABLE
+  gate: PHASE2F_PASS
+
+joint_scenario_forecast:
+  status: AVAILABLE
+  gate: PHASE2G_PASS
+
+automated_research_loop:
+  status: AVAILABLE
+  gate: PHASE2E_PASS
+
+official_data_live:
+  status: PARTIAL
+  gate: PHASE2G2_PASS
+  note: "JPX settlement/volume/OI + BLS/Cboe/EDGAR/BOJ LIVE; OHLC CONTRACT_ONLY"
+
+fine_tuning_extension:
+  status: INTERFACE_ONLY
+  note: "xgboost/lightgbm/nhits/nbeatsx supported; foundation disabled"
+
+yuanta_realtime:
+  status: DISABLED
+
+yuanta_securities_auth:
+  status: VERIFIED
+  gate: PHASE2YC_AUTH_PASS
+  api_family: SPARK
+
+yuanta_spark_futures:
+  status: CONTRADICTION
+  note: "user says enabled; server 0112；不直接下結論，走 contradiction diagnosis"
+
+yuanta_futures_auth:
+  status: PARTIAL
+  gate: PHASE2YE
+  api_family: YUANTA_QUOTE_COM
+  note: "T+1 盤登入成功；T 盤無登入權（疑 login ID 非帳號）"
+
+yuanta_futures_quote:
+  status: NOT_TESTED
+  api_family: YUANTA_QUOTE_COM
+  note: "legacy_login_id 修正後重測；OSE scope 未證實排除"
+
+yuanta_futures_trading_api:
+  status: FUTURE_RESEARCH_ONLY
+  note: "version 1.6.1.3；NOT_IMPLEMENTED / PROHIBITED_IN_PHASE2"
+
+tradingview_bridge:
+  status: OPTIONAL_NOT_INSTALLED
+
+live_trading:
+  status: PROHIBITED
+
+order_execution:
+  status: PROHIBITED
+
+champion_auto_promotion:
+  status: DISABLED

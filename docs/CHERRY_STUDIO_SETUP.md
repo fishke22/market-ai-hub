@@ -45,7 +45,7 @@ Test-Path "D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe"
 > **不要**把 token 寫進 command、args 或聊天 Prompt。
 
 6. 儲存並**啟用**（打開開關）。
-7. 稍等數秒，Cherry Studio 應顯示工具清單（V1 Freeze 為 13 個 tools）。
+7. 稍等數秒，Cherry Studio 應顯示工具清單（Phase 2 v2.0.0-rc1 為 21 個 tools）。
 
 ### 關於 Python executable
 
@@ -79,7 +79,7 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
   "cuda_available": true,
   "chronos": "ready",
   "timesfm": "ready",
-  "build": { "build_id": "bbf3cb2f9a80d20e" }
+  "build": { "build_id": "ccabe1e1552d9ae7" }
 }
 ```
 
@@ -89,10 +89,10 @@ D:\MARKET_AI_HUB\.venv\Scripts\market-ai-mcp.exe
 
 呼叫 `health_check` 或 `get_system_info`，看 `build.build_id`。
 
-公開 V1 Freeze：
+Phase 2（v2.0.0-rc1）：
 
 ```text
-bbf3cb2f9a80d20e
+ccabe1e1552d9ae7
 ```
 
 若你使用後續版本，build_id 可能不同；重點是同一個 runtime 的 tools 必須回傳一致版本。

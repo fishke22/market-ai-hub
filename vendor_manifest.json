@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-09-19",
+  "package": "YuantaSparkAPI",
+  "generation": "Spark gRPC API (securities)",
+  "version": "2.2026.0918.0",
+  "files": [
+    {
+      "filename": "YuantaSparkAPI.dll",
+      "version": "2.2026.0918.0",
+      "sha256": "4E124E718B40BAEDA8A61A515F32E24037F4FFB67F6739F8194250EC095BA01C",
+      "architecture": "x64",
+      "framework": ".NET 8 self-contained (coreclr/hostfxr/hostpolicy)",
+      "source_local_path_type": "zip: YuantaSparkAPI_win-x64_Python.zip",
+      "copied_at": null,
+      "copied": false
+    },
+    {
+      "filename": "FunctionList.xlsx",
+      "sha256": "39B0F2244981258399B840E9D4C9E9B3CC85D2425FDC14F4058F328BB8FD4EA5",
+      "architecture": "n/a",
+      "framework": "n/a",
+      "source_local_path_type": "zip: YuantaSparkAPI_win-x64_Python.zip/IO_Doc/FunctionList.xlsx",
+      "copied_at": null,
+      "copied": false
+    }
+  ],
+  "other_packages": [
+    {
+      "package": "API_Yuanta2.1.2.7 (futures)",
+      "generation": "legacy COM (YuantaQuoteLib / YuantaOrderAPI / GWMktAPLib)",
+      "note": "期貨 legacy COM API，與 Spark 為不同世代；不與證券 DLL 混用"
+    },
+    {
+      "package": "YuantaSparkAPI_CSharp (securities)",
+      "generation": "C# SDK + sample"
+    },
+    {
+      "package": "YuantaQuoteAPI_py (futures)",
+      "generation": "Python quote wrapper (4.8KB)"
+    }
+  ],
+  "note": "vendor/ gitignored；只提交此 manifest（file names/version/SHA256，無帳號）。本棒未複製 DLL（inventory only）。"
+}
