@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2Q-A（Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path）**
-- Gate: **PHASE2QA_PASS**（最近；前置 PHASE2PE_PUBLISHED）
-- build_id：**cd33ef1c14839b7d**（Phase 2Q-A source runtime 修正起；Phase 2H~2P-E 為 `ccabe1e1552d9ae7`）
+- Current phase: **Phase 2Q-B（Whole System Validation + Clean-Room Correctness Audit + Failure Injection + E2E MCP Acceptance）**
+- Gate: **PHASE2QB_PASS**（最近；前置 PHASE2QA_PASS）
+- build_id：**440d9273c9bb39f5**（Phase 2Q-B 修 project_path 硬編碼起；2Q-A 為 `cd33ef1c14839b7d`）
 
 ## Phase 2 全歷程 Gate
 
@@ -31,6 +31,15 @@
 | **2P-D** | Agent Response Truthfulness Hotfix + Target Semantics Audit | **PHASE2PD_PUBLISHED** |
 | **2P-E** | System Prompt Compaction + Skill Responsibility Cleanup | **PHASE2PE_PUBLISHED** |
 | **2Q-A** | Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path | **PHASE2QA_PASS** |
+| **2Q-B** | Whole System Validation + Clean-Room Audit + Failure Injection + E2E MCP | **PHASE2QB_PASS** |
+
+## 2Q-B 本棒成果（Whole System Validation + Clean-Room + Failure Injection + E2E MCP，correctness-only）
+- 0 Critical / 0 High defect；修 1 個 MEDIUM：`mcp/server.py` 硬編碼 `project_path` → `str(project_root())`（clean-room 違反）。
+- 新增 tests：`test_phase2qb.py`（16）+ `test_phase2qb_failure.py`（5）；全 suite **712 passed**（691→712）。
+- 新增 scripts：`mcp_e2e_stability.py`（實際啟動 MCP stdio，24 calls no crash，RSS 67.3MB）+ `secret_scan.py`（0 真實 secret）。
+- 新增 `SYSTEM_VALIDATION_BASELINE.json` + `PHASE2QB_WHOLE_SYSTEM_VALIDATION_REPORT.md` + `docs/reference/KNOWN_LIMITATIONS.md`。
+- Clean clone PASS（project_root 正確解析、21 tools、3 skills、data/ 僅 .gitkeep）；restart deterministic（multi-seed subprocess）；research truth 一致；仍 RESEARCH_ONLY。
+- build_id → `440d9273c9bb39f5`。禁區未動：不 performance optimization / 不重組目錄 / 不新模型 / 不 broker / 不 auto promotion。PR #7 merged；版本仍 v2.0.0-rc1（不 tag）。
 
 ## 2Q-A 本棒成果（Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path）
 - 修正 Cherry Studio 驗收問題 A–G：direction 只收 eligible vote（0 票 → NO_VALIDATED_MODEL_CONSENSUS）；deterministic tie（平手 → NO_CONSENSUS，cross-process 一致）；uncalibrated 不稱 probability；direct/proxy calendar 分離；research truth 單一來源；forward count 統一；fast path + forecast cache。

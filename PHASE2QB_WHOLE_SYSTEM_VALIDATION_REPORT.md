@@ -142,19 +142,27 @@ baseline 691 → **712 passed**（新增 test_phase2qb 16 + test_phase2qb_failur
 
 ## Clean Clone Validation
 
-（merge 後從 origin/main clone 驗證，結果補記於 handoff）
+從 `origin/main` 全新 `git clone`（temp dir，無本機 hidden state）驗證：
+
+- `project_root()` 正確解析到 clone 路徑（**非** hardcoded `D:\MARKET_AI_HUB`）→ 證明 project_path 修正生效。
+- core import + 21 tools + 3 skills 全部可用。
+- quick analysis（compact packet）正常回 `OSE_NIKKEI225_MICRO_FUTURES`。
+- `data/` 僅 `.gitkeep`（無 225LABO / model weights / Yuanta binaries 被 commit）。
+- build_id `440d9273c9bb39f5` 一致。
+
+**Clean Clone = PASS**；**No Private Dependency = PASS**。
 
 ## 總結問答
 
 1. subsystem：~13（schema/ensemble/calendar/packet/gates/catalog/registry/providers/models/services/research/cache/governor/mcp）
-2. 測了：unit/integration/runtime/failure/cache/restart-determinism/cross-tool/E2E/secret
+2. 測了：unit/integration/runtime/failure/cache/restart-determinism/cross-tool/E2E/secret/clean-clone
 3. 發現：0 Critical / 0 High / 1 Medium（已修）/ 1 Low（記錄）
 4. 修了：project_path 硬編碼
 5. Known Limitations：見 docs/reference/KNOWN_LIMITATIONS.md
 6. MCP 穩定：PASS（24 calls，no crash）
 7. Cache 正確：PASS（dimension 分離 + data 變 invalidates）
 8. Restart deterministic：PASS（multi-seed subprocess）
-9. Clean clone：待 merge 後補
+9. Clean clone：PASS
 10. Secret scan：PASS（0 真實 secret）
 11. Research truth：一致
 12. RESEARCH_ONLY：是
