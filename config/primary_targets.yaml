@@ -19,7 +19,7 @@ targets:
     currency: JPY
     price_unit: index_points
     tick_size_if_applicable: 5
-    multiplier_if_applicable: 100
+    multiplier_if_applicable: 10
     direct_sources: [JPX_settlement]
     proxy_sources: ["^N225 (Nikkei 225 index, PROXY only)"]
     historical_sources: [JPX_settlement_history, 225LABO_continuous]

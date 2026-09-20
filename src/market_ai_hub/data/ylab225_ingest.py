@@ -8,17 +8,20 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 
 from market_ai_hub.config.settings import project_root
+from market_ai_hub.config.runtime_paths import (
+    ose_micro_bars_path,
+    private_inbox_dir,
+    raw_archive_dir,
+)
 
-BARS_PATH = project_root() / "data" / "normalized" / "ose_micro" / "ose_micro_daily_bar_v1.parquet"
-INBOX = Path(r"D:\MARKET_AI_HUB_PRIVATE_INBOX\225labo")
-RAW_ARCHIVE = project_root() / "data" / "raw" / "ylab225" / "archive"
+# 路徑一律在 function 內由 runtime_paths resolver 產生（lazy），
+# 不在 module import 時解析，避免 env override 失效與 import 產生 side effect。
 MICRO_LISTING = "2023-05-29"
 TICK = 5
 
@@ -40,9 +43,10 @@ def freshness_state(last_bar_date: datetime | None) -> str:
 
 
 def load_bars() -> pd.DataFrame:
-    if not BARS_PATH.exists():
+    path = ose_micro_bars_path()
+    if not path.exists():
         return pd.DataFrame(columns=["trading_date", "open", "high", "low", "close", "volume", "count"])
-    return pd.read_parquet(BARS_PATH).sort_values("trading_date")
+    return pd.read_parquet(path).sort_values("trading_date")
 
 
 def build_daily_bars_from_minutes(rows) -> dict:
@@ -97,13 +101,17 @@ def ingest_from_inbox() -> dict:
     """Detect new 225LABO files in inbox, validate, hash, incremental append to normalized bars.
 
     Idempotent: same file re-run produces no duplicates. Source immutable (moved to archive, never overwritten).
+    Path 一律由 runtime_paths resolver 產生（不 hardcode D:\\）。
     """
-    INBOX.mkdir(parents=True, exist_ok=True)
-    RAW_ARCHIVE.mkdir(parents=True, exist_ok=True)
+    inbox = private_inbox_dir()
+    raw_archive = raw_archive_dir()
+    bars_path = ose_micro_bars_path()
+    inbox.mkdir(parents=True, exist_ok=True)
+    raw_archive.mkdir(parents=True, exist_ok=True)
 
     result = {"imported": [], "rejected": [], "skipped": [], "new_days": 0}
 
-    for f in sorted(INBOX.iterdir()):
+    for f in sorted(inbox.iterdir()):
         if f.suffix.lower() not in (".zip", ".xlsx"):
             continue
         sha = hashlib.sha256(f.read_bytes()).hexdigest()
@@ -148,11 +156,11 @@ def ingest_from_inbox() -> dict:
             new_df["trading_date"] = pd.to_datetime(new_df["trading_date"])
             merged = pd.concat([existing, new_df], ignore_index=True) if len(existing) else new_df
             merged = merged.drop_duplicates(subset="trading_date").sort_values("trading_date").reset_index(drop=True)
-            merged.to_parquet(BARS_PATH, index=False)
+            merged.to_parquet(bars_path, index=False)
             result["new_days"] = len(new_rows)
 
         # archive raw (immutable), never overwrite
-        archive_path = RAW_ARCHIVE / f"{f.stem}_{sha[:16]}{f.suffix}"
+        archive_path = raw_archive / f"{f.stem}_{sha[:16]}{f.suffix}"
         if not archive_path.exists():
             shutil.copy2(f, archive_path)
         f.unlink()  # remove from inbox after successful import

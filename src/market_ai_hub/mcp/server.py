@@ -16,13 +16,13 @@ from mcp.server.mcpserver import MCPServer
 from market_ai_hub.config.settings import project_root
 
 _LOG_DIR = project_root() / "logs"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    filename=str(_LOG_DIR / "mcp.log"),
-)
+# 用 delay=True 的 FileHandler：import 不建立目錄/檔案，side effect 只在 server 真正啟動時發生。
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.WARNING)
+_log_handler = logging.FileHandler(str(_LOG_DIR / "mcp.log"), delay=True)
+_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+_root_logger.addHandler(_log_handler)
 
 mcp = MCPServer("market-ai-hub")
 
@@ -687,6 +687,7 @@ def get_analysis_archive_status() -> dict:
 
 
 def main_sync() -> None:
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)  # 只有真正啟動 server 才建立 log 目錄
     import asyncio
 
     asyncio.run(mcp.run_stdio_async())

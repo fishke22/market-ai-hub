@@ -1,17 +1,21 @@
 # Phase 2V-E — Import latest 225LABO Micro data (MANUAL, no auto-download)
-# 使用者將合法下載的新 225LABO 檔案放入 D:\MARKET_AI_HUB_PRIVATE_INBOX\225labo
+# 使用者將合法下載的新 225LABO 檔案放入 <DATA_ROOT>\private\inbox\225labo
+# （路徑由 Python resolver 產生，PowerShell 不維護第二份 path truth）
 # 本 script：detect → validate → hash → dedup → normalize → update coverage
 # 不自動下載；source immutable；incremental idempotent。
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $python = Join-Path $root ".venv\Scripts\python.exe"
-$inbox = "D:\MARKET_AI_HUB_PRIVATE_INBOX\225labo"
 
 if (-not (Test-Path $python)) {
     Write-Error "venv python not found: $python"
     exit 1
 }
+
+# 單一 path truth：從 Python runtime_paths 取得 inbox path（非 hardcode D:\）
+$inbox = & $python -c "from market_ai_hub.config.runtime_paths import private_inbox_dir; print(private_inbox_dir())"
+$inbox = $inbox.Trim()
 
 if (-not (Test-Path $inbox)) {
     Write-Host "[import] inbox not found, creating: $inbox (drop new 225LABO .zip/.xlsx here)"

@@ -108,7 +108,7 @@ D:\QROS\data\metadata\artifacts\*.json
 225LABO_MARKET_DATA_PRIVATE_LOCAL_ONLY
 
 # Phase 2V-E 225LABO private data boundary (LOCAL_ONLY, never GitHub)
-D:\MARKET_AI_HUB_PRIVATE_INBOX\**
+<DATA_ROOT>\private\inbox\225labo\**
 data\raw\ylab225\**
 data\normalized\ose_micro\**
 225LABO_MARKET_DATA_PRIVATE_LOCAL_ONLY
