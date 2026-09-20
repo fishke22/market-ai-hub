@@ -114,7 +114,7 @@ def get_system_info() -> dict:
         "python": platform.python_version(),
         "os": platform.platform(),
         **info,
-        "project_path": r"D:\MARKET_AI_HUB",
+        "project_path": str(project_root()),
         "models": {
             n: {
                 "model_role": c.role,

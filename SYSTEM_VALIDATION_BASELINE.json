@@ -1,0 +1,41 @@
+{
+  "frozen_at": "2026-09-20T12:00:00Z",
+  "git_head": "7f4944ede836356652cf3d2f4e169111831b4268",
+  "runtime_build_id": "cd33ef1c14839b7d",
+  "release_version": "v2.0.0-rc1",
+  "schema_version": "1.1",
+  "python": "3.12.13",
+  "os": "Windows-11-10.0.26200-SP0",
+  "mcp_tool_count": 21,
+  "mcp_tools": [
+    "analyze_osaka_nikkei",
+    "analyze_taiwan_stock",
+    "backtest",
+    "get_analysis_archive_status",
+    "get_analysis_packet",
+    "get_data_coverage",
+    "get_data_source_status",
+    "get_event_calendar",
+    "get_forward_test_status",
+    "get_market_data",
+    "get_model_leaderboard",
+    "get_model_performance",
+    "get_official_release_snapshot",
+    "get_research_gates",
+    "get_system_info",
+    "get_target_instrument_state",
+    "health_check",
+    "predict_chronos",
+    "predict_ensemble",
+    "predict_timesfm",
+    "run_ts_validation"
+  ],
+  "skills_count": 3,
+  "skills": [
+    "model-validation-audit",
+    "osaka-micro-analysis",
+    "taiwan-stock-v28"
+  ],
+  "test_collected": 691,
+  "test_deselected": 5
+}
