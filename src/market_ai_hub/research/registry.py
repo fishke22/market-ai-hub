@@ -183,6 +183,40 @@ class PredictionRegistry:
             ).df()
         return df.to_dict("records")
 
+    def forward_summary(self) -> dict:
+        """Phase 2Q-A §14：統一 forward count 語義（單一來源，所有 packet 引用此函式）。"""
+        preds = self.list_predictions(settled=None, limit=100000)
+        model_tasks = {"PRICE_FORECAST", "DIRECTION_CLASSIFICATION"}
+
+        def _is_model(p: dict) -> bool:
+            return p.get("model_task") in model_tasks
+
+        def _is_baseline(p: dict) -> bool:
+            name = (p.get("model_name") or "").lower()
+            return "baseline" in name or "naive" in name or "drift" in name
+
+        settled = [p for p in preds if p.get("settled")]
+        pending = [p for p in preds if not p.get("settled")]
+
+        task_breakdown: dict = {}
+        for p in preds:
+            t = p.get("model_task") or "unknown"
+            b = task_breakdown.setdefault(t, {"registered": 0, "settled": 0})
+            b["registered"] += 1
+            if p.get("settled"):
+                b["settled"] += 1
+
+        return {
+            "registry_records_total": len(preds),
+            "model_forecast_records": sum(1 for p in preds if _is_model(p)),
+            "baseline_records": sum(1 for p in preds if _is_baseline(p)),
+            "pending_records": len(pending),
+            "settled_model_forecasts": sum(1 for p in settled if _is_model(p)),
+            "settled_baselines": sum(1 for p in settled if _is_baseline(p)),
+            "forward_evidence_n": sum(1 for p in settled if _is_model(p)),
+            "task_breakdown": task_breakdown,
+        }
+
     def export_parquet(self) -> tuple[Path, Path]:
         """把 predictions / outcomes 落成 bulk Parquet（schema versioned 檔名）。"""
         self.init()

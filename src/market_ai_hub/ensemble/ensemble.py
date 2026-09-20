@@ -112,7 +112,35 @@ def _price_components(forecasts: list[ForecastOutput]) -> list[ForecastOutput]:
 
 
 def _direction_components(forecasts: list[ForecastOutput]) -> list[ForecastOutput]:
+    """正式 direction vote 只收 DIRECTION_CLASSIFICATION 且 eligible_for_direction_vote 的 components。"""
+    return [
+        f for f in forecasts
+        if f.model_task == ModelTask.DIRECTION_CLASSIFICATION.value
+        and f.eligible_for_direction_vote
+    ]
+
+
+def _direction_research_components(forecasts: list[ForecastOutput]) -> list[ForecastOutput]:
+    """raw research view：所有 DIRECTION_CLASSIFICATION（含未驗證）僅供研究資訊，不進正式 vote。"""
     return [f for f in forecasts if f.model_task == ModelTask.DIRECTION_CLASSIFICATION.value]
+
+
+def _plurality_deterministic(dirs: list[str]) -> tuple[str | None, int]:
+    """Deterministic plurality。unique max → (winner, count)；tie → (None, count)。
+
+    取代 max(set(dirs), key=dirs.count)：set 迭代順序在 process 間會變（PYTHONHASHSEED），
+    導致平手時 final_direction 依 process 而異。此函式固定回 None（=NO_CONSENSUS）不選邊。
+    """
+    if not dirs:
+        return None, 0
+    counts: dict[str, int] = {}
+    for d in dirs:
+        counts[d] = counts.get(d, 0) + 1
+    max_count = max(counts.values())
+    winners = [d for d, c in counts.items() if c == max_count]
+    if len(winners) == 1:
+        return winners[0], max_count
+    return None, max_count
 
 
 def _combine(
@@ -178,8 +206,9 @@ def _combine(
             "calendar_grade": price_parts[0].calendar_grade,
         }
 
-    # ── direction ensemble：只聚合 DIRECTION_CLASSIFICATION ──
+    # ── direction ensemble：只聚合 DIRECTION_CLASSIFICATION 且有投票資格的 components ──
     dir_parts = _direction_components(forecasts)
+    dir_research = _direction_research_components(forecasts)
     dir_ens: dict = {"status": "NO_DIRECTION_CLASSIFICATION_COMPONENTS"}
     vote_dir = prob_argmax = final_dir = "N/A"
     resolution_method = "no_evidence"
@@ -188,7 +217,7 @@ def _combine(
         dw = np.array([weights[forecasts.index(f)] for f in dir_parts], dtype=float)
         dw = dw / dw.sum() if dw.sum() > 0 else np.ones(len(dir_parts)) / len(dir_parts)
         dirs = [f.direction for f in dir_parts]
-        top_dir = max(set(dirs), key=dirs.count)
+        _, top_count = _plurality_deterministic(dirs)
         keys = sorted({k for f in dir_parts for k in (f.class_probabilities or {})})
         avg_probs = {
             k: float(np.average([(f.class_probabilities or {}).get(k) or 0.0 for f in dir_parts], weights=dw))
@@ -201,8 +230,16 @@ def _combine(
             "status": "OK",
             "components": [f.model for f in dir_parts],
             "component_weights": {f.model: float(dw[dir_parts.index(f)]) for f in dir_parts},
+            "eligible_direction_vote_count": len(dir_parts),
+            # raw research view（與正式 vote 分離；未驗證 classifier 不得寫入 final_direction）
+            "raw_direction_research": {
+                "raw_component_directions": [f.direction for f in dir_research],
+                "raw_class_scores": _raw_class_scores(dir_research),
+                "raw_argmax": _raw_argmax(dir_research),
+                "unvalidated_components": [f.model for f in dir_research if not f.eligible_for_direction_vote],
+            },
             "vote_direction": vote_dir,
-            "vote_direction_count": dirs.count(top_dir),
+            "vote_direction_count": top_count,
             "probability_argmax_direction": prob_argmax,
             "final_direction": final_dir,
             "direction_resolution_method": resolution_method,
@@ -211,28 +248,44 @@ def _combine(
             "class_probabilities_calibrated": False,
             # 舊欄位（backward compat）= final_direction
             "direction": final_dir,
-            "direction_vote_count": dirs.count(top_dir),
+            "direction_vote_count": top_count,
         }
-
-    # ── 整體 ensemble 的 direction 解析（固定規則；見 _resolve_direction）──
-    # 無 classifier 時 fallback 到 price plurality
-    price_dir = None
-    if price_parts:
-        pdirs = [f.direction for f in price_parts]
-        price_dir = max(set(pdirs), key=pdirs.count)
-    if vote_dir == "N/A" and prob_argmax == "N/A":
-        overall_vote, overall_argmax, final_dir, resolution_method, disagreement = (
-            vote_dir, prob_argmax,
-            price_dir or "no_evidence",
-            "price_plurality" if price_dir else "no_evidence",
-            False,
+    else:
+        # 無 eligible direction vote（含：無分類器 或 分類器全未驗證）
+        # 未驗證 XGB/LGBM 仍保留研究資訊（raw research，非正式 validated direction）
+        dir_ens = {
+            "status": "NO_ELIGIBLE_VOTES" if dir_research else "NO_DIRECTION_CLASSIFICATION_COMPONENTS",
+            "components": [],
+            "eligible_direction_vote_count": 0,
+            "raw_direction_research": {
+                "raw_component_directions": [f.direction for f in dir_research],
+                "raw_class_scores": _raw_class_scores(dir_research),
+                "raw_argmax": _raw_argmax(dir_research),
+                "unvalidated_components": [f.model for f in dir_research if not f.eligible_for_direction_vote],
+            },
+            "vote_direction": "N/A",
+            "probability_argmax_direction": "N/A",
+            "final_direction": "NO_VALIDATED_MODEL_CONSENSUS",
+            "direction_resolution_method": "NO_ELIGIBLE_VOTES",
+            "direction_disagreement": False,
+            "class_probabilities": {},
+            "class_probabilities_calibrated": False,
+            "direction": "NO_VALIDATED_MODEL_CONSENSUS",
+            "direction_vote_count": 0,
+        }
+        vote_dir, prob_argmax, final_dir, resolution_method = (
+            "N/A", "N/A", "NO_VALIDATED_MODEL_CONSENSUS", "NO_ELIGIBLE_VOTES",
         )
+
+    # ── 整體 ensemble 的 direction：無 eligible classifier vote → NO_VALIDATED_MODEL_CONSENSUS ──
+    # price direction 只是 research 資訊，不再冒充 final_direction（V2 移除 price_plurality fallback）。
 
     # ── legacy blend view（backward compatible；legacy_research_only）──
     p50_legacy = float(np.average([f.point_forecast for f in forecasts], weights=weights))
     exp_ret_legacy = float(np.average([f.expected_return for f in forecasts], weights=weights))
     directions = [f.direction for f in forecasts]
-    direction_legacy = max(set(directions), key=directions.count)
+    direction_legacy, _ = _plurality_deterministic(directions)
+    direction_legacy = direction_legacy if direction_legacy is not None else "TIE"
     agree_ratio = directions.count(direction_legacy) / len(directions)
     agreement = "HIGH" if agree_ratio >= 0.75 else ("MEDIUM" if agree_ratio >= 0.5 else "LOW")
 
@@ -319,8 +372,8 @@ def model_agreement(forecasts: list[ForecastOutput]) -> str:
     if not forecasts:
         return "LOW"
     directions = [f.direction for f in forecasts]
-    top = max(set(directions), key=directions.count)
-    ratio = directions.count(top) / len(directions)
+    _, max_count = _plurality_deterministic(directions)
+    ratio = max_count / len(directions)
     return "HIGH" if ratio >= 0.75 else ("MEDIUM" if ratio >= 0.5 else "LOW")
 
 
@@ -332,38 +385,73 @@ def _resolve_direction(
     avg_probs: dict[str, float],
     price_dir: str | None,
 ) -> tuple[str, str, str, str, bool]:
-    """V1.2 direction resolution（固定規則，寫死在 code，不讓 LLM 選）。
+    """V2 direction resolution（固定規則，寫死在 code；deterministic across process restart）。
 
-    - vote_direction：分類器 component direction 的 plurality
-    - probability_argmax_direction：aggregated class probability 的 argmax
-    - final_direction：vote 優先，其次 probability argmax，再其次 price plurality
-    - direction_disagreement：vote 與 argmax 皆存在且不同 → true（不偷偷 tie-break）
+    - vote_direction：eligible classifier component direction 的 deterministic plurality
+      （平手 → "TIE"，不依 set iteration order 選邊）
+    - probability_argmax_direction：aggregated class probability 的 deterministic argmax
+    - final_direction：vote 唯一勝出 → vote；vote 平手 → NO_CONSENSUS；
+      無 vote → NO_VALIDATED_MODEL_CONSENSUS。
+    - price_dir 不再進入 final_direction（price 只是 research 資訊，不是 direction vote）。
     """
     if component_directions:
-        vote = max(set(component_directions), key=component_directions.count)
+        vote, _ = _plurality_deterministic(component_directions)
+        vote = vote if vote is not None else "TIE"
     else:
         vote = "N/A"
 
     prob_argmax = "N/A"
     if avg_probs:
-        best_key = max(avg_probs, key=lambda k: avg_probs[k])
+        # deterministic argmax：sorted keys 固定迭代順序，value 平手時選字典序最小 key
+        best_key = max(sorted(avg_probs), key=lambda k: (avg_probs[k] or 0.0, -_dir_index(k)))
         try:
             c = int(best_key.split("_")[-1])
             prob_argmax = _DIR_CLASS.get(c, "N/A")
         except (ValueError, IndexError):
             prob_argmax = "N/A"
 
-    if vote != "N/A":
+    if vote == "TIE":
+        final, method = "NO_CONSENSUS", "TIE"
+    elif vote != "N/A":
         final, method = vote, "vote_priority"
-    elif prob_argmax != "N/A":
-        final, method = prob_argmax, "probability_argmax"
-    elif price_dir:
-        final, method = price_dir, "price_plurality"
     else:
-        final, method = "no_evidence", "no_evidence"
+        final, method = "NO_VALIDATED_MODEL_CONSENSUS", "NO_ELIGIBLE_VOTES"
 
-    disagreement = (vote != "N/A" and prob_argmax != "N/A" and vote != prob_argmax)
+    disagreement = (vote not in ("N/A", "TIE") and prob_argmax != "N/A" and vote != prob_argmax)
     return vote, prob_argmax, final, method, disagreement
+
+
+def _dir_index(key: str) -> int:
+    """class_<c> → 數值 c（供 deterministic argmax tie-break）。"""
+    try:
+        return int(key.split("_")[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+def _raw_class_scores(components: list[ForecastOutput]) -> dict[str, dict[str, float | None]]:
+    """raw research class scores（未校準原始分數，不稱 probability）。"""
+    out: dict[str, dict[str, float | None]] = {}
+    for f in components:
+        out[f.model] = f.class_probabilities or {}
+    return out
+
+
+def _raw_argmax(components: list[ForecastOutput]) -> dict[str, str]:
+    """raw argmax（deterministic：sorted keys）。未驗證分類器的研究資訊，非正式方向。"""
+    out: dict[str, str] = {}
+    for f in components:
+        probs = f.class_probabilities or {}
+        if not probs:
+            out[f.model] = "N/A"
+            continue
+        best_key = max(sorted(probs), key=lambda k: (probs[k] or 0.0, -_dir_index(k)))
+        try:
+            c = int(best_key.split("_")[-1])
+            out[f.model] = _DIR_CLASS.get(c, "N/A")
+        except (ValueError, IndexError):
+            out[f.model] = "N/A"
+    return out
 
 
 def independent_vote_summary(forecasts: list[ForecastOutput]) -> dict:
@@ -376,8 +464,8 @@ def independent_vote_summary(forecasts: list[ForecastOutput]) -> dict:
         agreement = "N/A"
     else:
         directions = list(votes.values())
-        top = max(set(directions), key=directions.count)
-        ratio = directions.count(top) / len(directions)
+        _, max_count = _plurality_deterministic(directions)
+        ratio = max_count / len(directions)
         agreement = "HIGH" if ratio >= 0.75 else ("MEDIUM" if ratio >= 0.5 else "LOW")
     return {
         "independent_base_model_count": len(base),

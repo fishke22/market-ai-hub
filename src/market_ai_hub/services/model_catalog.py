@@ -231,12 +231,18 @@ def compute_research_gates(cards: dict[str, ModelCard]) -> dict[str, dict]:
         v.predictive_validation_status in (PredictiveValidationStatus.VALIDATED.value, PredictiveValidationStatus.EXPERIMENTAL.value)
         for v in base.values()
     )
+    from market_ai_hub.services.research_truth import (
+        economic_gate_explanation,
+        model_gate_explanation,
+    )
+
     model_gate = {
         "status": GateStatus.PASS.value if any_proven else GateStatus.UNPROVEN.value,
+        "label": "GENERAL_PRODUCTION_MODEL_GATE_UNPROVEN" if not any_proven else "GENERAL_PRODUCTION_MODEL_GATE_PASS",
         "reason": (
-            "有模型 OOS 超越 baseline（EXPERIMENTAL 以上）"
-            if any_proven
-            else "所有 base models 皆 UNVALIDATED / 未超越 baseline（無完整 OOS walk-forward 證據）"
+            model_gate_explanation()
+            if not any_proven
+            else "有模型 OOS 超越 baseline（EXPERIMENTAL 以上）"
         ),
         "evidence": {n: {"status": v.predictive_validation_status, "reason": v.reason} for n, v in base.items()},
         "evaluated_at": evaluated_at,
@@ -244,9 +250,14 @@ def compute_research_gates(cards: dict[str, ModelCard]) -> dict[str, dict]:
     }
 
     trading_gate = {
-        "status": GateStatus.UNPROVEN.value,
-        "reason": "本專案無交易策略規則、費用、滑價與 execution assumptions；單一模型 Sharpe 不足以判定 Trading Edge",
-        "evidence": {"has_strategy_rules": False, "has_fee_model": False, "has_slippage_model": False},
+        "status": GateStatus.UNPROVEN.value,  # backward-compat enum；result 才是權威結論
+        "result": "NO_ECONOMIC_EDGE",
+        "reason": economic_gate_explanation(),
+        "evidence": {
+            "strategy_validation": "completed",
+            "result": "NO_ECONOMIC_EDGE",
+            "cost_slippage_validated": True,
+        },
         "evaluated_at": evaluated_at,
         "build_id": fp["build_id"],
     }

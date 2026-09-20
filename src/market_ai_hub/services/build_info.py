@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 MARKET_AI_VERSION = "1.1.0"
+RELEASE_VERSION = "v2.0.0-rc1"
 SCHEMA_VERSION = "1.1"
 
 SOURCE_ROOT = Path(__file__).resolve().parents[3]
@@ -65,7 +66,9 @@ except Exception:
 def build_fingerprint() -> dict:
     return {
         "market_ai_version": MARKET_AI_VERSION,
+        "release_version": RELEASE_VERSION,
         "build_id": BUILD_ID,
+        "runtime_build_id": BUILD_ID,  # 內容 hash（非 git commit prefix）；build_id 為 backward-compat alias
         "git_commit": GIT_COMMIT,
         "source_root": str(SOURCE_ROOT),
         "python_executable": sys.executable,

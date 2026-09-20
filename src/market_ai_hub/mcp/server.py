@@ -173,7 +173,8 @@ def get_research_gates() -> dict:
     gates = _research_gates(cards)
     return {
         "gates": gates,
-        "note": "TRADING_EDGE_GATE 預設 UNPROVEN：本專案無策略規則/費用/滑價/execution assumptions；單一模型 Sharpe 不足以判定。",
+        "note": "MODEL_PREDICTIVE_GATE=UNPROVEN 指 GENERAL_PRODUCTION_MODEL_GATE_UNPROVEN（非 NO_OOS_TEST_EXISTS）；"
+                "TRADING_EDGE_GATE.result=NO_ECONOMIC_EDGE：Phase2 cost/slippage strategy validation completed",
     }
 
 
@@ -208,27 +209,44 @@ def predict_chronos(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
     from market_ai_hub.models.chronos_model import chronos_forecast
     from market_ai_hub.providers.yfinance_provider import YFinanceProvider
     from market_ai_hub.services.build_info import build_fingerprint
+    from market_ai_hub.services.forecast_cache import forecast_cache_key, get_cached, set_cached
     from market_ai_hub.services.horizon import HorizonUnsupportedError, parse_horizon
     from market_ai_hub.services.model_runtime import get_chronos
+    from market_ai_hub.services.perf_trace import trace
 
-    spec = parse_horizon(horizon, "1d")
-    if not spec.supported:
-        return {
-            "status": "UNSUPPORTED_WITH_CURRENT_DATA",
-            "requested_horizon": horizon,
-            "data_frequency": "1d",
-            "reason": spec.reason,
-            "build": build_fingerprint(),
-        }
-    df = YFinanceProvider().fetch(symbol, period=period)
-    closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
-    try:
-        fo = chronos_forecast(get_chronos(), symbol, closes, horizon, spec.effective_horizon_steps)
-        d = fo.model_dump()
-        d["build"] = build_fingerprint()
-        return d
-    except HorizonUnsupportedError as e:
-        return {"status": "UNSUPPORTED_WITH_CURRENT_DATA", "requested_horizon": horizon, "reason": str(e), "build": build_fingerprint()}
+    with trace("predict_chronos") as t:
+        spec = parse_horizon(horizon, "1d")
+        if not spec.supported:
+            return {
+                "status": "UNSUPPORTED_WITH_CURRENT_DATA",
+                "requested_horizon": horizon,
+                "data_frequency": "1d",
+                "reason": spec.reason,
+                "build": build_fingerprint(),
+            }
+        df = YFinanceProvider().fetch(symbol, period=period)
+        closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
+        fp = build_fingerprint()
+        key = forecast_cache_key("chronos-2", symbol, horizon, closes, fp["build_id"])
+        cached = get_cached(key)
+        if cached is not None:
+            cached["cache_hit"] = True
+            if isinstance(t, dict):
+                t["cache_hit"] = True
+            return cached
+        try:
+            t0 = __import__("time").perf_counter()
+            fo = chronos_forecast(get_chronos(), symbol, closes, horizon, spec.effective_horizon_steps)
+            if isinstance(t, dict):
+                t["model_inference_ms"] = round((__import__("time").perf_counter() - t0) * 1000, 2)
+                t["cache_hit"] = False
+            d = fo.model_dump()
+            d["build"] = fp
+            d["cache_hit"] = False
+            set_cached(key, d)
+            return d
+        except HorizonUnsupportedError as e:
+            return {"status": "UNSUPPORTED_WITH_CURRENT_DATA", "requested_horizon": horizon, "reason": str(e), "build": fp}
 
 
 @mcp.tool()
@@ -237,27 +255,44 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
     from market_ai_hub.models.timesfm_model import timesfm_forecast
     from market_ai_hub.providers.yfinance_provider import YFinanceProvider
     from market_ai_hub.services.build_info import build_fingerprint
+    from market_ai_hub.services.forecast_cache import forecast_cache_key, get_cached, set_cached
     from market_ai_hub.services.horizon import HorizonUnsupportedError, parse_horizon
     from market_ai_hub.services.model_runtime import get_timesfm
+    from market_ai_hub.services.perf_trace import trace
 
-    spec = parse_horizon(horizon, "1d")
-    if not spec.supported:
-        return {
-            "status": "UNSUPPORTED_WITH_CURRENT_DATA",
-            "requested_horizon": horizon,
-            "data_frequency": "1d",
-            "reason": spec.reason,
-            "build": build_fingerprint(),
-        }
-    df = YFinanceProvider().fetch(symbol, period=period)
-    closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
-    try:
-        fo = timesfm_forecast(get_timesfm(), symbol, closes, horizon, spec.effective_horizon_steps)
-        d = fo.model_dump()
-        d["build"] = build_fingerprint()
-        return d
-    except HorizonUnsupportedError as e:
-        return {"status": "UNSUPPORTED_WITH_CURRENT_DATA", "requested_horizon": horizon, "reason": str(e), "build": build_fingerprint()}
+    with trace("predict_timesfm") as t:
+        spec = parse_horizon(horizon, "1d")
+        if not spec.supported:
+            return {
+                "status": "UNSUPPORTED_WITH_CURRENT_DATA",
+                "requested_horizon": horizon,
+                "data_frequency": "1d",
+                "reason": spec.reason,
+                "build": build_fingerprint(),
+            }
+        df = YFinanceProvider().fetch(symbol, period=period)
+        closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
+        fp = build_fingerprint()
+        key = forecast_cache_key("timesfm-3.0", symbol, horizon, closes, fp["build_id"])
+        cached = get_cached(key)
+        if cached is not None:
+            cached["cache_hit"] = True
+            if isinstance(t, dict):
+                t["cache_hit"] = True
+            return cached
+        try:
+            t0 = __import__("time").perf_counter()
+            fo = timesfm_forecast(get_timesfm(), symbol, closes, horizon, spec.effective_horizon_steps)
+            if isinstance(t, dict):
+                t["model_inference_ms"] = round((__import__("time").perf_counter() - t0) * 1000, 2)
+                t["cache_hit"] = False
+            d = fo.model_dump()
+            d["build"] = fp
+            d["cache_hit"] = False
+            set_cached(key, d)
+            return d
+        except HorizonUnsupportedError as e:
+            return {"status": "UNSUPPORTED_WITH_CURRENT_DATA", "requested_horizon": horizon, "reason": str(e), "build": fp}
 
 
 @mcp.tool()
@@ -582,29 +617,57 @@ def get_target_instrument_state() -> dict:
 
 @mcp.tool()
 def get_model_leaderboard(target: str = "", horizon: str = "") -> dict:
-    """模型 leaderboard（tournament PerformanceStore，含 BEST_BASELINE）。"""
+    """模型 leaderboard（§10）：target / dataset_semantics / sample_n / evidence_layer 分層。
+
+    ^N225 n=4 與 Direct Micro substantial OOS 不得混成單一 headline ranking；
+    n < MIN_SAMPLE → INSUFFICIENT_SAMPLE（不得標 stable/best validated/winner）。"""
     from market_ai_hub.research.tournament.performance_store import PerformanceStore
+    from market_ai_hub.services.research_truth import mase_wording
 
     rows = PerformanceStore().leaderboard(target=target or None, horizon=horizon or None)
-    return {"records": rows, "note": "performance store（樣本不足不宣稱 edge）"}
+    MIN_SAMPLE = 30
+    scoped = []
+    for r in rows:
+        n = r.get("sample_size") or 0
+        mase = r.get("mase")
+        scoped.append({
+            "model": r.get("model"),
+            "target": r.get("target"),
+            "dataset_semantics": (
+                "PROXY_INDEX" if r.get("target") == "^N225" else "DIRECT_MICRO_CONTINUOUS"
+                if "micro" in str(r.get("target", "")).lower() or "nikkei" in str(r.get("target", "")).lower()
+                else "UNSPECIFIED"
+            ),
+            "sample_n": n,
+            "evidence_layer": "HISTORICAL_OOS",
+            "sample_status": "INSUFFICIENT_SAMPLE" if n < MIN_SAMPLE else "OK",
+            "mase": mase,
+            "mase_wording": mase_wording(mase),
+            "direction_accuracy": r.get("direction_accuracy"),
+            "balanced_accuracy": r.get("balanced_accuracy"),
+            "mcc": r.get("mcc"),
+            "horizon": r.get("horizon"),
+        })
+    return {
+        "records": scoped,
+        "note": (
+            "target/dataset 分層；n < MIN_SAMPLE 標 INSUFFICIENT_SAMPLE，"
+            "不宣稱 stable/best validated/winner；MASE≈1 = baseline-level error，非 random guessing"
+        ),
+    }
 
 
 @mcp.tool()
 def get_forward_test_status() -> dict:
-    """Forward test 註冊狀態（Prediction Registry 中 joint/scenario/ensemble 預測是否已結算）。"""
+    """Forward test 統一計數（§14）：registry_records_total / model_forecast_records /
+    baseline_records / pending_records / settled_model_forecasts / settled_baselines /
+    forward_evidence_n / task_breakdown。所有 packet 引用同一來源。"""
     from market_ai_hub.research.registry import PredictionRegistry
 
     reg = PredictionRegistry()
-    preds = reg.list_predictions(settled=None, limit=200)
-    by_task: dict = {}
-    for p in preds:
-        t = p.get("model_task", "unknown")
-        by_task.setdefault(t, {"registered": 0, "settled": 0})
-        by_task[t]["registered"] += 1
-        if p.get("settled"):
-            by_task[t]["settled"] += 1
-    return {"forward_test_by_task": by_task,
-            "note": "forward paper 累積中；尚不足以宣稱 ensemble 提高預測能力"}
+    summary = reg.forward_summary()
+    summary["note"] = "forward paper 累積中；forward_evidence_n = settled model forecasts（非 registered/pending）"
+    return summary
 
 
 @mcp.tool()

@@ -78,7 +78,10 @@ def test_price_ensemble_not_contaminated_by_classifier():
     pe = ens.model_metadata["price_ensemble"]
     de = ens.model_metadata["direction_ensemble"]
     assert pe["components"] == ["chronos-2"]  # 分類器不進價格層
-    assert de["components"] == ["xgboost"]  # 分類器進方向層
+    # V2：分類器未 eligible_for_direction_vote → 不進正式方向層，只進 raw research view
+    assert de["components"] == []
+    assert de["final_direction"] == "NO_VALIDATED_MODEL_CONSENSUS"
+    assert de["raw_direction_research"]["unvalidated_components"] == ["xgboost"]
     assert ens.model_metadata["legacy_research_only"] is True
 
 

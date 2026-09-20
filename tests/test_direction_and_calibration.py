@@ -42,8 +42,8 @@ def test_direction_vote_vs_argmax_disagreement():
     from market_ai_hub.ensemble.ensemble import ensemble_equal_weight
 
     # 兩分類器 vote 都 up；但 aggregated prob 的 argmax 是 flat（class_0 最高）
-    a = _clf("xgboost", "up", {"class_-1": 0.2, "class_0": 0.5, "class_1": 0.3})
-    b = _clf("lightgbm", "up", {"class_-1": 0.2, "class_0": 0.6, "class_1": 0.2})
+    a = _clf("xgboost", "up", {"class_-1": 0.2, "class_0": 0.5, "class_1": 0.3}, vote_eligible=True)
+    b = _clf("lightgbm", "up", {"class_-1": 0.2, "class_0": 0.6, "class_1": 0.2}, vote_eligible=True)
     ens = ensemble_equal_weight([a, b], "X", "1d")
     de = ens.model_metadata["direction_ensemble"]
     assert de["vote_direction"] == "up"
@@ -56,8 +56,8 @@ def test_direction_vote_vs_argmax_disagreement():
 def test_direction_agreement_when_same():
     from market_ai_hub.ensemble.ensemble import ensemble_equal_weight
 
-    a = _clf("xgboost", "up", {"class_-1": 0.1, "class_0": 0.3, "class_1": 0.6})
-    b = _clf("lightgbm", "up", {"class_-1": 0.1, "class_0": 0.2, "class_1": 0.7})
+    a = _clf("xgboost", "up", {"class_-1": 0.1, "class_0": 0.3, "class_1": 0.6}, vote_eligible=True)
+    b = _clf("lightgbm", "up", {"class_-1": 0.1, "class_0": 0.2, "class_1": 0.7}, vote_eligible=True)
     ens = ensemble_equal_weight([a, b], "X", "1d")
     de = ens.model_metadata["direction_ensemble"]
     assert de["vote_direction"] == "up"
@@ -65,14 +65,15 @@ def test_direction_agreement_when_same():
     assert de["direction_disagreement"] is False
 
 
-def test_direction_falls_back_to_price_when_no_classifier():
+def test_direction_no_eligible_votes_with_price_model():
+    """無 eligible direction vote 時，final_direction = NO_VALIDATED_MODEL_CONSENSUS（不 fallback price plurality）。"""
     from market_ai_hub.ensemble.ensemble import ensemble_equal_weight
 
     p = _price("chronos-2", "down")
     ens = ensemble_equal_weight([p], "X", "1d")
     mm = ens.model_metadata
-    assert mm["final_direction"] == "down"
-    assert mm["direction_resolution_method"] == "price_plurality"
+    assert mm["final_direction"] == "NO_VALIDATED_MODEL_CONSENSUS"
+    assert mm["direction_resolution_method"] == "NO_ELIGIBLE_VOTES"
 
 
 def test_probability_calibration_metadata_classifier():

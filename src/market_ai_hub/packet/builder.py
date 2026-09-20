@@ -24,7 +24,6 @@ from market_ai_hub.packet.schema import (
     AnalysisPacket,
 )
 
-
 # --- 進程級 TTL cache（request dedup：同 symbol/range 只抓一次）---
 _TTL_SECONDS = 300
 _panel_cache: dict[str, tuple[float, pd.DataFrame | None]] = {}
@@ -168,6 +167,83 @@ def _event_snapshot(top_n: int = 5) -> list[dict]:
     return out[:top_n]
 
 
+def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> None:
+    """§6：direct_target / direct_market_fact / continuous_research_series / proxy_model_target
+    三者分離，不得合併。§7：direct 與 proxy calendar 分離。"""
+    if market == "osaka":
+        proxy_model_target = "^N225"
+        direct_calendar = "OSE/JPX_DERIVATIVES"
+        proxy_calendar = "XTKS"
+    else:
+        proxy_model_target = target
+        direct_calendar = "XTAI"
+        proxy_calendar = "XTAI"
+
+    packet.target_semantics = {
+        "direct_target": "OSE_NIKKEI225_MICRO_FUTURES" if market == "osaka" else target,
+        "direct_market_fact": (
+            {"contract": packet.contract_month, "price_type": packet.reference_price_type}
+            if packet.contract_month else {"status": "NOT_AVAILABLE"}
+        ),
+        "direct_contract_if_applicable": packet.contract_month or "N/A",
+        "continuous_research_series": "225LABO (CENTER_MONTH_CONTINUOUS_MICRO)" if market == "osaka" else "N/A",
+        "proxy_model_target": proxy_model_target,
+        "proxy_model_calendar": proxy_calendar,
+        "direct_market_calendar": direct_calendar,
+        "model_forecast_target_dates": packet.forecast_target_dates,
+    }
+
+    # §7：direct 與 proxy 各別 session/bar。OSE derivatives 可能 Holiday Trading，與 XTKS cash 不同。
+    try:
+        from market_ai_hub.services.calendar import next_trading_sessions, trading_date_of
+
+        today_utc = pd.Timestamp.now("UTC")
+        last_proxy = trading_date_of(today_utc, proxy_model_target)
+        proxy_bars = next_trading_sessions(proxy_model_target, last_proxy, 1)
+        packet.proxy_next_model_bar = proxy_bars[0] if proxy_bars else ""
+    except Exception:  # noqa: BLE001
+        packet.proxy_next_model_bar = ""
+    packet.direct_next_session = (
+        f"OSE/JPX derivatives session (may differ from TSE cash on holiday trading); "
+        f"proxy next bar = {packet.proxy_next_model_bar or 'N/A'}"
+    )
+
+
+def _fill_research_truth(packet: AnalysisPacket) -> None:
+    """§8：單一來源 ValidationTruth；§12/§13：driver panel / market environment 非 causal / economic。"""
+    from market_ai_hub.services.research_truth import research_evidence_summary, validation_truth
+
+    packet.validation_truth = validation_truth()
+
+    # 支援壓力：不可用時 NOT_AVAILABLE，不用 P10/P90 冒充（§16）
+    packet.support_resistance_status = "NOT_AVAILABLE"
+    packet.support_levels = []
+    packet.resistance_levels = []
+    packet.model_statistical_reference_range = {
+        "note": "uncalibrated model quantile range (NOT support/resistance)",
+        "p10": None, "p90": None,
+    }
+
+    # §13：risk_on/trend/vol/rates 是 MARKET ENVIRONMENT，不是 economic edge
+    packet.market_environment = {
+        "status": "ENVIRONMENT_ONLY",
+        "note": "risk_on/trend/vol/rates regime 是市場環境，非 economic edge",
+    }
+    packet.economic_edge_summary = {
+        "status": "NO_ECONOMIC_EDGE",
+        "source": "Phase2V-C cost-aware strategy validation",
+        "explanation": "Phase2 cost/slippage strategy validation completed; result NO_ECONOMIC_EDGE.",
+    }
+
+    # §12：driver panel 只標 CONTEXT / EXPLANATORY FEATURES，非 formal causal validation
+    packet.driver_panel = {
+        "status": "CONTEXT_ONLY",
+        "top_positive_drivers": packet.top_positive_drivers,
+        "top_negative_drivers": packet.top_negative_drivers,
+        "note": "explanatory features only; formal causal layer reads Phase2V-C.1 evidence (NON_EXECUTABLE_FORECAST_EDGE)",
+    }
+
+
 def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MICRO_FUTURES",
                           horizon: str = "1d", detail_level: str = "compact",
                           save_analysis: bool = True, profiler=None) -> dict:
@@ -244,6 +320,10 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
     packet.historical_edge_summary = {"status": "INSUFFICIENT_EVIDENCE",
                                       "note": "edge is evidence layer, does not modify forecast"}
     packet.strategy_research_state = "WAIT"
+
+    # 5.5 V2 target semantics / calendar 分離 / research truth / environment / driver panel
+    _fill_target_semantics(packet, market, target)
+    _fill_research_truth(packet)
 
     # 6. coverage / gates
     if detail_level == "compact":
