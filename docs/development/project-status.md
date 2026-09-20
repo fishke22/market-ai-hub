@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 2Q-F.4（Runtime Output Contract Enforcement + Proxy/Direct Presentation Hardening + Taiwan Session Filter Coverage）**
-- Gate: **PHASE2QF4_RUNTIME_OUTPUT_PASS**（最近；前置 PHASE2QF3_RUNTIME_TRUTH_PASS）
-- build_id：**cabed392964fb6de**（fingerprint 全部 runtime source + config）
+- Current phase: **Phase 2Q-F.5（Public MCP Safe View + Position-Aware Research Guard + Manual UAT Contract Closure）**
+- Gate: **PHASE2QF5_PUBLIC_SAFE_PASS**（最近；前置 PHASE2QF4_RUNTIME_OUTPUT_PASS）
+- build_id：**4286537b8a8ae4f7**（fingerprint 全部 runtime source + config）
 - Manual Cherry UAT：**RETEST_REQUIRED**
 
 ## Phase 2 全歷程 Gate
