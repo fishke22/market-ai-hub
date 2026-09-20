@@ -33,6 +33,9 @@ def forecast_cache_key(model: str, symbol: str, horizon: str, closes, build_id: 
 def get_cached(key: str) -> dict | None:
     hit = _FORECAST_CACHE.get(key)
     if hit is not None and (time.time() - hit[0]) <= _TTL_SECONDS:
+        from market_ai_hub.services.instrumentation import incr
+
+        incr("forecast_cache_hit")
         return hit[1]
     if hit is not None:
         _FORECAST_CACHE.pop(key, None)

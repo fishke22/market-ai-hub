@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-09-20",
+  "note": "before optimization baseline（人工實測 + 任務 §1 提供）",
+  "resource_profile": "DESKTOP_SAFE",
+  "metrics": {
+    "health_check_first_sec": 15.894,
+    "health_check_warm_sec": 7.545,
+    "get_system_info_sec": 16.48,
+    "packet_osaka_cold_sec": 1.729,
+    "packet_osaka_warm_sec": 0.0034,
+    "packet_taiwan_stock_cold_sec": 0.529,
+    "packet_taiwan_stock_warm_sec": 0.1104,
+    "packet_taiwan_index_cold_sec": 0.205,
+    "packet_taiwan_index_warm_sec": 0.0252,
+    "analyze_osaka_first_sec": 11.826,
+    "analyze_osaka_warm_sec": 1.467
+  }
+}

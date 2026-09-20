@@ -30,8 +30,11 @@ class ProviderRegistry:
             "broker": BrokerProvider(),
         }
 
-    def status_all(self) -> dict[str, ProviderInfo]:
-        return {name: p.status() for name, p in self.providers.items()}
+    def status_all(self, deep: bool = False) -> dict[str, ProviderInfo]:
+        """provider 狀態。deep=False（預設）用 shallow（不 network probe），deep=True 才 live probe。"""
+        if deep:
+            return {name: p.status() for name, p in self.providers.items()}
+        return {name: p.status_shallow() for name, p in self.providers.items()}
 
     def get(self, name: str):
         return self.providers[name]

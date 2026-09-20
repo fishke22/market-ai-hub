@@ -84,7 +84,9 @@ def live_model_cards() -> dict[str, ModelCard]:
     cards: dict[str, ModelCard] = {}
     perf = PerformanceStore().latest_by_model()
 
-    chronos_ok = get_chronos().status() == "ready"
+    from market_ai_hub.services.model_status import shallow_status
+
+    chronos_ok = shallow_status("chronos") == "AVAILABLE_NOT_LOADED"
     chronos_val, chronos_ev = _ts_validation_status("chronos-2")
     cards["chronos-2"] = ModelCard(
         name="chronos-2", role=ModelRole.BASE_MODEL.value, model_task=ModelTask.PRICE_FORECAST.value,
@@ -97,7 +99,7 @@ def live_model_cards() -> dict[str, ModelCard]:
         evidence={"smoke": "PASS" if chronos_ok else "FAIL", **chronos_ev},
     )
 
-    tsfm_ok = get_timesfm().status() == "ready"
+    tsfm_ok = shallow_status("timesfm") == "AVAILABLE_NOT_LOADED"
     tsfm_val, tsfm_ev = _ts_validation_status("timesfm-3.0")
     cards["timesfm-3.0"] = ModelCard(
         name="timesfm-3.0", role=ModelRole.BASE_MODEL.value, model_task=ModelTask.PRICE_FORECAST.value,
