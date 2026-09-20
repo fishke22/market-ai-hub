@@ -53,3 +53,7 @@ AI 會自己去查資料、跑模型、回報結果。你**不需要記任何指
 - 想懂離「可交易」還有多遠 → [TRADING_READINESS_FOR_BEGINNERS.md](TRADING_READINESS_FOR_BEGINNERS.md)
 - 想懂電腦資源會不會被吃滿 → [SAFE_TRAINING_FOR_BEGINNERS.md](SAFE_TRAINING_FOR_BEGINNERS.md)
 - 常見問題 → [FAQ_BEGINNER.md](FAQ_BEGINNER.md)
+
+> **技術使用者**：想讓 AI 遵守嚴謹的金融分析規則，可參考推薦的
+> [System Prompt V4（Phase 2 RC1）](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)。
+> 一般使用者不需要自己設定，AI Client 會依工具自動運作。

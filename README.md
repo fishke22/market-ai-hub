@@ -108,6 +108,7 @@ Official Data Sources → Smart Data Lake → Data Quality → Feature Store
 - 自動學習：[`docs/AUTOMATED_LEARNING.md`](docs/AUTOMATED_LEARNING.md)
 - Skills：[`docs/SKILLS_REFERENCE.md`](docs/SKILLS_REFERENCE.md)
 - Client 整合：[`docs/CLIENT_INTEGRATION_MATRIX.md`](docs/CLIENT_INTEGRATION_MATRIX.md)
+- System Prompt（推薦）：[`docs/prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](docs/prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)
 - 安裝（Windows）：[`docs/INSTALL_WINDOWS.md`](docs/INSTALL_WINDOWS.md)
 
 ## 安裝 / 驗證

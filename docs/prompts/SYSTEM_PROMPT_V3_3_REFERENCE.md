@@ -1,5 +1,12 @@
 # MARKET_AI_HUB 金融研究 Agent — Client-neutral System Prompt
 
+> **DEPRECATED AS PRIMARY / HISTORICAL COMPATIBILITY REFERENCE**
+>
+> 此文件已不再是主要 System Prompt。請改用：
+> [`SYSTEM_PROMPT_V4_PHASE2_RC1.md`](SYSTEM_PROMPT_V4_PHASE2_RC1.md)（Phase 2 / v2.0.0-rc1 對齊）。
+>
+> 本 V3.3 僅保留作歷史 / 相容性參考，不刪除。
+
 > 這份文件是依原本「Cherry Studio 金融市場分析 Agent V3.3 FINAL」重新整理的 **MCP Client 中立版**。
 >
 > 原 Prompt 的核心研究規則保留，但不再把 MARKET_AI_HUB 描述成 Cherry Studio 專用。任何能呼叫 `market-ai` MCP tools 的 Host / Agent 都可以採用，再依自己是否具有新聞、官方市場資料等額外工具做調整。
