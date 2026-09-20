@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2Q-C（Primary Market Parity + Historical Learning + OOS Validation Framework）**
-- Gate: **PHASE2QC_PASS**（最近；前置 PHASE2QB_PASS）
-- build_id：**026a18a9d46832f8**（2Q-C 起；2Q-B 為 `440d9273c9bb39f5`）
+- Current phase: **Phase 2Q-C.1（Product Spec Truth + Local Data Root Hygiene + Filesystem Side-Effect Remediation）**
+- Gate: **PHASE2QC1_PASS**（最近；前置 PHASE2QC_PASS）
+- build_id：**1afb6888eec3fbdc**（2Q-C.1 起；2Q-C 為 `026a18a9d46832f8`）
 
 ## Phase 2 全歷程 Gate
 
@@ -33,6 +33,16 @@
 | **2Q-A** | Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path | **PHASE2QA_PASS** |
 | **2Q-B** | Whole System Validation + Clean-Room Audit + Failure Injection + E2E MCP | **PHASE2QB_PASS** |
 | **2Q-C** | Primary Market Parity + Historical Learning + OOS Validation Framework | **PHASE2QC_PASS** |
+| **2Q-C.1** | Product Spec Truth + Local Data Root Hygiene + Filesystem Side-Effect Remediation | **PHASE2QC1_PASS** |
+
+## 2Q-C.1 本棒成果（Product Spec Truth + Data Root Hygiene + Filesystem Side-Effect，correctness/hygiene hotfix）
+- 修 OSE Micro multiplier 100→10（JPX official：Contract Unit = Nikkei 225 × JPY 10，tick 5）。TX/MTX/TMF = 200/50/10 authoritative verified。
+- 新 `config/runtime_paths.py`：MARKET_AI_DATA_ROOT env override，預設 `<ProjectRoot>\data`；private inbox = `<DATA_ROOT>\private\inbox\225labo`。
+- 移除 hardcode `D:\MARKET_AI_HUB_PRIVATE_INBOX`（empty legacy folder 已安全刪除）；import/health/status 不再產生 filesystem side effect（lazy path + FileHandler delay）。
+- `scripts/import_latest_225labo_micro.ps1` 改從 Python resolver 取 path。`.env.example` 加 MARKET_AI_DATA_ROOT。
+- 新增 PRODUCT_SPEC_AUDIT.md / LOCAL_RUNTIME_ARTIFACT_AUDIT.md / 報告。225LABO license boundary 不變（LOCAL_ONLY，manual only）。
+- 新增 `test_phase2qc1.py`（16 tests）；全 suite **740 passed**（724→740）。build_id → `1afb6888eec3fbdc`。
+- 禁區未動：不 training / 不 broker / 不 mega-restructure。PR #9 merged；版本仍 v2.0.0-rc1。
 
 ## 2Q-C 本棒成果（Primary Market Parity + Historical Learning + OOS Validation，architecture/framework）
 - 三大 first-class families 正式定義：OSAKA_MICRO / TAIWAN_STOCK / TAIWAN_INDEX（防止 Osaka-only）。
