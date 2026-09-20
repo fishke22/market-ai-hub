@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2Q-B（Whole System Validation + Clean-Room Correctness Audit + Failure Injection + E2E MCP Acceptance）**
-- Gate: **PHASE2QB_PASS**（最近；前置 PHASE2QA_PASS）
-- build_id：**440d9273c9bb39f5**（Phase 2Q-B 修 project_path 硬編碼起；2Q-A 為 `cd33ef1c14839b7d`）
+- Current phase: **Phase 2Q-C（Primary Market Parity + Historical Learning + OOS Validation Framework）**
+- Gate: **PHASE2QC_PASS**（最近；前置 PHASE2QB_PASS）
+- build_id：**026a18a9d46832f8**（2Q-C 起；2Q-B 為 `440d9273c9bb39f5`）
 
 ## Phase 2 全歷程 Gate
 
@@ -32,6 +32,17 @@
 | **2P-E** | System Prompt Compaction + Skill Responsibility Cleanup | **PHASE2PE_PUBLISHED** |
 | **2Q-A** | Runtime Truth Consolidation + Deterministic Direction + MCP Fast Path | **PHASE2QA_PASS** |
 | **2Q-B** | Whole System Validation + Clean-Room Audit + Failure Injection + E2E MCP | **PHASE2QB_PASS** |
+| **2Q-C** | Primary Market Parity + Historical Learning + OOS Validation Framework | **PHASE2QC_PASS** |
+
+## 2Q-C 本棒成果（Primary Market Parity + Historical Learning + OOS Validation，architecture/framework）
+- 三大 first-class families 正式定義：OSAKA_MICRO / TAIWAN_STOCK / TAIWAN_INDEX（防止 Osaka-only）。
+- TAIWAN_INDEX 語義：TAIEX=cash index forecast/reference（非可成交）；TX/MTX/TMF=execution。
+- 新模組 `research/historical_learning.py`：HistoricalWalkForwardProtocol（expanding/rolling、three_zone_split、protocol hash、leakage invariant）。
+- 新 `services/primary_targets.py`（registry loader）+ `config/primary_targets.yaml`（不 hardcode 私人路徑）。
+- `research_truth` 新增 `evidence_by_target()`（§21 按市場隔離）；`get_analysis_packet` 支援 `market=taiwan_index`。
+- 新增 YAML/docs：PRIMARY_MARKET_MISSION / UNIFIED_RESEARCH_EVIDENCE_SCHEMA / TAIWAN_INDEX_CAPABILITY_AUDIT / HISTORICAL_LEARNING_PROTOCOL / OUT_OF_SAMPLE_VALIDATION_STANDARD / 報告。
+- 新增 `test_phase2qc.py`（15 tests）；全 suite **724 passed**（712→724）。build_id → `026a18a9d46832f8`。
+- TAIWAN_STOCK / TAIWAN_INDEX 目前 NO_EVIDENCE / NOT_YET_VALIDATED（誠實）。禁區未動：不 broker / 不 auto promotion。PR #8 merged；版本仍 v2.0.0-rc1。
 
 ## 2Q-B 本棒成果（Whole System Validation + Clean-Room + Failure Injection + E2E MCP，correctness-only）
 - 0 Critical / 0 High defect；修 1 個 MEDIUM：`mcp/server.py` 硬編碼 `project_path` → `str(project_root())`（clean-room 違反）。
