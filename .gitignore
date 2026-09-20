@@ -133,3 +133,7 @@ MCP_E2E_STABILITY.json
 
 # runtime backups (local-only)
 data/backups/
+data/db/
+data/logs/
+data/research_outputs/
+data/diagnostics/
