@@ -275,6 +275,9 @@ def predict_chronos(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
                 t["model_inference_ms"] = round((__import__("time").perf_counter() - t0) * 1000, 2)
                 t["cache_hit"] = False
             d = fo.model_dump()
+            from market_ai_hub.services.public_view import sanitize_forecast_dump
+
+            d = sanitize_forecast_dump(d)
             d["build"] = fp
             d["cache_hit"] = False
             set_cached(key, d)
@@ -321,6 +324,9 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
                 t["model_inference_ms"] = round((__import__("time").perf_counter() - t0) * 1000, 2)
                 t["cache_hit"] = False
             d = fo.model_dump()
+            from market_ai_hub.services.public_view import sanitize_forecast_dump
+
+            d = sanitize_forecast_dump(d)
             d["build"] = fp
             d["cache_hit"] = False
             set_cached(key, d)
@@ -364,7 +370,9 @@ def predict_ensemble(symbol: str, period: str = "6mo", horizon: str = "1d") -> d
     def _try(key, fn):
         try:
             fo = fn()
-            out[key] = fo.model_dump()
+            from market_ai_hub.services.public_view import sanitize_forecast_dump
+
+            out[key] = sanitize_forecast_dump(fo.model_dump())
             models.append(fo)
         except Exception as e:
             out[key] = {"status": "unavailable", "error": str(e)}
@@ -376,8 +384,10 @@ def predict_ensemble(symbol: str, period: str = "6mo", horizon: str = "1d") -> d
 
     if models:
         ens = ensemble_equal_weight(models, symbol, horizon)
-        out["ensemble"] = ens.model_dump()
-        out["ensemble_result"] = ens.model_dump()
+        from market_ai_hub.services.public_view import sanitize_ensemble_dump
+
+        out["ensemble"] = sanitize_ensemble_dump(ens.model_dump())
+        out["ensemble_result"] = out["ensemble"]
         out["used_ensemble"] = True
         mm = ens.model_metadata
         out["price_forecast_ensemble"] = mm.get("price_ensemble", {})

@@ -12,6 +12,9 @@ import time
 _FORECAST_CACHE: dict[str, tuple[float, dict]] = {}
 _TTL_SECONDS = 300
 
+# 2Q-F.5 §14：session filter 版本進 cache key（session sanitation 變更 → 舊 unsanitized cache 不得 reuse）
+SESSION_FILTER_VERSION = "XTAI_SESSION_FILTER_V1"
+
 
 def _data_hash(closes) -> str:
     """最後 60 根 close 值 + 最後 timestamp 的 hash（資料改 → hash 變 → cache invalidates）。"""
@@ -27,7 +30,7 @@ def _data_hash(closes) -> str:
 
 
 def forecast_cache_key(model: str, symbol: str, horizon: str, closes, build_id: str) -> str:
-    return f"{model}|{symbol}|{horizon}|{_data_hash(closes)}|{build_id}"
+    return f"{model}|{symbol}|{horizon}|{_data_hash(closes)}|{build_id}|{SESSION_FILTER_VERSION}"
 
 
 def get_cached(key: str) -> dict | None:
