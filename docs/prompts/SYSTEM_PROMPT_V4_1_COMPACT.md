@@ -104,6 +104,15 @@ get_forward_test_status
 
 其他 tool 由 runtime discovery 取得，依問題路由，**不需每次全部呼叫**。
 
+### 預設 tool budget（§18；非安全 hard limit，是 routing policy）
+
+- QUICK_FORECAST（預設）：`get_analysis_packet` compact = 1 primary call；maximum normal calls = 2。
+- FULL_ANALYSIS：1 primary packet + only missing-evidence calls；maximum = 4。
+- MODEL_AUDIT：allow deeper calls（predict_* / leaderboard / gates）。
+- SYSTEM_STATUS：prefer health/status only；maximum 2 calls。
+
+packet 已含 Chronos/TimesFM/XGB/LGBM/Ensemble 結果時，不得重複呼叫 predict_*（除非 explicit MODEL_AUDIT 或 packet 缺失）。
+
 ---
 
 ## I. 輸出模式

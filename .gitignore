@@ -127,3 +127,6 @@ desktop.ini
 # Experiment tracking
 lightning_logs/
 mlruns/
+
+# Phase 2Q-A benchmark output
+MCP_FASTPATH_BASELINE.json

@@ -77,6 +77,27 @@ class AnalysisPacket(BaseModel):
     research_gates: dict[str, Any] = Field(default_factory=dict)
     reanalysis_conditions: list[str] = Field(default_factory=list)
 
+    # ── V2 target semantics（§6）：direct / continuous / proxy / calendar 分離，不得合併 ──
+    target_semantics: dict[str, Any] = Field(default_factory=dict)
+
+    # ── V2 calendar 分離（§7）：direct 與 proxy 各別 session/bar ──
+    direct_next_session: str = ""
+    proxy_next_model_bar: str = ""
+
+    # ── V2 support/resistance（§16）：不可用時 NOT_AVAILABLE，quantile 獨立為 statistical reference ──
+    support_resistance_status: str = "NOT_AVAILABLE"
+    model_statistical_reference_range: dict[str, Any] = Field(default_factory=dict)
+
+    # ── V2 research truth（§8）：單一來源 ValidationTruth ──
+    validation_truth: dict[str, Any] = Field(default_factory=dict)
+
+    # ── V2 market environment vs economic edge（§13）：risk_on/trend/vol 是環境，非經濟 edge ──
+    market_environment: dict[str, Any] = Field(default_factory=dict)
+    economic_edge_summary: dict[str, Any] = Field(default_factory=dict)
+
+    # ── V2 driver panel（§12）：context/explanatory features，非 formal causal validation ──
+    driver_panel: dict[str, Any] = Field(default_factory=dict)
+
     # data lake 狀態（§11）
     data_reused: list[str] = Field(default_factory=list)
     data_fetched: list[str] = Field(default_factory=list)
