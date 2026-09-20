@@ -123,6 +123,36 @@ def assert_origins_no_leakage(origins: list[tuple[np.ndarray, np.ndarray]]) -> b
     return True
 
 
+# ── baselines（§18）──
+def naive_scale(series: np.ndarray, m: int = 1) -> float:
+    """naive in-sample scale = mean(|Y_t - Y_{t-m}|) 只在 TRAINING history 上算。
+
+    不得用 test actual 估 scale（§15/§19）。
+    """
+    s = np.asarray(series, dtype=float)
+    if len(s) <= m:
+        return float("nan")
+    return float(np.mean(np.abs(s[m:] - s[:-m])))
+
+
+def baseline_predictions(series: np.ndarray, n_steps: int, method: str, m: int = 1) -> np.ndarray:
+    """產生 test 期 baseline 預測（只用 train series；§18）。"""
+    s = np.asarray(series, dtype=float)
+    if method in ("LAST_VALUE", "ZERO_RETURN"):
+        # zero return == last value for level forecast
+        return np.full(n_steps, s[-1])
+    if method == "SEASONAL_NAIVE":
+        if len(s) < m:
+            return np.full(n_steps, np.nan)
+        return np.asarray([s[-m - 1 + ((i % m))] if (i % m) < m else np.nan for i in range(n_steps)])
+    if method == "DRIFT":
+        if len(s) < 2:
+            return np.full(n_steps, s[-1])
+        step_change = (s[-1] - s[0]) / (len(s) - 1)
+        return s[-1] + step_change * np.arange(1, n_steps + 1)
+    raise ValueError(f"unknown baseline method: {method}")
+
+
 # ── unified walk-forward runner ──
 @dataclass(frozen=True)
 class WalkForwardFold:
@@ -178,26 +208,85 @@ class HistoricalWalkForwardProtocol:
         return folds
 
     @staticmethod
-    def score(folds: list[WalkForwardFold], df: pd.DataFrame, target_col: str) -> dict:
-        """實際值出現後才 score（MAE/RMSE/MASE vs LAST_VALUE baseline）。"""
-        actual_all: list[float] = []
-        pred_all: list[float] = []
+    def score(folds: list[WalkForwardFold], df: pd.DataFrame, target_col: str, m: int = 1) -> dict:
+        """實際值出現後才 score。
+
+        每 fold 的 MASE denominator 只用該 fold TRAINING history 的 naive in-sample scale（§15）。
+        不得跨 fold 邊界 diff，不得讓 future test observation 進 scaling denominator（§19）。
+        回 aggregate + per-fold metrics（§17 fold-level auditability）。
+        """
+        fold_metrics: list[dict] = []
+        mae_sum = 0.0
+        rmse_sumsq = 0.0
+        n_total = 0
+        mase_num = 0.0
+        mase_den = 0.0
+
         for fold in folds:
-            actual = df.iloc[list(fold.test_idx)][target_col].to_numpy()
-            actual_all.extend(float(a) for a in actual)
-            pred_all.extend(fold.prediction or ())
-        if not actual_all:
-            return {"n": 0}
-        actual = np.asarray(actual_all)
-        pred = np.asarray(pred_all)
-        err = pred - actual
-        mae = float(np.mean(np.abs(err)))
-        rmse = float(np.sqrt(np.mean(err ** 2)))
-        # MASE：naive LAST_VALUE baseline 的 in-sample MAE 當 scaling（簡化；正確版應 per-fold）
-        last_value_err = np.abs(np.diff(actual, prepend=actual[0]))
-        denom = float(np.mean(last_value_err)) if len(last_value_err) else 1.0
-        mase = mae / denom if denom > 1e-12 else float("inf")
-        return {"n": len(actual), "mae": mae, "rmse": rmse, "mase": mase}
+            train_series = df.iloc[list(fold.train_idx)][target_col].to_numpy(dtype=float)
+            test_actual = df.iloc[list(fold.test_idx)][target_col].to_numpy(dtype=float)
+            pred = np.asarray(fold.prediction or (), dtype=float)
+
+            n_train = len(train_series)
+            n_test = len(test_actual)
+            if n_test == 0 or len(pred) != n_test:
+                continue
+
+            scale = naive_scale(train_series, m=m)  # training-only，不含 test
+            err = pred - test_actual
+            fold_mae = float(np.mean(np.abs(err)))
+            fold_rmse = float(np.sqrt(np.mean(err ** 2)))
+            fold_mase = fold_mae / scale if (scale and np.isfinite(scale) and scale > 1e-12) else float("inf")
+
+            fold_metrics.append({
+                "origin": fold.origin,
+                "n_train": n_train,
+                "n_test": n_test,
+                "mae": fold_mae,
+                "rmse": fold_rmse,
+                "mase": fold_mase,
+                "mase_scale": scale,
+            })
+
+            mae_sum += fold_mae * n_test
+            rmse_sumsq += (fold_rmse ** 2) * n_test
+            n_total += n_test
+            # weighted aggregate MASE：Σ(mae_i · n_i) / Σ(scale_i · n_i)
+            if np.isfinite(scale) and scale > 1e-12:
+                mase_num += fold_mae * n_test
+                mase_den += scale * n_test
+
+        if n_total == 0:
+            return {"n": 0, "folds": []}
+
+        return {
+            "n": n_total,
+            "mae": mae_sum / n_total,
+            "rmse": float(np.sqrt(rmse_sumsq / n_total)),
+            "mase": mase_num / mase_den if mase_den > 1e-12 else float("inf"),
+            "folds": fold_metrics,
+        }
+
+    @staticmethod
+    def baseline_scores(folds: list[WalkForwardFold], df: pd.DataFrame, target_col: str,
+                        methods: list[str] | None = None, m: int = 1) -> dict:
+        """同 origin baseline 成績（§18）：model vs same-origin baseline。"""
+        methods = methods or ["LAST_VALUE", "ZERO_RETURN", "SEASONAL_NAIVE", "DRIFT"]
+        out: dict[str, float] = {}
+        for method in methods:
+            errs = []
+            scales = []
+            for fold in folds:
+                train_series = df.iloc[list(fold.train_idx)][target_col].to_numpy(dtype=float)
+                test_actual = df.iloc[list(fold.test_idx)][target_col].to_numpy(dtype=float)
+                pred = baseline_predictions(train_series, len(test_actual), method, m=m)
+                errs.extend(np.abs(pred - test_actual))
+                scale = naive_scale(train_series, m=m)
+                if np.isfinite(scale) and scale > 1e-12:
+                    scales.append(scale)
+            if errs:
+                out[method] = float(np.mean(errs))
+        return out
 
 
 def make_protocol(

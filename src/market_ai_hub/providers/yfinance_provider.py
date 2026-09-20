@@ -59,12 +59,15 @@ class YFinanceProvider(BaseProvider):
         local_tz = TZ_MAP.get(symbol, "UTC")
         ts = pd.to_datetime(raw[ts_col])
         if ts.dt.tz is None:
+            # naive → 先 localize 到 instrument local timezone，再 convert UTC（不得同一 naive 兩套解讀）
             local_ts = ts.dt.tz_localize(local_tz, ambiguous="infer", nonexistent="NaT")
+            utc_ts = local_ts.dt.tz_convert("UTC")
         else:
             local_ts = ts.dt.tz_convert(local_tz)
+            utc_ts = ts.dt.tz_convert("UTC")
         df = pd.DataFrame(
             {
-                "timestamp_utc": ts.dt.tz_localize("UTC") if ts.dt.tz is None else ts.dt.tz_convert("UTC"),
+                "timestamp_utc": utc_ts,
                 "timestamp_local": local_ts,
                 "open": raw["Open"],
                 "high": raw["High"],
