@@ -63,18 +63,21 @@ CLASSES = [-1, 0, 1]
 
 
 def _new_model(name: str):
+    from market_ai_hub.services.resource_governor import interactive_n_jobs
+
+    n_jobs = interactive_n_jobs()  # bounded（DESKTOP_SAFE），禁止 -1 吃滿 CPU
     if name == "lr":
         return LogisticRegression(max_iter=1000)
     if name == "rf":
-        return RandomForestClassifier(n_estimators=200, n_jobs=-1, random_state=42)
+        return RandomForestClassifier(n_estimators=200, n_jobs=n_jobs, random_state=42)
     if name == "xgb":
         import xgboost as xgb
 
-        return xgb.XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.1, n_jobs=-1, random_state=42)
+        return xgb.XGBClassifier(n_estimators=200, max_depth=4, learning_rate=0.1, n_jobs=n_jobs, random_state=42)
     if name == "lgbm":
         import lightgbm as lgb
 
-        return lgb.LGBMClassifier(n_estimators=200, max_depth=4, learning_rate=0.1, n_jobs=-1, random_state=42, verbosity=-1)
+        return lgb.LGBMClassifier(n_estimators=200, max_depth=4, learning_rate=0.1, n_jobs=n_jobs, random_state=42, verbosity=-1)
     raise ValueError(f"unknown model {name}")
 
 
@@ -168,7 +171,19 @@ def baseline_forecast(
     X_train, y_train, X_last = prepare_training_data(df, threshold, steps)
     if len(np.unique(y_train)) < 2:
         raise RuntimeError("training labels contain only one class; cannot fit classifier")
-    model.fit(X_train, y_train)
+
+    # request-time research fit cache（§23）：相同 data/horizon 不得每 request 重 fit
+    from market_ai_hub.services.fit_cache import fit_cache_key, get_fitted, set_fitted
+
+    key = fit_cache_key(model.name, symbol, horizon, df)
+    cached = get_fitted(key)
+    if cached is not None:
+        model.model, model._label_map, model._imputer = cached
+        model.fitted = True
+    else:
+        model.fit(X_train, y_train)
+        set_fitted(key, (model.model, model._label_map, model._imputer))
+
     proba = model.predict_proba(X_last)[0]
     classes = list(model.model.classes_)
     if model._label_map is not None:

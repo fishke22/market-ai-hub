@@ -50,6 +50,13 @@ RESOURCE_MONITOR_UNAVAILABLE = "RESOURCE_MONITOR_UNAVAILABLE"
 PROFILES_PATH = project_root() / "config" / "resource_profiles.yaml"
 
 
+def interactive_n_jobs() -> int:
+    """interactive inference/fit 的 bounded thread 數（DESKTOP_SAFE）。禁止 n_jobs=-1 吃滿 CPU。"""
+    cores = os.cpu_count() or 1
+    reserve = max(1, int(cores * 0.25))
+    return max(1, min(4, cores - reserve))
+
+
 def load_profile(name: str | None = None) -> dict:
     data = yaml.safe_load(PROFILES_PATH.read_text(encoding="utf-8"))
     name = name or data.get("default_profile", "DESKTOP_SAFE")

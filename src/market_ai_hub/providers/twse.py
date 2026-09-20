@@ -39,6 +39,10 @@ class TWSEProvider(BaseProvider):
         except Exception as e:
             return ProviderInfo(name=self.name, status=ProviderStatus.UNAVAILABLE, message=str(e))
 
+    def status_shallow(self) -> ProviderInfo:
+        """TWSE 為 public API 無 key；shallow 只回 configured（不做 live network probe，避免 health 卡住）。"""
+        return ProviderInfo(name=self.name, status=ProviderStatus.OK)
+
     def _get_json(self, path: str, params: dict, cache: bool = True) -> list[dict] | dict:
         url = BASE_URL + path
         cache_key = hashlib.sha256((url + str(sorted(params.items()))).encode()).hexdigest()[:16]

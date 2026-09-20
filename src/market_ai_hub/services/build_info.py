@@ -1,17 +1,19 @@
-"""Build identity / version fingerprint（V1.1）。
+"""Build identity / version fingerprint（V1.1 + 2Q-D）。
 
 讓外部 Agent 能確認自己正在使用哪一份 code、哪個 process：
 - market_ai_version：人讀版本
-- build_id：關鍵 source 檔內容的 sha256（code 一變 id 就變）
-- git_commit：N/A（本專案非 git repo）
-- source_root / python_executable / server_started_at / schema_version
+- release_version：release 版本
+- build_id：全部 runtime source + runtime config 內容的 sha256（code/config 一變 id 就變）
+- git_commit / source_root / python_executable / server_started_at / schema_version
 
-build_id 在 server 啟動時計算一次（import 時），供所有 response 引用。
+2Q-D 修正：build_id 涵蓋所有會影響 runtime semantics 的 src/**/*.py 與 runtime config，
+純 docs/tests 不改變 build_id。
 """
 from __future__ import annotations
 
 import hashlib
 import platform
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,30 +24,36 @@ SCHEMA_VERSION = "1.1"
 
 SOURCE_ROOT = Path(__file__).resolve().parents[3]
 
-FINGERPRINTED_FILES = [
-    "mcp/server.py",
-    "services/analysis.py",
-    "services/horizon.py",
-    "services/model_catalog.py",
-    "services/validation.py",
-    "models/chronos_model.py",
-    "models/timesfm_model.py",
-    "models/baseline_ml.py",
-    "ensemble/ensemble.py",
-    "features/features.py",
-    "backtest/walk_forward.py",
-    "schemas/market_data.py",
-    "schemas/backtest.py",
+# runtime config（內容變 → build_id 變）
+RUNTIME_CONFIG_FILES = [
+    "config/model_registry.yaml",
+    "config/model_manifest.yaml",
+    "config/primary_targets.yaml",
+    "config/resource_profiles.yaml",
+    "config/model_resource_requirements.yaml",
+    "config/symbols.yaml",
 ]
+
+
+def _fingerprint_paths() -> list[Path]:
+    """全部 runtime source + runtime config（sorted，deterministic）。"""
+    src_dir = SOURCE_ROOT / "src" / "market_ai_hub"
+    paths: list[Path] = []
+    if src_dir.exists():
+        paths.extend(p for p in src_dir.rglob("*.py") if "__pycache__" not in p.parts)
+    for cfg in RUNTIME_CONFIG_FILES:
+        p = SOURCE_ROOT / cfg
+        if p.exists():
+            paths.append(p)
+    return sorted(paths)
 
 
 def _compute_build_id() -> str:
     h = hashlib.sha256()
-    for rel in FINGERPRINTED_FILES:
-        p = SOURCE_ROOT / "src" / "market_ai_hub" / rel
-        if p.exists():
-            h.update(rel.encode("utf-8"))
-            h.update(p.read_bytes())
+    for p in _fingerprint_paths():
+        rel = p.relative_to(SOURCE_ROOT).as_posix()
+        h.update(rel.encode("utf-8"))
+        h.update(p.read_bytes())
     return h.hexdigest()[:16]
 
 
@@ -53,8 +61,6 @@ BUILD_ID = _compute_build_id()
 SERVER_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
 try:
-    import subprocess
-
     GIT_COMMIT = subprocess.run(
         ["git", "-C", str(SOURCE_ROOT), "rev-parse", "HEAD"],
         capture_output=True, text=True, timeout=10,

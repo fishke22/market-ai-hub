@@ -65,6 +65,18 @@ class ChronosAdapter:
             log.warning("chronos load failed: %s", e)
             return "unavailable"
 
+    def status_shallow(self) -> str:
+        """不 load weights、不 import chronos（health/status 用）。回 LOADED_READY / AVAILABLE_NOT_LOADED / UNAVAILABLE。"""
+        if self._pipeline is not None:
+            return "LOADED_READY"
+        import importlib.util
+
+        pkg_ok = importlib.util.find_spec("chronos") is not None
+        cache_ok = MODEL_CACHE.exists() and any(MODEL_CACHE.rglob("*"))
+        if pkg_ok or cache_ok:
+            return "AVAILABLE_NOT_LOADED"
+        return "UNAVAILABLE"
+
     def load(self) -> None:
         if self._pipeline is not None:
             return

@@ -28,32 +28,44 @@ mcp = MCPServer("market-ai-hub")
 
 
 def _torch_info() -> dict:
-    try:
-        import torch
+    """torch/CUDA 資訊（shallow：不 import torch，避免 cold health ~2s）。
 
-        return {
-            "cuda_available": torch.cuda.is_available(),
-            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none",
-            "torch": torch.__version__,
-        }
-    except Exception as e:
-        return {"cuda_available": False, "gpu": "none", "torch": "unavailable", "error": str(e)}
+    deep GPU probe（實際 device name / VRAM）由 Model Runtime / deep_probe 路徑提供。
+    """
+    import shutil
+
+    from market_ai_hub.services.model_status import torch_installed
+
+    nvidia = shutil.which("nvidia-smi") is not None
+    return {
+        "torch_installed": torch_installed(),
+        "cuda_available": None,  # not probed in shallow mode
+        "gpu": "nvidia_driver_present" if nvidia else "none_detected",
+        "torch": "installed" if torch_installed() else "unavailable",
+    }
 
 
-def _model_statuses() -> dict:
+def _model_statuses(deep: bool = False) -> dict:
+    """模型狀態。預設 shallow（不 load weights、不 import torch）；deep=True 才真正 load/smoke。"""
     out = {}
-    try:
-        from market_ai_hub.models.chronos_model import ChronosAdapter
+    if deep:
+        try:
+            from market_ai_hub.models.chronos_model import ChronosAdapter
 
-        out["chronos"] = ChronosAdapter().status()
-    except Exception as e:
-        out["chronos"] = f"unavailable: {e}"
-    try:
-        from market_ai_hub.models.timesfm_model import TimesFM3Adapter
+            out["chronos"] = ChronosAdapter().status()
+        except Exception as e:
+            out["chronos"] = f"unavailable: {e}"
+        try:
+            from market_ai_hub.models.timesfm_model import TimesFM3Adapter
 
-        out["timesfm"] = TimesFM3Adapter().status()
-    except Exception as e:
-        out["timesfm"] = f"unavailable: {e}"
+            out["timesfm"] = TimesFM3Adapter().status()
+        except Exception as e:
+            out["timesfm"] = f"unavailable: {e}"
+    else:
+        from market_ai_hub.services.model_status import shallow_status
+
+        out["chronos"] = shallow_status("chronos")
+        out["timesfm"] = shallow_status("timesfm")
     try:
         from market_ai_hub.models.fincast_model import FinCastAdapter
 
@@ -64,10 +76,14 @@ def _model_statuses() -> dict:
 
 
 @mcp.tool()
-def health_check() -> dict:
-    """整體健康檢查：models / providers / 環境 / build fingerprint。"""
+def health_check(deep_probe: bool = False) -> dict:
+    """整體健康檢查：models / providers / 環境 / build fingerprint。
+
+    預設 SHALLOW_FAST（不 load Chronos/TimesFM、不 inference、不 download、不啟動 FinCast worker）。
+    deep_probe=true 才真正 load/smoke 模型。
+    """
     torch_info = _torch_info()
-    ms = _model_statuses()
+    ms = _model_statuses(deep=deep_probe)
     try:
         from market_ai_hub.storage.duckdb_store import MarketStore
 
@@ -86,6 +102,7 @@ def health_check() -> dict:
     return {
         "service": "market-ai-hub",
         "status": "ok",
+        "deep_probe": deep_probe,
         "python": platform.python_version(),
         "cuda_available": torch_info.get("cuda_available", False),
         "gpu": torch_info.get("gpu", "none"),
@@ -180,11 +197,11 @@ def get_research_gates() -> dict:
 
 @mcp.tool()
 def get_data_source_status() -> dict:
-    """各資料來源狀態（TWSE/FinMind/FRED/yfinance/JQuants/TradingView/Broker）。"""
+    """各資料來源狀態（TWSE/FinMind/FRED/yfinance/JQuants/TradingView/Broker）。live probe（deep）。"""
     from market_ai_hub.providers.registry import ProviderRegistry
 
     reg = ProviderRegistry()
-    return {k: {"status": v.status.value, "message": v.message} for k, v in reg.status_all().items()}
+    return {k: {"status": v.status.value, "message": v.message} for k, v in reg.status_all(deep=True).items()}
 
 
 @mcp.tool()

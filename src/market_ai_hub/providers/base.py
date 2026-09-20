@@ -34,6 +34,10 @@ class BaseProvider:
     def status(self) -> ProviderInfo:
         return ProviderInfo(name=self.name, status=ProviderStatus.OK)
 
+    def status_shallow(self) -> ProviderInfo:
+        """shallow（不 network probe）狀態。預設 = status()；有 network probe 的 provider 覆寫為 configured state。"""
+        return self.status()
+
     def fetch(self, symbol: str, **kwargs) -> pd.DataFrame:
         raise NotImplementedError
 

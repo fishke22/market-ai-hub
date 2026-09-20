@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from market_ai_hub.packet.builder import build_analysis_packet, clear_caches  # noqa: E402
 from market_ai_hub.packet.profiler import PerformanceProfiler, patch_http_counters  # noqa: E402
 from market_ai_hub.services.forecast_cache import cache_stats  # noqa: E402
+from market_ai_hub.services.instrumentation import snapshot as instrumentation_snapshot  # noqa: E402
 
 
 def _run(cold: bool, detail: str = "compact") -> dict:
@@ -37,13 +38,15 @@ def _run(cold: bool, detail: str = "compact") -> dict:
         detail_level=detail, save_analysis=False, profiler=profiler,
     )
     latency = time.perf_counter() - t0
+    inst = instrumentation_snapshot()
     return {
         "cold": cold,
         "detail_level": detail,
         "mcp_calls": 1,  # 單一 get_analysis_packet
         "backend_latency_sec": round(latency, 3),
-        "model_inference_count": 0,  # packet 路徑不跑 Chronos/TimesFM inference
+        "model_inference_count": inst.get("model_inference_count", 0),  # 真 instrumentation，非 hardcode
         "provider_http_calls": profiler.http_calls,
+        "classifier_fit_count": inst.get("classifier_fit_count", 0),
         "response_bytes": len(json.dumps(packet, ensure_ascii=False, default=str).encode("utf-8")),
         "forecast_cache": cache_stats(),
     }
