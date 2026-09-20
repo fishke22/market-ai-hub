@@ -5,7 +5,7 @@ V1 remediation 修改：predict 回傳 per-step path；原 flat quantile dict �
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.optional_model
 
 
 @pytest.fixture(scope="module")

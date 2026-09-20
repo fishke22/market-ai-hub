@@ -133,3 +133,6 @@ MCP_FASTPATH_BASELINE.json
 
 # Phase 2Q-B E2E output
 MCP_E2E_STABILITY.json
+
+# runtime backups (local-only)
+data/backups/

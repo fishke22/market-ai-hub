@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.optional_model
 
 
 def test_status():

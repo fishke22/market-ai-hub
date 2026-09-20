@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 
 from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
@@ -30,7 +31,7 @@ async def run() -> dict:
     from mcp.client.stdio import stdio_client
 
     params = StdioServerParameters(
-        command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
+        command=sys.executable, args=["-m", "market_ai_hub.mcp.server"]
     )
     report: dict = {}
     async with stdio_client(params) as (r, w):

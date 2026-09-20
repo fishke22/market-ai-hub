@@ -6,7 +6,7 @@ V1 remediation 修改：predict 回傳 per-step path（{"path": {"p10"/"p50"/"p9
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.optional_model
 
 
 @pytest.fixture(scope="module")

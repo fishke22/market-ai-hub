@@ -1,6 +1,7 @@
 """MCP server 整合測試：啟動 stdio server，驗證 tools + health_check。"""
 import asyncio
 import json
+import sys
 
 import pytest
 
@@ -9,14 +10,16 @@ _REPO = Path(__file__).resolve().parents[1]
 
 pytestmark = pytest.mark.integration
 
+# 用 sys.executable -m module，不 hardcode .venv 路徑（clean-room portability）
+MCP_COMMAND = sys.executable
+MCP_ARGS = ["-m", "market_ai_hub.mcp.server"]
+
 
 async def _call_tool(name, args=None):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    params = StdioServerParameters(
-        command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
-    )
+    params = StdioServerParameters(command=MCP_COMMAND, args=MCP_ARGS)
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -29,9 +32,7 @@ def test_tools_list():
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        params = StdioServerParameters(
-            command=str(_REPO / ".venv" / "Scripts" / "market-ai-mcp.exe"), args=[]
-        )
+        params = StdioServerParameters(command=MCP_COMMAND, args=MCP_ARGS)
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()

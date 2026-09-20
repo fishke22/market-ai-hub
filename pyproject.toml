@@ -46,5 +46,9 @@ markers = [
     "unit: 不依賴網路的單元測試",
     "integration: 需要本地資源(duckdb/模型快取)的測試",
     "live: 需要外部網路的測試",
+    "optional_model: 需要 GB 級 model weights（clean clone 預設不跑）",
+    "optional_integration: 需要外部整合（Yuanta/TradingView/broker）",
+    "private_data: 需要 local private data（225LABO 等）",
+    "broker_diagnostic: broker 診斷（需本機 SDK/憑證）",
 ]
-addopts = "-m 'not live'"
+addopts = "-m 'not live and not optional_model and not private_data and not broker_diagnostic'"

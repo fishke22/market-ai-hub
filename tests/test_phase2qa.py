@@ -84,7 +84,7 @@ def test_restart_same_input_same_direction():
         "e = ensemble_equal_weight([f('a','up'), f('b','down'), f('c','flat')], 'X', '1d')\n"
         "print(e.model_metadata['final_direction'])\n"
     )
-    py = str(ROOT / ".venv" / "Scripts" / "python.exe")
+    py = sys.executable  # 用當前 interpreter，不 hardcode .venv 路徑（clean-room portability）
     outs = set()
     for seed in ("0", "1", "2", "42"):
         r = subprocess.run(
