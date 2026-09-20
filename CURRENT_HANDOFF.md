@@ -1,6 +1,6 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2P-D（Agent Response Truthfulness Hotfix + Target Semantics Audit）**
+- Current phase: **Phase 2P-E（System Prompt Compaction + Skill Responsibility Cleanup）**
 - Gate: **PHASE2VB2_PASS**（最近；前置 PHASE2VB_PASS + PHASE2VB1_PASS）
 - build_id：**ccabe1e1552d9ae7**（Phase 2H 起；V1 Freeze 為 `bbf3cb2f9a80d20e`）
 
@@ -29,6 +29,15 @@
 | **2P-B** | Beginner Ops Docs + Cherry Studio Guide + Final Publication | **PHASE2PB_BLOCKED**（remote mismatch） |
 | **2P-C** | Remote Reconciliation + Client-Neutral Merge + GitHub Publication | **PHASE2PC_PUBLISHED** |
 | **2P-D** | Agent Response Truthfulness Hotfix + Target Semantics Audit | **PHASE2PD_PUBLISHED** |
+| **2P-E** | System Prompt Compaction + Skill Responsibility Cleanup | **PHASE2PE_PUBLISHED** |
+
+## 2P-E 本棒成果（System Prompt Compaction + Skill Responsibility Cleanup，doc-only）
+- 新增 `docs/prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`（~260 行，RECOMMENDED FOR CHERRY STUDIO AND NORMAL MCP CLIENT USE）。
+- 保留 critical safeguards；移除 hardcode dynamic facts（Forward N / build_id 作 authoritative / leaderboard）；詳細規則 delegate 到 3 Skills。
+- V4.0 標 FULL REFERENCE / EXTENDED POLICY（不刪）。
+- README / CHERRY_STUDIO_BEGINNER_GUIDE / CHERRY_STUDIO_SETUP / MCP_CLIENT_SETUP 推薦改指 compact。
+- 新增 `tests/test_phase2pe.py`（12 tests）；全 suite 669 passed。
+- 不改 runtime / models / research evidence / MCP tools / training defaults。PR #5 merged；版本仍 v2.0.0-rc1。
 
 ## 2P-D 本棒成果（Agent Response Truthfulness Hotfix，documentation/prompt only）
 - 新增 `docs/prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`（Phase 2 / v2.0.0-rc1 對齊，含 0A 語意保護 10 條）。
