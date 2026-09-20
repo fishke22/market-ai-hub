@@ -108,16 +108,83 @@ def _index_proxy_reference() -> dict | None:
         return None
 
 
+def _taiwan_stock_reference(symbol: str) -> dict | None:
+    """台股個股 reference price（FinMind → TWSE → yfinance fallback）。
+
+    只回該股票本身的價，不得 fallback 到 OSE Micro / TAIEX / 其他股票。
+    """
+    from datetime import timedelta
+
+    lookup = symbol.split(".")[0] if symbol.upper().endswith(".TW") else symbol
+    end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    start = (datetime.now(timezone.utc) - timedelta(days=730)).strftime("%Y-%m-%d")
+
+    # 1. FinMind（OFFICIAL_DAILY）
+    try:
+        from market_ai_hub.providers.finmind import FinMindProvider
+
+        fm = FinMindProvider()
+        if fm.status().status.value in ("ok", "needs_config"):
+            df = fm.fetch_price(lookup, start, end)
+            if df is not None and not df.empty:
+                last = df.sort_values("timestamp_utc").iloc[-1]
+                return {"price": float(last["close"]), "price_type": PRICE_TYPE_REFERENCE,
+                        "price_timestamp": str(last["timestamp_utc"]), "source": "finmind",
+                        "data_grade": "OFFICIAL_DAILY"}
+    except Exception:
+        pass
+
+    # 2. TWSE OpenAPI
+    try:
+        from market_ai_hub.providers.twse import TWSEProvider
+
+        twse = TWSEProvider()
+        ts_start = (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y%m%d")
+        df = twse.fetch_symbol_daily(lookup, ts_start, end.replace("-", ""))
+        if df is not None and not df.empty:
+            last = df.sort_values("timestamp_utc").iloc[-1]
+            return {"price": float(last["close"]), "price_type": PRICE_TYPE_REFERENCE,
+                    "price_timestamp": str(last["timestamp_utc"]), "source": "twse",
+                    "data_grade": "OFFICIAL_DAILY"}
+    except Exception:
+        pass
+
+    # 3. yfinance fallback（RESEARCH_PROXY）
+    try:
+        from market_ai_hub.providers.yfinance_provider import YFinanceProvider
+
+        df = YFinanceProvider().fetch(symbol, period="6mo")
+        if df is not None and not df.empty:
+            last = df.sort_values("timestamp_utc").iloc[-1]
+            return {"price": float(last["close"]), "price_type": PRICE_TYPE_PROXY,
+                    "price_timestamp": str(last["timestamp_utc"]), "source": "yfinance",
+                    "data_grade": "RESEARCH_PROXY"}
+    except Exception:
+        pass
+
+    return None
+
+
 # 可用 yfinance symbols（避免 404 的 US10Y/US2Y）→ regime 引擎欄位名
-REGIME_SYMBOLS = {"^N225": "^N225", "^VIX": "^VIX", "USDJPY=X": "USDJPY=X",
-                  "^TNX": "US10Y", "^FVX": "US5Y"}
+# 全域因子共通 reuse；local target context 依 family 分離（§7）。
+REGIME_GLOBAL_SYMBOLS = {"^VIX": "VIX", "USDJPY=X": "USDJPY=X", "^TNX": "US10Y", "^FVX": "US5Y"}
+REGIME_LOCAL_SYMBOLS = {
+    "OSAKA_MICRO": {"^N225": "^N225"},
+    "TAIWAN_STOCK": {"^TWII": "^TWII"},
+    "TAIWAN_INDEX": {"^TWII": "^TWII"},
+}
 
 
-def _regime_panel() -> pd.DataFrame | None:
-    """跨資產 proxy panel（可選；無網路 → None）。進程級 cache + 同 symbol 只抓一次。"""
+def _regime_panel(family: str = "OSAKA_MICRO") -> pd.DataFrame | None:
+    """跨資產 regime panel（可選；無網路 → None）。進程級 cache + 同 symbol 只抓一次。
+
+    local target context 依 family 分離（Osaka 用 ^N225，Taiwan 用 ^TWII）；
+    global（VIX/US rates/USDJPY）共通。
+    """
     from market_ai_hub.services.provider_metrics import tracked
 
-    key = "regime_panel"
+    symbols = {**REGIME_LOCAL_SYMBOLS.get(family, {}), **REGIME_GLOBAL_SYMBOLS}
+    key = f"regime_panel_{family}"
     cached = _cached(key, _panel_cache, _TTL_SECONDS)
     if cached is not None:
         with tracked("yfinance", "regime_panel", cache_hit=True):
@@ -130,7 +197,7 @@ def _regime_panel() -> pd.DataFrame | None:
 
             yf = YFinanceProvider()
             closes = {}
-            for sym, col in REGIME_SYMBOLS.items():
+            for sym, col in symbols.items():
                 df = yf.fetch(sym, period="1y")
                 if not df.empty:
                     s = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"]
@@ -156,17 +223,19 @@ def _regime(panel: pd.DataFrame | None) -> dict:
         return {"status": "ERROR", "note": str(e)[:120]}
 
 
-def _coverage_summary() -> list[dict]:
+def _coverage_summary(family: str = "OSAKA_MICRO") -> list[dict]:
     from market_ai_hub.targets.coverage import LiveCoverageAuditor, LIVE_VERIFIED
 
-    overrides = {
-        "Micro settlement": {"status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
-        "VIX": {"status": LIVE_VERIFIED, "source": "Cboe official"},
-        "CPI": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
-        "NFP": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
-    }
-    recs = LiveCoverageAuditor().audit_osaka(overrides)
-    return [r.model_dump() for r in recs]
+    if family == "OSAKA_MICRO":
+        overrides = {
+            "Micro settlement": {"status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
+            "VIX": {"status": LIVE_VERIFIED, "source": "Cboe official"},
+            "CPI": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
+            "NFP": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
+        }
+        recs = LiveCoverageAuditor().audit_osaka(overrides)
+        return [r.model_dump() for r in recs]
+    return _coverage_summary_compact(family)
 
 
 def _event_snapshot(top_n: int = 5) -> list[dict]:
@@ -184,22 +253,25 @@ def _event_snapshot(top_n: int = 5) -> list[dict]:
 
 def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> None:
     """§6：direct_target / direct_market_fact / continuous_research_series / proxy_model_target
-    三者分離，不得合併。§7：direct 與 proxy calendar 分離。"""
-    if market == "osaka":
+    三者分離，不得合併。§7：direct 與 proxy calendar 分離。§3-§6：family 隔離。"""
+    from market_ai_hub.services.primary_targets import resolve_market_family
+
+    family = resolve_market_family(market)
+    if family == "OSAKA_MICRO":
         proxy_model_target = "^N225"
         direct_calendar = "OSE/JPX_DERIVATIVES"
         proxy_calendar = "XTKS"
         execution_instrument = "OSE_NIKKEI225_MICRO_FUTURES"
         direct_target = "OSE_NIKKEI225_MICRO_FUTURES"
         continuous = "225LABO (CENTER_MONTH_CONTINUOUS_MICRO)"
-    elif market in ("taiwan_index",):
+    elif family == "TAIWAN_INDEX":
         proxy_model_target = "^TWII"
         direct_calendar = "XTAI"
         proxy_calendar = "XTAI"
         execution_instrument = None  # TAIEX 非可成交；策略需明確 TX/MTX/TMF
         direct_target = target or "TAIEX"
         continuous = "N/A"
-    else:
+    else:  # TAIWAN_STOCK
         proxy_model_target = target
         direct_calendar = "XTAI"
         proxy_calendar = "XTAI"
@@ -207,13 +279,26 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
         direct_target = target
         continuous = "N/A"
 
-    packet.target_semantics = {
-        "direct_target": direct_target,
-        "direct_market_fact": (
+    # direct_market_fact：只有 OSAKA 才含 contract / settlement；Taiwan 為 stock-specific fact 或 NOT_AVAILABLE
+    if family == "OSAKA_MICRO":
+        direct_market_fact = (
             {"contract": packet.contract_month, "price_type": packet.reference_price_type}
             if packet.contract_month else {"status": "NOT_AVAILABLE"}
-        ),
-        "direct_contract_if_applicable": packet.contract_month or "N/A",
+        )
+        direct_contract = packet.contract_month or "N/A"
+    else:
+        direct_market_fact = {
+            "target": direct_target,
+            "price": packet.reference_price,
+            "price_type": packet.reference_price_type,
+            "source": packet.target_price_source,
+        }
+        direct_contract = "N/A"  # cash equity / cash index 無 contract_month
+
+    packet.target_semantics = {
+        "direct_target": direct_target,
+        "direct_market_fact": direct_market_fact,
+        "direct_contract_if_applicable": direct_contract,
         "continuous_research_series": continuous,
         "proxy_model_target": proxy_model_target,
         "proxy_model_calendar": proxy_calendar,
@@ -223,14 +308,14 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
     }
 
     # §28：TAIEX 指數點位不可假裝實際成交；execution 需明確 TX/MTX/TMF 之一
-    if market == "taiwan_index":
+    if family == "TAIWAN_INDEX":
         packet.target_semantics["forecast_vs_execution"] = {
             "forecast_target": direct_target,
             "execution_instruments": ["TX", "MTX", "TMF"],
             "note": "TAIEX index points are NOT executable; strategy execution must pick TX/MTX/TMF explicitly",
         }
 
-    # §7：direct 與 proxy 各別 session/bar。OSE derivatives 可能 Holiday Trading，與 XTKS cash 不同。
+    # §7：direct 與 proxy 各別 session/bar。
     try:
         from market_ai_hub.services.calendar import next_trading_sessions, trading_date_of
 
@@ -240,10 +325,15 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
         packet.proxy_next_model_bar = proxy_bars[0] if proxy_bars else ""
     except Exception:  # noqa: BLE001
         packet.proxy_next_model_bar = ""
-    packet.direct_next_session = (
-        f"OSE/JPX derivatives session (may differ from TSE cash on holiday trading); "
-        f"proxy next bar = {packet.proxy_next_model_bar or 'N/A'}"
-    )
+    if family == "OSAKA_MICRO":
+        packet.direct_next_session = (
+            f"OSE/JPX derivatives session (may differ from TSE cash on holiday trading); "
+            f"proxy next bar = {packet.proxy_next_model_bar or 'N/A'}"
+        )
+    else:
+        packet.direct_next_session = (
+            f"{direct_calendar} session; proxy next bar = {packet.proxy_next_model_bar or 'N/A'}"
+        )
 
 
 def _fill_research_truth(packet: AnalysisPacket) -> None:
@@ -293,23 +383,60 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
 
     packet = AnalysisPacket(horizon=horizon, information_cutoff=_now())
 
-    # 1. target resolution
-    if market == "osaka":
+    from market_ai_hub.services.primary_targets import resolve_market_family
+
+    family = resolve_market_family(market)
+
+    # 1. target resolution（family 隔離，未知 market fail clearly）
+    if family == "OSAKA_MICRO":
         packet.execution_target = "OSE_NIKKEI225_MICRO_FUTURES"
         packet.exchange = "OSE"
-    elif market == "taiwan" or market == "taiwan_stock":
-        packet.execution_target = target  # 台股直接以代碼
+    elif family == "TAIWAN_STOCK":
+        packet.execution_target = target
         packet.exchange = "TWSE"
-    elif market == "taiwan_index":
-        # TAIEX = forecast target / reference（cash index，非可成交）；execution 需明確 TX/MTX/TMF
+    else:  # TAIWAN_INDEX
         packet.execution_target = target or "TAIEX"
         packet.exchange = "TWSE"
-    else:
-        packet.execution_target = target
 
-    # 2. reference price（Micro settlement 優先 → proxy fallback）
-    if market == "taiwan_index":
-        # TAIEX 走 ^TWII proxy（RESEARCH_PROXY），不冒充可成交 futures price
+    # 2. reference price（target-family routing，§3-§6：不得 cross-market）
+    micro = None
+    if family == "OSAKA_MICRO":
+        micro = _t("provider_micro_settlement", _load_latest_micro_settlement)
+        if profiler is not None and micro is not None:
+            profiler.datalake_reads += 1
+        if micro:
+            packet.reference_price = micro["price"]
+            packet.reference_price_type = micro["price_type"]
+            packet.price_timestamp = micro["date"]
+            packet.contract_month = micro["contract"]
+            packet.target_data_status = "LIVE_VERIFIED"
+            packet.target_price_source = "settlement"
+            packet.data_reused.append("jpx_micro_settlement")
+        else:
+            proxy = _t("provider_proxy_reference", _proxy_reference)
+            if proxy:
+                packet.reference_price = proxy["price"]
+                packet.reference_price_type = proxy["price_type"]
+                packet.price_timestamp = proxy.get("price_timestamp", "")
+                packet.target_data_status = "RESEARCH_PROXY"
+                packet.target_price_source = "proxy"
+            else:
+                packet.target_data_status = "MISSING"
+                packet.target_price_source = "unavailable"
+                packet.data_missing.append("micro_settlement")
+    elif family == "TAIWAN_STOCK":
+        stock_ref = _t("provider_stock_reference", lambda: _taiwan_stock_reference(target))
+        if stock_ref:
+            packet.reference_price = stock_ref["price"]
+            packet.reference_price_type = stock_ref["price_type"]
+            packet.price_timestamp = stock_ref.get("price_timestamp", "")
+            packet.target_data_status = "LIVE_VERIFIED" if stock_ref.get("data_grade") == "OFFICIAL_DAILY" else "RESEARCH_PROXY"
+            packet.target_price_source = stock_ref.get("source", "stock")
+        else:
+            packet.target_data_status = "MISSING"
+            packet.target_price_source = "unavailable"
+            packet.data_missing.append(f"taiwan_stock:{target}")
+    else:  # TAIWAN_INDEX
         idx_proxy = _t("provider_index_proxy", lambda: _index_proxy_reference())
         if idx_proxy:
             packet.reference_price = idx_proxy["price"]
@@ -319,37 +446,12 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             packet.target_price_source = "proxy_index"
         else:
             packet.target_data_status = "MISSING"
-            packet.target_price_source = "unavailable"
+            packet.target_price_source = "DIRECT_NOT_IMPLEMENTED"
             packet.data_missing.append("taiwan_index")
-        micro = None
-    else:
-        micro = _t("provider_micro_settlement", _load_latest_micro_settlement)
-    if profiler is not None and micro is not None:
-        profiler.datalake_reads += 1
-    if micro:
-        packet.reference_price = micro["price"]
-        packet.reference_price_type = micro["price_type"]
-        packet.price_timestamp = micro["date"]
-        packet.contract_month = micro["contract"]
-        packet.target_data_status = "LIVE_VERIFIED"
-        packet.target_price_source = "settlement"
-        packet.data_reused.append("jpx_micro_settlement")
-    elif market != "taiwan_index":
-        proxy = _t("provider_proxy_reference", _proxy_reference)
-        if proxy:
-            packet.reference_price = proxy["price"]
-            packet.reference_price_type = proxy["price_type"]
-            packet.price_timestamp = proxy.get("price_timestamp", "")
-            packet.target_data_status = "RESEARCH_PROXY"
-            packet.target_price_source = "proxy"
-        else:
-            packet.target_data_status = "MISSING"
-            packet.target_price_source = "unavailable"
-            packet.data_missing.append("micro_settlement")
 
-    # 3. regime / event（provider 失敗 → degrade，不整份分析失敗）
+    # 3. regime / event（family 隔離，§7；provider 失敗 → degrade，不整份分析失敗）
     try:
-        panel = _t("provider_regime_panel", _regime_panel)
+        panel = _t("provider_regime_panel", lambda: _regime_panel(family))
     except Exception as e:  # noqa: BLE001
         panel = None
         packet.data_quality["regime_panel_error"] = str(e)[:120]
@@ -381,11 +483,11 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
     _fill_target_semantics(packet, market, target)
     _fill_research_truth(packet)
 
-    # 6. coverage / gates
+    # 6. coverage / gates（family 隔離，§8）
     if detail_level == "compact":
-        packet.data_coverage_summary = _t("feature_coverage_compact", _coverage_summary_compact)
+        packet.data_coverage_summary = _t("feature_coverage_compact", lambda: _coverage_summary_compact(family))
     else:
-        packet.data_coverage_summary = _t("feature_coverage", _coverage_summary)
+        packet.data_coverage_summary = _t("feature_coverage", lambda: _coverage_summary(family))
     packet.research_gates = {"TRADING_EDGE_GATE": "UNPROVEN",
                              "FORWARD_VALIDATION": "NOT_YET"}
     packet.reanalysis_conditions = ["FORECAST_STALE_AFTER_EVENT", "major data revision",
@@ -394,7 +496,7 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
     # 7. archive auto-hook
     if save_analysis:
         def _save():
-            aid = _archive_packet(packet)
+            aid = _archive_packet(packet, family)
             packet.analysis_id = aid
             packet.saved_to_archive = True
         try:
@@ -408,27 +510,53 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
     return packet.render(detail_level)
 
 
-def _coverage_summary_compact() -> list[dict]:
-    """compact：只回最關鍵覆蓋項（不建 28 factor 全表）。"""
+def _coverage_summary_compact(family: str = "OSAKA_MICRO") -> list[dict]:
+    """compact：只回最關鍵覆蓋項（family 隔離，§8）。"""
     from market_ai_hub.targets.coverage import LIVE_VERIFIED, MISSING
 
+    if family == "OSAKA_MICRO":
+        return [
+            {"factor": "Micro settlement", "status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
+            {"factor": "Micro OHLC", "status": MISSING, "source": "not in official xlsx/csv"},
+            {"factor": "VIX", "status": LIVE_VERIFIED, "source": "Cboe official"},
+            {"factor": "CPI/NFP", "status": LIVE_VERIFIED, "source": "BLS API v2"},
+            {"factor": "PCE/GDP", "status": "NEEDS_CONFIG", "source": "BEA API"},
+        ]
+    if family == "TAIWAN_STOCK":
+        return [
+            {"factor": "target stock data", "status": "ROUTED", "source": "FinMind/TWSE/yfinance"},
+            {"factor": "TWSE/FinMind status", "status": "ROUTED", "source": "provider registry"},
+            {"factor": "corporate action", "status": "NOT_AVAILABLE", "source": "adjustment not implemented"},
+            {"factor": "VIX", "status": "GLOBAL_CONTEXT", "source": "Cboe official"},
+        ]
+    # TAIWAN_INDEX
     return [
-        {"factor": "Micro settlement", "status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
-        {"factor": "Micro OHLC", "status": MISSING, "source": "not in official xlsx/csv"},
-        {"factor": "VIX", "status": LIVE_VERIFIED, "source": "Cboe official"},
-        {"factor": "CPI/NFP", "status": LIVE_VERIFIED, "source": "BLS API v2"},
-        {"factor": "PCE/GDP", "status": "NEEDS_CONFIG", "source": "BEA API"},
+        {"factor": "TAIEX", "status": "PROXY_ONLY", "source": "yfinance ^TWII (DIRECT_NOT_IMPLEMENTED)"},
+        {"factor": "TAIFEX TX/MTX/TMF", "status": "NOT_IMPLEMENTED", "source": "execution instrument semantics only"},
+        {"factor": "VIX", "status": "GLOBAL_CONTEXT", "source": "Cboe official"},
     ]
 
 
-def _archive_packet(packet: AnalysisPacket) -> str:
-    """把 structured packet 存進 AnalysisArchive（不存 Chain of Thought）。"""
+def _archive_packet(packet: AnalysisPacket, family: str = "OSAKA_MICRO") -> str:
+    """把 structured packet 存進 AnalysisArchive（不存 Chain of Thought）。§9/§10：family-correct metadata。"""
     from market_ai_hub.automation.archive import AnalysisArchive, AnalysisRecord
+
+    market_name = {"OSAKA_MICRO": "osaka", "TAIWAN_STOCK": "taiwan_stock", "TAIWAN_INDEX": "taiwan_index"}[family]
+    dataset_semantics = {
+        "OSAKA_MICRO": "jpx-micro-settlement-v1",
+        "TAIWAN_STOCK": "UNVERSIONED",  # 台股 historical dataset 尚未正式 version
+        "TAIWAN_INDEX": "UNVERSIONED",  # TAIEX pipeline 未實作
+    }[family]
+    feature_semantics = {
+        "OSAKA_MICRO": "base-v1",
+        "TAIWAN_STOCK": "UNVERSIONED",
+        "TAIWAN_INDEX": "UNVERSIONED",
+    }[family]
 
     rec = AnalysisRecord(
         analysis_id=packet.analysis_packet_id,
         information_cutoff=packet.information_cutoff,
-        market="osaka" if packet.execution_target.startswith("OSE") else "taiwan",
+        market=market_name,
         target=packet.execution_target,
         instrument=packet.execution_target,
         horizon=packet.horizon,
@@ -438,8 +566,8 @@ def _archive_packet(packet: AnalysisPacket) -> str:
         direction=packet.strategy_research_state,
         regime=json.dumps(packet.regime, ensure_ascii=False)[:500] if packet.regime else "",
         event_state=packet.event_state,
-        dataset_version="jpx-micro-v1",
-        feature_version="base-v1",
+        dataset_version=dataset_semantics,
+        feature_version=feature_semantics,
     )
     rec.analysis_packet_hash = rec.packet_hash()
     AnalysisArchive().save(rec)

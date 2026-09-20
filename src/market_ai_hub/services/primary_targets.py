@@ -15,6 +15,22 @@ _PRIMARY_TARGETS_PATH = project_root() / "config" / "primary_targets.yaml"
 
 TARGET_FAMILIES = ("OSAKA_MICRO", "TAIWAN_STOCK", "TAIWAN_INDEX")
 
+_MARKET_ALIASES = {
+    "osaka": "OSAKA_MICRO", "osaka_micro": "OSAKA_MICRO", "ose": "OSAKA_MICRO",
+    "taiwan": "TAIWAN_STOCK", "taiwan_stock": "TAIWAN_STOCK", "taiwanstock": "TAIWAN_STOCK",
+    "stock": "TAIWAN_STOCK", "tw_stock": "TAIWAN_STOCK",
+    "taiwan_index": "TAIWAN_INDEX", "taiwanindex": "TAIWAN_INDEX", "index": "TAIWAN_INDEX",
+    "tw_index": "TAIWAN_INDEX",
+}
+
+
+def resolve_market_family(market: str) -> str:
+    """market string → target family。未知 market → fail clearly（不默認 Osaka）。"""
+    fam = _MARKET_ALIASES.get((market or "").strip().lower())
+    if fam is None:
+        raise ValueError(f"unknown market family: {market!r} (expected osaka/taiwan_stock/taiwan_index)")
+    return fam
+
 
 def load_primary_targets() -> dict:
     data = yaml.safe_load(_PRIMARY_TARGETS_PATH.read_text(encoding="utf-8"))
