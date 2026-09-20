@@ -1,6 +1,6 @@
 # MARKET_AI_HUB — CURRENT HANDOFF
 
-- Current phase: **Phase 2P-B（Beginner Operations Docs + Cherry Studio Guide + Final GitHub Publication）**
+- Current phase: **Phase 2P-C（Remote Reconciliation + Client-Neutral + Phase2 Merge + GitHub Publication）**
 - Gate: **PHASE2VB2_PASS**（最近；前置 PHASE2VB_PASS + PHASE2VB1_PASS）
 - build_id：**ccabe1e1552d9ae7**（Phase 2H 起；V1 Freeze 為 `bbf3cb2f9a80d20e`）
 
@@ -27,6 +27,16 @@
 | **2V-F** | Compute Resource Governor + Safe Training Scheduler + Desktop Protection | **PHASE2VF_PASS** |
 | **2P-A** | Final Publication Acceptance + Release Freeze + Clean Reconstruction Audit | **PHASE2PA_PASS** |
 | **2P-B** | Beginner Ops Docs + Cherry Studio Guide + Final Publication | **PHASE2PB_BLOCKED**（remote mismatch） |
+| **2P-C** | Remote Reconciliation + Client-Neutral Merge + GitHub Publication | **PHASE2PC_PUBLISHED** |
+
+## 2P-C 本棒成果（Remote Reconciliation + GitHub Publication）
+- Remote client-neutral 改寫（3922365）與 local Phase 2 工作**兩者全保留**（不二選一）。
+- release/v2.0.0-rc1 建於 origin/main，cherry-pick Phase 2 work，reconcile README/HANDOFF/ARCHITECTURE。
+- remote stale V1 docs 更新（13→21 tools，build_id→ccabe1e1552d9ae7）。
+- **已發布 GitHub**：PR #3 merged（6b6d58e）→ tag v2.0.0-rc1 → release（truthful notes）。
+- 全 suite 649 passed；MCP 21 tools；Skills 3；research state 誠實。
+- URL：https://github.com/fishke22/market-ai-hub/releases/tag/v2.0.0-rc1
+- 產物：`REMOTE_RECONCILIATION_REPORT.md`、`PHASE2PC_REMOTE_RECONCILIATION_PUBLICATION_REPORT.md`。
 
 ## 2P-B 本棒成果（Beginner docs + 嘗試 final publication）
 - 建立 9 份繁體中文 beginner docs（START_HERE / HOW_WORKS / CHERRY_STUDIO_GUIDE / DATA_UPDATE / AUTO_LEARNING / SAFE_TRAINING / TRADING_READINESS / DAILY_WORKFLOW / FAQ）+ README「第一次使用」links。
