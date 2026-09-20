@@ -34,7 +34,7 @@ sources:
     note: "only for REFERENCE_PROXY exam; never substitute direct Micro"
 
 inbox:
-  path: "D:\\MARKET_AI_HUB_PRIVATE_INBOX\\225labo"
+  path: "<DATA_ROOT>\\private\\inbox\\225labo"
   purpose: "使用者將合法下載的新 225LABO 檔案放入；script 只 detect/validate/import，不自動下載"
 
 rules:

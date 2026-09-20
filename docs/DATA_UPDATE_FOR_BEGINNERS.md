@@ -44,7 +44,7 @@
 ```
 
 - **原始檔案不會進 GitHub**（那是你的私人授權資料）。
-- 檔案放進的資料夾（example）：`D:\MARKET_AI_HUB_PRIVATE_INBOX\225labo`
+- 檔案放進的資料夾（example）：`<DATA_ROOT>\private\inbox\225labo`
 
 ## 如果不更新 225LABO 會怎樣？
 

@@ -9,7 +9,7 @@
 把新下載的 `.zip` / `.xlsx` 檔案放到 private inbox：
 
 ```
-D:\MARKET_AI_HUB_PRIVATE_INBOX\225labo\
+<DATA_ROOT>\private\inbox\225labo\
 ```
 
 ## 2. Import 新資料

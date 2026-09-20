@@ -12,7 +12,7 @@
 
 ## OPTIONAL CONFIG（選用能力，未設定時顯示 unavailable，不影響 core startup）
 
-- 225LABO minute 資料 ingest：`data/ylab225_ingest.py` 的 `INBOX` 為本機絕對路徑（`D:\MARKET_AI_HUB_PRIVATE_INBOX\225labo`）；需本機手動提供 zip。未提供時 ingest 為 unavailable（core MCP startup 不依賴它）。
+- 225LABO minute 資料 ingest：`data/ylab225_ingest.py` 的 `INBOX` 為本機絕對路徑（`<DATA_ROOT>\private\inbox\225labo`）；需本機手動提供 zip。未提供時 ingest 為 unavailable（core MCP startup 不依賴它）。
 - Yuanta 盤後行情：需本機 Yuanta SDK / COM / 憑證；未安裝時顯示 DISABLED。
 - TradingView bridge：OPTIONAL_NOT_INSTALLED。
 
