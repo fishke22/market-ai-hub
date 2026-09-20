@@ -221,8 +221,9 @@ MCP 只提供工具，不會強制你的 AI 用哪種分析流程。
 
 如果希望 AI 遵守比較嚴謹的金融分析規則，可以參考：
 
-- [`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)（**推薦**）
+- [`prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`](prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)（**推薦**，適合長期常駐）
 - [`prompts/QUICK_PROMPTS.md`](prompts/QUICK_PROMPTS.md)
+- [`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)（完整政策參考 / FULL REFERENCE）
 - [`prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md`](prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md)（歷史 / 相容性參考，已 deprecate）
 
 也可以完全不用這份 System Prompt，直接由你自己的 Agent / workflow 呼叫 MCP tools。

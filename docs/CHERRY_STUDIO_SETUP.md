@@ -127,8 +127,9 @@ Cherry Studio 啟動的 MCP server 是長駐 process。
 
 更多範例：[`prompts/QUICK_PROMPTS.md`](prompts/QUICK_PROMPTS.md)
 
-完整 Agent 行為參考（推薦）：[`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)
+完整 Agent 行為參考（推薦）：[`prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`](prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)
 
+（完整政策參考：[`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)）
 （歷史 / 相容性參考：[`prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md`](prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md)）
 
 ---
