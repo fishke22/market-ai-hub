@@ -76,3 +76,12 @@ MARKET_AI_HUB 是它的「外掛工具」，讓 AI 能查金融資料、跑模�
 一般使用者**不需要記 21 個 MCP tools**。AI 會依你的問題自動呼叫對的工具。
 
 只有技術使用者才需要看 [MCP_TOOL_REFERENCE.md](MCP_TOOL_REFERENCE.md)。
+
+## 8. 進階：System Prompt
+
+一般使用者**不需要自己設定** System Prompt。
+
+技術使用者若想讓 AI 遵守更嚴謹的金融分析規則，推薦用精簡版：
+[`prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`](prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)（適合長期常駐）。
+
+完整政策參考（Advanced）見 [`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)。
