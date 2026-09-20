@@ -28,6 +28,14 @@ TZ_MAP = {
 }
 
 
+def _local_tz_for(symbol: str) -> str:
+    """Taiwan symbols → Asia/Taipei；其餘查 TZ_MAP，default UTC。"""
+    s = symbol.upper()
+    if s.startswith("^TWII") or s.endswith(".TW") or s.endswith(".TWO"):
+        return "Asia/Taipei"
+    return TZ_MAP.get(symbol, "UTC")
+
+
 class YFinanceProvider(BaseProvider):
     name = "yfinance"
 
@@ -56,7 +64,7 @@ class YFinanceProvider(BaseProvider):
 
         raw = raw.reset_index()
         ts_col = "Datetime" if "Datetime" in raw.columns else "Date"
-        local_tz = TZ_MAP.get(symbol, "UTC")
+        local_tz = _local_tz_for(symbol)
         ts = pd.to_datetime(raw[ts_col])
         if ts.dt.tz is None:
             # naive → 先 localize 到 instrument local timezone，再 convert UTC（不得同一 naive 兩套解讀）

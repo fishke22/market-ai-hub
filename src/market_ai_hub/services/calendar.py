@@ -109,6 +109,41 @@ def calendar_metadata(symbol: str) -> dict:
     return meta
 
 
+# ── 2Q-F.3：OSE derivatives holiday trading calendar（JPX official）──
+_OSE_HOLIDAY_SESSIONS: list[str] | None = None
+
+
+def _ose_holiday_trading_sessions() -> list[str]:
+    global _OSE_HOLIDAY_SESSIONS
+    if _OSE_HOLIDAY_SESSIONS is None:
+        try:
+            import yaml
+
+            from market_ai_hub.config.settings import project_root
+
+            cfg = yaml.safe_load((project_root() / "config" / "ose_derivatives_calendar.yaml").read_text(encoding="utf-8"))
+            _OSE_HOLIDAY_SESSIONS = [str(d) for d in cfg.get("holiday_trading_sessions", [])]
+        except Exception as e:  # pragma: no cover
+            log.warning("OSE derivatives calendar unavailable: %s", e)
+            _OSE_HOLIDAY_SESSIONS = []
+    return _OSE_HOLIDAY_SESSIONS
+
+
+def next_ose_derivatives_sessions(after_date: date | datetime | str, n: int) -> list[str]:
+    """after_date 之後的 n 個 OSE derivatives sessions。
+
+    = XTKS（TSE cash）sessions + JPX Holiday Trading sessions（TSE cash 休市但 OSE OPEN）。
+    e.g. after 2026-09-18 → 2026-09-21/22/23（holiday trading）+ 2026-09-24/25（XTKS）。
+    """
+    if n <= 0:
+        return []
+    holiday = _ose_holiday_trading_sessions()
+    cash = next_trading_sessions("^N225", after_date, n)  # XTKS sessions
+    combined = sorted(set(cash) | set(holiday))
+    start = str(pd.Timestamp(after_date).date())
+    return [d for d in combined if d > start][:n]
+
+
 def calendar_covers(symbol: str, dates: list[str]) -> bool:
     """calendar 是否覆蓋所有 target dates（超過 last_session → 未覆蓋）。"""
     if not calendar_verified(symbol) or not dates:

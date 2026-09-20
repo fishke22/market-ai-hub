@@ -20,8 +20,6 @@ from market_ai_hub.providers.base import ProviderError
 
 log = logging.getLogger(__name__)
 
-CACHE_ROOT = data_root() / "cache"
-
 
 class RateLimitedClient:
     def __init__(self, name: str, max_retries: int = 3, base_backoff: float = 1.0,
@@ -31,7 +29,7 @@ class RateLimitedClient:
         self.base_backoff = base_backoff
         self.max_backoff = max_backoff
         self.default_ttl = default_ttl
-        self.cache_dir = CACHE_ROOT / name
+        self.cache_dir = data_root() / "cache" / name  # lazy：尊重 test isolation env
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _cache_path(self, key: str) -> Path:

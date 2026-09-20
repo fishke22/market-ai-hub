@@ -119,12 +119,16 @@ packet 已含 Chronos/TimesFM/XGB/LGBM/Ensemble 結果時，不得重複呼叫 p
 
 | 模式 | 觸發 | 內容 |
 |------|------|------|
-| QUICK_FORECAST | 預設（今晚/明天/下週/會到多少） | Target / Latest Direct / Reference / Center / Core Range / Direction / Research Confidence / Trading Readiness / Forward State / Support-Resistance / Invalidation / 2 counter-evidence / 白話總結 |
+| QUICK_FORECAST | 預設（今晚/明天/下週/會到多少） | Target / Latest Direct / Reference / Center / Core Range / Direction / Research Confidence / Trading Readiness / Forward State / Support-Resistance Status（NOT_AVAILABLE 就 N/A）/ Invalidation（僅 explicit evidence）/ 2 counter-evidence / 白話總結 |
 | FULL_ANALYSIS | 說「完整分析」 | 市場狀態、技術、基本面、籌碼、公司行動、cross-asset、macro、events、models、evidence、gates、critic、limitations |
 | SYSTEM_STATUS | 系統正常嗎 | traffic-light（GREEN/YELLOW/RED + TRAINING OFF/RUNNING/DEFERRED） |
 | MODEL_AUDIT / FORWARD_STATUS / TRAINING_REVIEW | 對應問題 | technical |
 
 - Quick request 簡潔；Full analysis 完整；不要所有問題都套同一巨大模板。
+- Support/Resistance：`support_resistance_status=NOT_AVAILABLE` 就輸出 N/A，不得由 P10/P90 生成。
+- Invalidation：僅 explicit validated invalidation evidence 才提供，不從 quantile 製造。
+- Direction：`eligible_direction_vote_count=0` → `NO_VALIDATED_MODEL_CONSENSUS`，不得輸出 Up/Down/Flat。
+- 不得輸出任何交易建議（進場/買點/停損價/做多做空）；research reference only。
 - 不要在第一屏輸出幾千字工具過程。
 
 ---
