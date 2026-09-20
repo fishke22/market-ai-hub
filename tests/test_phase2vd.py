@@ -9,11 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def _doc(p): return (ROOT / p).read_text(encoding="utf-8")
 def _yaml(p): return yaml.safe_load((ROOT / p).read_text(encoding="utf-8"))
 
-PROTO = _yaml("FORWARD_SHADOW_PROTOCOL.yaml")
-ACT = _yaml("FORWARD_SHADOW_ACTIVATION.yaml")
-MANIFEST = _yaml("FORWARD_VALIDATION_MANIFEST.yaml")
-REPORT = _doc("FORWARD_SHADOW_REPORT.md")
-SETUP = _doc("PHASE2VD_FORWARD_SHADOW_SETUP_REPORT.md")
+PROTO = _yaml("research/phase2/protocols/FORWARD_SHADOW_PROTOCOL.yaml")
+ACT = _yaml("research/phase2/manifests/FORWARD_SHADOW_ACTIVATION.yaml")
+MANIFEST = _yaml("research/phase2/manifests/FORWARD_VALIDATION_MANIFEST.yaml")
+REPORT = _doc("research/phase2/reports/FORWARD_SHADOW_REPORT.md")
+SETUP = _doc("research/phase2/reports/PHASE2VD_FORWARD_SHADOW_SETUP_REPORT.md")
 
 def test_forward_activation_timestamp():
     assert ACT.get("activated_at")

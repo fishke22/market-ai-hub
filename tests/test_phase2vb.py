@@ -22,7 +22,7 @@ def _json(p: str):
     return json.loads((ROOT / p).read_text(encoding="utf-8"))
 
 
-PROTO = _yaml("HISTORICAL_OOS_PROTOCOL.yaml")
+PROTO = _yaml("research/phase2/protocols/HISTORICAL_OOS_PROTOCOL.yaml")
 
 
 def test_oos_protocol_frozen():
@@ -54,7 +54,7 @@ def test_point_in_time_every_origin():
 
 
 def test_same_exam_hash():
-    m = _yaml("OOS_EXAM_MANIFEST.yaml")
+    m = _yaml("research/phase2/manifests/OOS_EXAM_MANIFEST.yaml")
     assert m.get("exam_hash")
     assert m.get("dataset_hash")
     assert m["target"] == "^N225 (REFERENCE_PROXY)"
@@ -99,5 +99,5 @@ def test_roll_period_tagged():
 
 def test_no_auto_champion():
     assert PROTO["no_auto_promote"] is True
-    d = _doc("PHASE2VB_HISTORICAL_OOS_REPORT.md")
+    d = _doc("research/phase2/reports/PHASE2VB_HISTORICAL_OOS_REPORT.md")
     assert "AUTO_PROMOTE=false" in d and "CHAMPION_CANDIDATE" in d

@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def _doc(p): return (ROOT / p).read_text(encoding="utf-8")
 def _yaml(p): return yaml.safe_load((ROOT / p).read_text(encoding="utf-8"))
 
-POLICY = _yaml("FORWARD_DATA_SOURCE_POLICY.yaml")
-FREEZE = _yaml("PHASE2_RESEARCH_FREEZE.yaml")
+POLICY = _yaml("research/phase2/protocols/FORWARD_DATA_SOURCE_POLICY.yaml")
+FREEZE = _yaml("research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml")
 
 from market_ai_hub.data import ylab225_ingest as ing
 
@@ -55,10 +55,10 @@ def test_missed_origin_not_backfilled():
     assert "no_auto_scrape" in POLICY["rules"]
 
 def test_replay_not_forward():
-    assert "activation timestamp 之前永遠不算 forward evidence" in _doc("FORWARD_SHADOW_PROTOCOL.yaml")
+    assert "activation timestamp 之前永遠不算 forward evidence" in _doc("research/phase2/protocols/FORWARD_SHADOW_PROTOCOL.yaml")
 
 def test_scheduler_default_disabled():
-    proto = _yaml("FORWARD_SHADOW_PROTOCOL.yaml")
+    proto = _yaml("research/phase2/protocols/FORWARD_SHADOW_PROTOCOL.yaml")
     assert proto["scheduler_default"] == "DISABLED"
 
 def test_daily_cycle_no_broker():
@@ -68,16 +68,16 @@ def test_daily_cycle_no_broker():
 
 def test_forward_status_counts_missed():
     import json
-    st = json.loads(_doc("FORWARD_SHADOW_STATUS.json"))
+    st = json.loads(_doc("research/phase2/status/FORWARD_SHADOW_STATUS.json"))
     assert "forward_origins_missed" in st
     assert "forward_origins_created" in st
 
 def test_schema_change_fails_closed():
-    assert "schema_change_fails_closed" in _doc("FORWARD_DATA_SOURCE_POLICY.yaml")
+    assert "schema_change_fails_closed" in _doc("research/phase2/protocols/FORWARD_DATA_SOURCE_POLICY.yaml")
 
 def test_private_data_gitignored():
     # 225LABO raw/normalized must be excluded from publication
-    excl = _doc("PUBLICATION_EXCLUDE_MANIFEST.txt")
+    excl = _doc("research/phase2/publication/PUBLICATION_EXCLUDE_MANIFEST.txt")
     assert "225LABO" in excl or "ylab225" in excl or "N225microf" in excl
 
 def test_phase2_research_freeze_truthful():
@@ -87,6 +87,6 @@ def test_phase2_research_freeze_truthful():
     assert FREEZE["production_candidate"] == "NONE"
 
 def test_no_profitable_claim():
-    freeze_doc = _doc("PHASE2_RESEARCH_FREEZE.yaml")
+    freeze_doc = _doc("research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml")
     for bad in ["profitable", "alpha confirmed", "trading edge", "winning model", "production ready trading"]:
         assert bad not in freeze_doc.split("forbidden_claims")[0].lower() or bad in freeze_doc

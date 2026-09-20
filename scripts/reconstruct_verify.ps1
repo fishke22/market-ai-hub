@@ -10,8 +10,8 @@ function Check($cond, $msg) {
 
 Write-Host "== required files =="
 $required = @(
-  "README.md", "SYSTEM_MANIFEST.yaml", "docs/AI_RECONSTRUCTION_GUIDE.md",
-  "CURRENT_HANDOFF.md", "config/model_registry.yaml", "config/model_manifest.yaml",
+  "README.md", "config/system_manifest.yaml", "docs/AI_RECONSTRUCTION_GUIDE.md",
+  "docs/development/project-status.md", "config/model_registry.yaml", "config/model_manifest.yaml",
   "config/capabilities.yaml", "LICENSE", "SECURITY.md", ".env.example", ".gitignore",
   "pyproject.toml", "requirements-runtime.txt",
   "examples/mcp/generic-stdio.json", "examples/mcp/cherry-studio.json",
@@ -41,8 +41,8 @@ if (Test-Path $py) {
 
 Write-Host "== SYSTEM_MANIFEST validity =="
 if (Test-Path $py) {
-  $m = & $py -c "import yaml; d=yaml.safe_load(open('SYSTEM_MANIFEST.yaml',encoding='utf-8')); print(d['system']['build_id'])" 2>$null
-  Check ($m -match "^[0-9a-f]{16}$") "SYSTEM_MANIFEST.yaml valid; build_id=$m"
+  $m = & $py -c "import yaml; d=yaml.safe_load(open('config/system_manifest.yaml',encoding='utf-8')); print(d['system']['build_id'])" 2>$null
+  Check ($m -match "^[0-9a-f]{16}$") "config/system_manifest.yaml valid; build_id=$m"
   $c = & $py -c "import yaml; d=yaml.safe_load(open('config/capabilities.yaml',encoding='utf-8')); print(d['live_trading']['status'])" 2>$null
   Check ($c -eq "PROHIBITED") "capabilities.yaml live_trading=PROHIBITED"
 }

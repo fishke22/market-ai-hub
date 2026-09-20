@@ -18,9 +18,9 @@ def _yaml(p: str) -> dict:
     return yaml.safe_load((ROOT / p).read_text(encoding="utf-8"))
 
 
-MANIFEST = _yaml("LOCAL_OSE_DATA_PROVENANCE_MANIFEST.yaml")
-REPORT = _doc("PHASE2VB2_LOCAL_MICRO_PROVENANCE_REPORT.md")
-DRAFT = _yaml("DIRECT_MICRO_BAR_OOS_PROTOCOL_DRAFT.yaml")
+MANIFEST = _yaml("research/phase2/manifests/LOCAL_OSE_DATA_PROVENANCE_MANIFEST.yaml")
+REPORT = _doc("research/phase2/reports/PHASE2VB2_LOCAL_MICRO_PROVENANCE_REPORT.md")
+DRAFT = _yaml("research/phase2/protocols/drafts/DIRECT_MICRO_BAR_OOS_PROTOCOL_DRAFT.yaml")
 
 
 def test_micro_no_data_before_listing():

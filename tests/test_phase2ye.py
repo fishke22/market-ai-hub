@@ -104,7 +104,7 @@ def test_futures_diag_script_present():
 
 
 def test_futures_docs_reconstructable():
-    doc = (ROOT / "docs/YUANTA_FUTURES_COM.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs/integrations/yuanta/YUANTA_FUTURES_COM.md").read_text(encoding="utf-8")
     assert "32-bit" in doc and "sidecar" in doc.lower()
     guide = (ROOT / "docs/AI_RECONSTRUCTION_GUIDE.md").read_text(encoding="utf-8")
     assert "setup_yuanta_futures_x86.ps1" in guide

@@ -44,7 +44,7 @@ def test_spark_jnu_code_verified():
 
 
 def test_easywin_symbol_semantics_separate():
-    d = _doc("docs/YUANTA_EASYWIN_SYMBOL_MAPPING.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_EASYWIN_SYMBOL_MAPPING.md")
     assert "EASYWIN" in d and "UNRESOLVED" in d
     assert "JNU2609" in d and "SPARK" in d  # 三套 namespace 分離
 
@@ -56,12 +56,12 @@ def test_legacy_quote_symbol_not_guessed():
 
 
 def test_quote_login_id_contract():
-    d = _doc("PHASE2YH_LOCAL_SDK_FORENSICS_REPORT.md")
+    d = _doc("research/phase2/integrations/yuanta/PHASE2YH_LOCAL_SDK_FORENSICS_REPORT.md")
     assert "SetMktLogon" in d and "身份證ID" in d
 
 
 def test_quote_status_contract():
-    d = _doc("PHASE2YH_LOCAL_SDK_FORENSICS_REPORT.md")
+    d = _doc("research/phase2/integrations/yuanta/PHASE2YH_LOCAL_SDK_FORENSICS_REPORT.md")
     assert "lsLogonOK" in d and "-2" in d
     assert "無權限" in d  # Msg[0]='3'
 
@@ -73,13 +73,13 @@ def test_trading_bitness_contract():
 
 
 def test_quote_trading_independence():
-    d = _doc("PHASE2YH_LOCAL_SDK_FORENSICS_REPORT.md")
+    d = _doc("research/phase2/integrations/yuanta/PHASE2YH_LOCAL_SDK_FORENSICS_REPORT.md")
     assert "apiquote.yuantafutures.com.tw" in d
     assert "api.yuantafutures.com.tw" in d
     assert "INDEPENDENT_BY_DESIGN" in d
 
 
 def test_proprietary_sdk_excluded():
-    d = _doc("PUBLICATION_EXCLUDE_MANIFEST.txt")
+    d = _doc("research/phase2/publication/PUBLICATION_EXCLUDE_MANIFEST.txt")
     for token in ("ocx", "YuantaQuote", "YuantaOrd", "YuantaCAPIDLL", "BToCAPI", "元大行情API"):
         assert token.lower() in d.lower()

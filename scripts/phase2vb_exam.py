@@ -1,6 +1,6 @@
 """Phase 2V-B — Historical OOS walk-forward exam (point-in-time, no leakage).
 
-Runs a formal historical exam per HISTORICAL_OOS_PROTOCOL.yaml v1.
+Runs a formal historical exam per research/phase2/protocols/HISTORICAL_OOS_PROTOCOL.yaml v1.
 - DIRECT target (OSE Micro settlement): data coverage audited → INSUFFICIENT_EVIDENCE (1 day only).
 - PROXY target (^N225): full walk-forward with baselines + models + stats.
 
@@ -411,7 +411,7 @@ def main():
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     import yaml
-    with open("OOS_EXAM_MANIFEST.yaml", "w", encoding="utf-8") as f:
+    with open("research/phase2/manifests/OOS_EXAM_MANIFEST.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(manifest, f, allow_unicode=True, sort_keys=False)
 
     with open("data/phase2vb_results.json", "w", encoding="utf-8") as f:
@@ -425,7 +425,7 @@ def main():
             if r["kind"] == "PRICE":
                 print(f"    {r['model']:16s} MAE={r['MAE_RETURN']:.6f} MASE={r['MASE']:.3f} "
                       f"dir_acc={r['direction']['accuracy']:.3f} dm_p={r.get('dm_p')}")
-    print("Wrote PROXY_REFERENCE_OOS_RESULTS.csv + DIRECT_OSE_MICRO_OOS_RESULTS.csv + OOS_EXAM_MANIFEST.yaml")
+    print("Wrote PROXY_REFERENCE_OOS_RESULTS.csv + DIRECT_OSE_MICRO_OOS_RESULTS.csv + research/phase2/manifests/OOS_EXAM_MANIFEST.yaml")
 
 
 if __name__ == "__main__":

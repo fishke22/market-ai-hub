@@ -58,7 +58,7 @@ def test_endpoint_matrix_matches_official_sample():
     assert MKT_LOGON_T[1:] == ("80", 1)
     assert MKT_LOGON_TP1[1:] == ("82", 2)
     # 443/442 記錄於 doc
-    d = _doc("docs/YUANTA_FUTURES_COM.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_FUTURES_COM.md")
     assert "443" in d and "442" in d
 
 
@@ -77,6 +77,6 @@ def test_session_aware_retest_required():
 
 def test_trading_api_account_metadata_flow_documented():
     # 未來 authoritative branch/account 來源 = 歸戶ID + OnLogonS AccList（不猜）
-    d = _doc("docs/YUANTA_FUTURES_TRADING_API_FUTURE.md")
+    d = _doc("docs/integrations/yuanta/YUANTA_FUTURES_TRADING_API_FUTURE.md")
     assert "SetFutOrdConnection" in d and "歸戶" in d
     assert "OnLogonS" in d and "Branch" in d and "SubAccount" in d

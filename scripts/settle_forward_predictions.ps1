@@ -18,7 +18,7 @@ print('settled:', len(result['settled']), 'forecasts')
 for f in result['settled']:
     print('  ', f)
 fs.build_status()
-print('status updated: FORWARD_SHADOW_STATUS.json')
+print('status updated: research/phase2/status/FORWARD_SHADOW_STATUS.json')
 "@
 
 if ($LASTEXITCODE -ne 0) {

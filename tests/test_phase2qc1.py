@@ -152,7 +152,7 @@ def test_legacy_empty_safe_cleanup(monkeypatch, tmp_path):
 
 def test_private_data_never_git_candidate():
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    manifest = (ROOT / "PUBLICATION_EXCLUDE_MANIFEST.txt").read_text(encoding="utf-8")
+    manifest = (ROOT / "research/phase2/publication/PUBLICATION_EXCLUDE_MANIFEST.txt").read_text(encoding="utf-8")
     combined = gitignore + "\n" + manifest
     # private inbox / raw / normalized 必須被排除，且不再硬編 D:\
     assert "data/private/" in combined or "data\\private\\" in combined

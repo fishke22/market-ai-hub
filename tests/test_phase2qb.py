@@ -104,7 +104,7 @@ def test_research_truth_matches_freeze():
 
     from market_ai_hub.services.research_truth import validation_truth
 
-    fz = yaml.safe_load((ROOT / "PHASE2_RESEARCH_FREEZE.yaml").read_text(encoding="utf-8"))
+    fz = yaml.safe_load((ROOT / "research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml").read_text(encoding="utf-8"))
     vt = validation_truth()
     assert vt["proxy_historical"] == fz["historical_conclusions"]["proxy_exam"]
     assert vt["causal"] == fz["causality_conclusion"]

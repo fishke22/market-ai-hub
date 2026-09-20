@@ -25,7 +25,7 @@ COHORT_ZERO = "ZERO_RETURN_FORWARD"
 HORIZONS = [1, 3, 5]
 
 BARS_PATH = project_root() / "data" / "normalized" / "ose_micro" / "ose_micro_daily_bar_v1.parquet"
-ACTIVATION_PATH = project_root() / "FORWARD_SHADOW_ACTIVATION.yaml"
+ACTIVATION_PATH = project_root() / "research/phase2/manifests/FORWARD_SHADOW_ACTIVATION.yaml"
 
 
 def _now_utc() -> datetime:
@@ -184,7 +184,7 @@ def settle_pending() -> dict:
 
 
 def build_status() -> dict:
-    """Aggregate forward shadow status/metrics into FORWARD_SHADOW_STATUS.json."""
+    """Aggregate forward shadow status/metrics into research/phase2/status/FORWARD_SHADOW_STATUS.json."""
     import yaml
 
     reg = PredictionRegistry()
@@ -240,7 +240,7 @@ def build_status() -> dict:
         "label": "RESEARCH_FORECAST_ONLY / NON_EXECUTABLE_FORECAST_EDGE",
         "generated_at": _now_utc().isoformat(),
     }
-    out = project_root() / "FORWARD_SHADOW_STATUS.json"
+    out = project_root() / "research/phase2/status/FORWARD_SHADOW_STATUS.json"
     out.write_text(json.dumps(status, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     return status
 

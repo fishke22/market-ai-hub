@@ -12,9 +12,9 @@ def _csv(p):
     import pandas as pd
     return pd.read_csv(ROOT / p)
 
-PROTO = _yaml("DIRECT_MICRO_BAR_OOS_PROTOCOL.yaml")
-MANIFEST = _yaml("DIRECT_MICRO_BAR_DATASET_MANIFEST.yaml")
-REPORT = _doc("PHASE2VB3_DIRECT_MICRO_BAR_OOS_REPORT.md")
+PROTO = _yaml("research/phase2/protocols/DIRECT_MICRO_BAR_OOS_PROTOCOL.yaml")
+MANIFEST = _yaml("research/phase2/manifests/DIRECT_MICRO_BAR_DATASET_MANIFEST.yaml")
+REPORT = _doc("research/phase2/reports/PHASE2VB3_DIRECT_MICRO_BAR_OOS_REPORT.md")
 
 def test_micro_bar_protocol_frozen():
     assert PROTO["protocol_version"] == 1
@@ -27,7 +27,7 @@ def test_micro_source_is_225labo():
 
 def test_micro_raw_not_publishable():
     assert MANIFEST["redistribution_allowed"] is False
-    d = _doc("PUBLICATION_EXCLUDE_MANIFEST.txt")
+    d = _doc("research/phase2/publication/PUBLICATION_EXCLUDE_MANIFEST.txt")
     assert "225LABO_MARKET_DATA_PRIVATE_LOCAL_ONLY" in d or "225LABO" in d
 
 def test_micro_continuous_not_contract_level():
