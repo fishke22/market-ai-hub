@@ -399,6 +399,13 @@ def predict_ensemble(symbol: str, period: str = "6mo", horizon: str = "1d") -> d
     vote = independent_vote_summary(models)
     out.update(vote)
     out["used_base_models"] = [f.model for f in models]
+    # 2Q-F.4：forecast scope（^N225 是 PROXY，不得冒充 direct）
+    out["forecast_scope"] = "PROXY_MODEL_REFERENCE"
+    out["forecast_target"] = symbol
+    out["instrument_role"] = "PROXY"
+    out["direct_execution_target"] = "OSE_NIKKEI225_MICRO_FUTURES"
+    out["direct_forecast"] = False
+    out["do_not_relabel_as_direct"] = True
     out["build"] = build_fingerprint()
     return out
 

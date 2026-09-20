@@ -144,6 +144,30 @@ def next_ose_derivatives_sessions(after_date: date | datetime | str, n: int) -> 
     return [d for d in combined if d > start][:n]
 
 
+def sanitize_daily_exchange_sessions(df: "pd.DataFrame", symbol: str) -> "pd.DataFrame":
+    """2Q-F.4：daily bars 只保留 exchange 有效 session（排除週末/休市 invalid bars）。
+
+    對 ^TWII / *.TW / *.TWO → XTAI；^N225 → XTKS。非 session 的 rows 標 invalid_session 並排除。
+    raw 保留供 audit；latest reference / model origin / features / forecast 不得用 invalid row。
+    """
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    ex = exchange_for_symbol(symbol)
+    invalid = []
+    for idx, row in out.iterrows():
+        ts = pd.Timestamp(row.get("timestamp_utc") or row.get("timestamp_local"))
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        local_date = ts.tz_convert(exchange_timezone(symbol)).date()
+        if not is_session(symbol, local_date):
+            invalid.append(idx)
+    if invalid:
+        out.loc[invalid, "invalid_session"] = True
+    valid = out[~out.index.isin(invalid)]
+    return valid
+
+
 def calendar_covers(symbol: str, dates: list[str]) -> bool:
     """calendar 是否覆蓋所有 target dates（超過 last_session → 未覆蓋）。"""
     if not calendar_verified(symbol) or not dates:

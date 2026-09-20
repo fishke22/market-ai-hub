@@ -98,6 +98,9 @@ class AnalysisPacket(BaseModel):
     # ── V2 driver panel（§12）：context/explanatory features，非 formal causal validation ──
     driver_panel: dict[str, Any] = Field(default_factory=dict)
 
+    # ── 2Q-F.4：display policy（answer layer 不需重建 safety logic）──
+    display_policy: dict[str, Any] = Field(default_factory=dict)
+
     # data lake 狀態（§11）
     data_reused: list[str] = Field(default_factory=list)
     data_fetched: list[str] = Field(default_factory=list)

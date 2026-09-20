@@ -366,7 +366,7 @@ def _combine(
             "legacy_research_only": True,
             # raw agreement（全部 component，含 unvalidated）→ 更名，不得當 direction consensus
             "legacy_raw_unvalidated_agreement": agreement,
-            "model_agreement": agreement,  # backward compat alias（raw）
+            "model_agreement": agreement,  # backward compat alias（raw；不得當 consensus）
             # validated agreement（只算 eligible voters；0 → N/A）
             "validated_direction_agreement": validated_direction_agreement,
             # V1.2 direction resolution（final_direction 由固定規則產生，見 _resolve_direction）
@@ -375,6 +375,9 @@ def _combine(
             "direction_disagreement": disagreement,
             "vote_direction": vote_dir,
             "probability_argmax_direction": prob_argmax,
+            # 2Q-F.4：單一 authoritative direction contract（answer layer 不需自行推理）
+            "direction_status": _direction_status(final_dir),
+            "direction_value": _direction_value(final_dir),
         },
         warnings=warnings,
     )
@@ -440,6 +443,22 @@ def _dir_index(key: str) -> int:
         return int(key.split("_")[-1])
     except (ValueError, IndexError):
         return 0
+
+
+def _direction_status(final_dir: str) -> str:
+    """2Q-F.4：authoritative direction status（enum-like）。"""
+    if final_dir in ("NO_VALIDATED_MODEL_CONSENSUS", "no_evidence"):
+        return "NO_VALIDATED_MODEL_CONSENSUS"
+    if final_dir == "NO_CONSENSUS":
+        return "NO_CONSENSUS"
+    return "VALIDATED_CONSENSUS"
+
+
+def _direction_value(final_dir: str) -> str | None:
+    """2Q-F.4：無 validated consensus 時回 None（不輸出 up/down/flat）。"""
+    if final_dir in ("NO_VALIDATED_MODEL_CONSENSUS", "NO_CONSENSUS", "no_evidence", "N/A"):
+        return None
+    return final_dir
 
 
 def _raw_class_scores(components: list[ForecastOutput]) -> dict[str, dict[str, float | None]]:
