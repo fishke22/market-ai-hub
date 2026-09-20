@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "market-ai": {
+      "command": "<PROJECT>\\.venv\\Scripts\\market-ai-mcp.exe",
+      "args": []
+    }
+  }
+}

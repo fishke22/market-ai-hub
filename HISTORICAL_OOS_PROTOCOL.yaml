@@ -1,0 +1,107 @@
+# HISTORICAL OOS PROTOCOL (pre-registered, frozen before results)
+# Phase 2V-B — Historical Out-of-Sample Validation + Walk-Forward Tournament
+# 正式跑完後不得因結果不好改 protocol 重跑；需 v2 則 protocol_version: 2 並保留 v1 結果。
+protocol_version: 1
+frozen_at: "2026-09-20"
+purpose: >
+  回答模型在 point-in-time / out-of-sample / walk-forward 條件下是否 beat baseline、
+  regime 是否穩定、價格與方向是否有效、Dynamic Ensemble 是否有 edge、
+  OSE Micro direct target 是否可預測。本 exam 不做 strategy PnL optimization / parameter mining。
+
+# ── targets ──
+targets:
+  DIRECT:
+    id: OSE_NIKKEI225_MICRO_FUTURES
+    semantic: future_settlement_return      # 不是 NEXT_CLOSE
+    source: "官方 JPX settlement（rbYYYYMMDD.csv）"
+    listing_date: "2023-05-29"
+    forbidden_mislabels: [NEXT_CLOSE, proxy_as_target]
+  PROXY:
+    id: "^N225"                              # 獨立 REFERENCE_PROXY 考場
+    semantic: next_close_return
+    source: "yfinance（RESEARCH_PROXY）"
+    note: "DIRECT 與 PROXY 結果完全分開，禁止合併成總排名"
+
+# ── horizons ──
+horizons_mandatory: [1, 3, 5]               # trading days
+horizons_optional: [10]
+
+# ── forecast origins ──
+origins: every_trading_day                   # 不得只挑 event-free / 好預測日期
+information_cutoff: "origin 當日收盤（settlement 或 close 之 as-of）"
+point_in_time_rule: "所有 feature available_at <= cutoff；revision-risk provider 標 REVISION_CONTAMINATION_RISK"
+
+# ── models ──
+models:
+  - chronos-2
+  - timesfm-3.0
+  - xgboost
+  - lightgbm
+  - nhits          # runtime 若修好才考；否則 NOT_EXAMINED_RUNTIME_BLOCKED
+  - nbeatsx        # 同上
+  - var            # 簡易 VAR(1)（若無 runtime 阻礙）
+  - kalman         # 簡易 local-level Kalman
+  - ridge          # ridge 迴歸
+  - dynamic_ensemble
+  - joint_baseline
+runtime_unavailable_label: MODEL_NOT_EXAMINED   # 不是 FAIL，不是 0 分
+
+# ── baselines ──
+price_baselines: [LAST_VALUE, SEASONAL_NAIVE, DRIFT, MOVING_AVERAGE, RIDGE]
+direction_baselines: [ALWAYS_UP, ALWAYS_DOWN, PREVIOUS_DIRECTION, MA_TREND]
+
+# ── metrics ──
+price_metrics: [MAE, RMSE, MASE, sMAPE, MedianAE, forecast_bias]
+return_metric: MAE_RETURN
+direction_metrics: [accuracy, balanced_accuracy, precision, recall, F1, MCC]
+quantile_metrics: [pinball_loss, coverage, interval_width]   # 僅真 predictive distribution/quantile 模型
+no_fake_brier: true                            # 無真實 probability 不得捏造 Brier
+quantile_label: "集成研究分位摘要（未校準）"    # arithmetic p10/p50/p90 不得稱 calibrated interval
+
+# ── sample size labels ──
+evidence_labels:
+  n_lt_30: INSUFFICIENT_EVIDENCE
+  n_30_100: EARLY_EVIDENCE
+  n_100_250: MODERATE_SAMPLE
+  n_ge_250: SUBSTANTIAL_SAMPLE
+sample_size_does_not_imply_valid: true
+
+# ── train/val/test ──
+split: expanding_walk_forward                 # 禁止 random train_test_split
+split_forbidden: "random train_test_split"
+tuning_scope: "training/validation only；test 不得進 normalization / hyperparam / calibration"
+
+# ── statistical tests ──
+bootstrap: moving_block_bootstrap             # 不用 naive iid bootstrap
+bootstrap_ci: 0.95
+forecast_comparison: Diebold-Mariano          # HAC / Newey-West variance correction（overlap 修正）
+variance_correction: "HAC / Newey-West（overlap 修正）"
+multiple_testing: Benjamini-Hochberg FDR
+primary_comparison: "champion_candidate vs BEST_SIMPLE_BASELINE"
+
+# ── regime / event / roll ──
+regimes: [TREND_UP, TREND_DOWN, HIGH_VOL, LOW_VOL, RISK_ON, RISK_OFF, RATE_UP, RATE_DOWN, EVENT, NON_EVENT]
+regime_min_sample: 30                         # 不足 → INSUFFICIENT_EVIDENCE
+event_windows: [PRE_EVENT, EVENT_WINDOW, POST_EVENT, NONE]
+roll_period: [PRE_ROLL, ROLL, POST_ROLL]
+
+# ── ensemble ──
+ensemble_comparison: [DynamicEnsemble, best_single_model, best_simple_baseline, static_equal_weight]
+no_auto_promote: true                          # AUTO_PROMOTE=false；最多 CHAMPION_CANDIDATE
+
+# ── reproducibility ──
+seed: 42
+save: [protocol_version, dataset_hash, exam_hash, feature_version, model_version, seed, env, cuda, torch, python, build_id]
+manifest: OOS_EXAM_MANIFEST.yaml
+
+# ── failure rules（任一成立 → PHASE2VB_BLOCKED）──
+block_on:
+  - future_leakage
+  - target_contamination
+  - proxy_mislabeled_as_target
+  - settlement_mislabeled_close
+  - random_split
+  - test_used_for_tuning
+  - exam_hash_inconsistent
+  - silently_excluded_bad_periods
+  - invalid_roll_adjustment

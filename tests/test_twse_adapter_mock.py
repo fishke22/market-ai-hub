@@ -35,13 +35,17 @@ def test_twse_fetch_symbol_daily_mocked(monkeypatch, tmp_path):
     provider._cache_dir = tmp_path
     got = []
 
-    def fake_get(path, params, cache=True):
-        got.append(params["date"])
-        return _sample_payload()
+    def fake_stock_day(symbol, roc_month):
+        got.append(roc_month)
+        # STOCK_DAY 回傳格式：每列 [日期(ROC), 成交股數, 成交金額, 開, 高, 低, 收, 漲跌, 筆數]
+        return {"stat": "OK", "data": [
+            ["115/01/02", "1,000", "1,000,000", "100.00", "101.00", "99.00", "100.50", "+1.0", "100"],
+        ]}
 
-    monkeypatch.setattr(provider, "_get_json", fake_get)
+    monkeypatch.setattr(provider, "_get_stock_day_json", fake_stock_day)
     df = provider.fetch_symbol_daily("2330", "20260102", "20260102")
     assert len(df) == 1
     assert df.iloc[0]["symbol"] == "2330"
     assert df.iloc[0]["data_grade"] == "OFFICIAL_DAILY"
     assert df.iloc[0]["timestamp_utc"].tzinfo is not None
+    assert df.iloc[0]["close"] == 100.5

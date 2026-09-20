@@ -1,0 +1,21 @@
+# MARKET_AI_HUB — TradingView Optional Bridge 設定
+# 預設 disabled；使用者明確啟用才使用。TradingView 非核心依賴。
+enabled: false
+mode: optional
+host: 127.0.0.1
+debug_port: 9222
+allow_training_data: false
+
+capabilities:
+  chart_read: true
+  indicator_read: true
+  pine_research: true
+  strategy_tester_read: true
+  replay_read: true
+  order_execution: false
+  arbitrary_ui_eval: false
+
+source_semantics:
+  source: TRADINGVIEW_OPTIONAL_UI
+  authority: OPTIONAL_EXTERNAL_UI_SOURCE
+  # 不得自動寫入 authoritative model training dataset

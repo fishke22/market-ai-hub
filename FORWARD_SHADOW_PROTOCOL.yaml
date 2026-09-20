@@ -1,0 +1,73 @@
+# FORWARD SHADOW PROTOCOL v1 (frozen before activation)
+protocol_version: 1
+frozen_at: "2026-09-20"
+purpose: >
+  Real-time / forward RESEARCH forecast shadow only. Tracks forecast quality
+  of VAR(1) + baselines on DIRECT_MICRO_CONTINUOUS_BAR. NOT paper trading,
+  NOT strategy validation, NOT broker simulation. No PnL/position/order.
+scope:
+  primary_model: "VAR(1)"
+  secondary_model: "TimesFM-3.0"      # 保留但低優先，不強制每日
+  baselines: [LAST_VALUE, ZERO_RETURN]
+  excluded_from_shadow: [Dynamic Ensemble, XGBoost, Chronos, NHITS, NBEATSx]  # 避免 model shopping
+target:
+  primary: DIRECT_MICRO_CONTINUOUS_BAR
+  primary_semantic: NEXT_TRADING_DAY_BAR_CLOSE
+  secondary: [NEXT_3D_BAR_CLOSE, NEXT_5D_BAR_CLOSE]
+  forbidden: NEXT_SETTLEMENT   # settlement history 仍不足
+data_source:
+  historical_reference: "225LABO verified Micro continuous daily bars"
+  forward_current: "MARKET_AI_HUB 當日可合法取得最新 Micro bar"
+  no_proxy_substitution: true   # 當日 direct Micro unavailable → TARGET_DATA_UNAVAILABLE（不得用 ^N225/Mini/proxy 替代）
+forecast_creation:
+  cadence: "每個 eligible trading day 一次"
+  cutoff: AFTER_EXCHANGE_DAY_COMPLETE
+  fields_saved: [signal_created_at, information_cutoff, target_trading_date, model_version, feature_version, dataset_version, build_id]
+immutability:
+  append_only: true
+  no_post_actual_modification: true
+  supersede_rule: "bug 時建立 superseding forecast，原 forecast 保留"
+registry:
+  backend: "existing PredictionRegistry (DuckDB, immutable + append-only)"
+  fields: [forecast_id, created_at, information_cutoff, target, horizon, forecast_value, forecast_return, direction, model, model_version, exam_hash, feature_version, source_coverage, data_freshness, regime, event_state, status]
+baseline_same_origin: true   # VAR + LAST_VALUE + ZERO_RETURN 同 origin/target/horizon/actual
+no_backfill_as_forward: true  # 歷史 replay 標 REPLAY，不得與 FORWARD 混
+activation:
+  boundary: "activation timestamp 之前永遠不算 forward evidence"
+model_freeze:
+  VAR: {architecture: "AR(1)", lag: 1, feature: "close-to-close return", normalization: "none"}
+  no_daily_model_tuning: true
+  new_model_rule: "model_version += 1，獨立 cohort"
+cohort: "VAR_V1_FORWARD"
+training_policy: "expanding window，只用 <= information_cutoff 資料 retrain"
+data_quality_gate:
+  on_failure: FORECAST_SKIPPED_DATA_QUALITY  # 比硬產生 forecast 好
+source_coverage_fields: [Micro, USDJPY, VIX, rates, US_equity, events]
+metrics:
+  price: [MAE, RMSE, MASE, MedianAE, bias]
+  return: [MAE_RETURN, RMSE_RETURN, correlation, R2_OOS]
+  direction: [direction_accuracy, MCC]
+small_n_labels:
+  n_lt_20: TOO_EARLY
+  n_20_39: EARLY_FORWARD
+  n_40_79: PRELIMINARY_FORWARD
+  n_80_149: MODERATE_FORWARD
+  n_ge_150: SUBSTANTIAL_FORWARD
+drift_monitoring:
+  metrics: [feature drift, target volatility, error drift, direction drift, provider drift, regime distribution]
+  methods: [PSI, rolling mean/std, rolling error stats]
+  drift_is_alert_only: true   # 不得 auto retrain/promote
+regime_saved_per_forecast: true
+known_failure_region: HIGH_VOL + TREND_DOWN   # 只追蹤，不避開
+non_executable_label: "RESEARCH_FORECAST_ONLY / NON_EXECUTABLE_FORECAST_EDGE（直到 new causal protocol 另行驗證）"
+mcp_trade_signal: NONE   # MCP 只回 forecast/uncertainty/quality/state，不回 BUY/SELL/LONG/SHORT
+forecast_status: [CREATED, WAITING_ACTUAL, SETTLED, SKIPPED_DATA_QUALITY, INVALIDATED_TECHNICAL]
+invalidation_rule: "INVALIDATED_TECHNICAL 保留原 record，不 delete"
+scheduler_default: DISABLED  # Windows Task Scheduler 需 user explicit opt-in
+alert_conditions: [DATA_STALE, MODEL_ERROR, DRIFT_WARNING, FORECAST_DEGRADATION]  # 無 TRADE_ALERT
+degradation_rule: "rolling MASE > 1 或 direction <= baseline → 只標 FORECAST_DEGRADATION，不 auto disable/retrain/promote"
+no_auto_promotion: true  # AUTO_PROMOTE=false；最高 FORWARD_EVIDENCE_ACCUMULATING
+release_status: >
+  Research system validated; Historical statistical signal found;
+  No executable economic strategy edge; Forward validation active/pending.
+forbidden_release_claims: [profitable, winning strategy, trading edge, production alpha]

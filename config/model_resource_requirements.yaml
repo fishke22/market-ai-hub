@@ -1,0 +1,34 @@
+# MODEL RESOURCE REQUIREMENTS (Phase 2V-F)
+# 不同模型不同資源限制；不得所有模型同一限制。
+model_resource_tiers:
+  CPU_LIGHT:
+    allow_gpu_fallback: true
+    heavy: false
+  GPU_MEDIUM:
+    allow_gpu_fallback: true
+    heavy: false
+  GPU_HEAVY:
+    allow_gpu_fallback: false      # heavy 不轉 CPU 100%
+    heavy: true
+
+models:
+  VAR: CPU_LIGHT
+  Ridge: CPU_LIGHT
+  Kalman: CPU_LIGHT
+  XGBoost: GPU_MEDIUM
+  LightGBM: GPU_MEDIUM
+  Chronos: GPU_HEAVY
+  TimesFM: GPU_HEAVY
+  NHITS: GPU_HEAVY
+  NBEATSx: GPU_HEAVY
+  fincast: GPU_MEDIUM
+
+# 優先順序（高 → 低）；training 不得阻塞 forward shadow
+priority_order:
+  1: Interactive / manual inference
+  2: Forward Shadow
+  3: Data ingestion
+  4: Light model evaluation
+  5: Scheduled retraining
+  6: Hyperparameter search (Optuna)
+  7: Experimental fine-tuning

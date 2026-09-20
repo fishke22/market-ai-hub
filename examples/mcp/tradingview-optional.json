@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "market-ai": {
+      "command": "<PROJECT>\\.venv\\Scripts\\market-ai-mcp.exe",
+      "args": []
+    },
+    "tradingview": {
+      "command": "node",
+      "args": ["<PROJECT>\\external\\tradingview-mcp\\src\\server.js"]
+    }
+  }
+}

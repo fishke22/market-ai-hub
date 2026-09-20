@@ -1,0 +1,22 @@
+commission_note: index-point equivalent commission per trade
+contract_multiplier: JPY 10 per index point
+cost_scenarios:
+  C0:
+    commission_pts: 0
+    name: THEORETICAL_ZERO_COST
+    tick_slippage: 0
+  C1:
+    commission_pts: 0.5
+    name: LOW_COST
+    tick_slippage: 1
+  C2:
+    commission_pts: 1.0
+    name: BASE_CONSERVATIVE_COST
+    tick_slippage: 2
+  C3:
+    commission_pts: 2.0
+    name: HIGH_STRESS_COST
+    tick_slippage: 4
+data_quality: APPROXIMATE_RESEARCH_EXECUTION
+slippage_note: per-side tick slippage applied at both entry and exit (2*tick)
+tick_size_index_points: 5.0

@@ -1,0 +1,25 @@
+# MARKET_AI_HUB — Data Retention 政策（預設：不自動刪重要資料）
+#
+# 原則：正式 historical market observations / Prediction Registry /
+# Analysis Archive / Training metadata 一律永久保留，除非另有明確 policy。
+
+retention:
+  # 永久保留（預設不刪）
+  historical_market_observations:
+    policy: KEEP_FOREVER
+  prediction_registry:
+    policy: KEEP_FOREVER
+  analysis_archive:
+    policy: KEEP_FOREVER
+  training_metadata:
+    policy: KEEP_FOREVER
+
+  # 可 TTL 清理（derived / 可重建 / 暫存）
+  http_temporary_cache:
+    policy: TTL
+    ttl_hours: 168   # 7 天
+  derived_rebuildable_cache:
+    policy: TTL
+    ttl_hours: 720   # 30 天
+
+# 不得自動刪除：raw official historical data / prediction history / analysis history。

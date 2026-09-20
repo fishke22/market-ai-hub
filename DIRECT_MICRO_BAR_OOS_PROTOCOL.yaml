@@ -1,0 +1,67 @@
+# DIRECT MICRO BAR OOS PROTOCOL v1 (frozen before results)
+protocol_version: 1
+frozen_at: "2026-09-20"
+purpose: >
+  Evaluate model predictive performance on verified OSE Nikkei 225 Micro Futures
+  daily bar OHLCV (225LABO continuous center-month series). Exam A = Micro-only
+  features. Exam B = Micro + cross-asset features. Settlement NOT available.
+targets:
+  DIRECT_MICRO_BAR:
+    id: OSE_NIKKEI225_MICRO_FUTURES
+    semantic: NEXT_TRADING_DAY_BAR_CLOSE
+    return_semantic: NEXT_TRADING_DAY_RETURN
+    authority: VERIFIED_MARKET_BAR_SOURCE
+    data: "225LABO minute OHLCV → daily bar OSE exchange-day semantics"
+    forbidden_mislabels: [NEXT_SETTLEMENT, CONTRACT_LEVEL]
+    continuous_series: true
+    contract_specific: false
+horizons: [1, 3, 5]
+origins: all_eligible_trading_days
+warmup_history: 128
+split: expanding_walk_forward
+information_cutoff: "end of trading day T (15:15 JST + settlement)"
+max_feature_timestamp_rule: "available_at <= information_cutoff"
+exams:
+  A_MICRO_ONLY:
+    name: "Micro-only features"
+    features: [returns, range, rv, volume, gap, session_path, momentum, vol_regime]
+  B_MICRO_PLUS_CROSS_ASSET:
+    name: "Micro + cross-asset"
+    features: [A + USDJPY, VIX, NQ, ES, SOX, rates, events]
+baselines:
+  price: [LAST_VALUE, DRIFT, MOVING_AVERAGE, SEASONAL_NAIVE]
+  return: [ZERO_RETURN, HISTORICAL_MEAN_RETURN, PREVIOUS_RETURN]
+  direction: [PREVIOUS_DIRECTION, ALWAYS_UP, MA_TREND]
+models:
+  - chronos-2
+  - timesfm-3.0
+  - xgboost
+  - lightgbm
+  - ridge
+  - var
+  - kalman
+  - dynamic_ensemble
+  - static_equal_weight_ensemble
+  - nhits           # RUNTIME_BLOCKED if unavailable
+  - nbeatsx         # RUNTIME_BLOCKED if unavailable
+metrics:
+  price: [MAE, RMSE, MASE, sMAPE, MedianAE, BIAS]
+  return: [MAE_RETURN, RMSE_RETURN, CORRELATION, R2_OOS]
+  direction: [accuracy, balanced_accuracy, F1, MCC]
+  error_points: [error_in_index_points]
+  no_fake_brier: true
+statistical_tests:
+  bootstrap: moving_block_bootstrap (95% CI)
+  forecast_comparison: Diebold-Mariano (HAC / overlap correction)
+  multiple_testing: Benjamini-Hochberg FDR
+primary_comparison: "each model vs BEST_SIMPLE_BASELINE"
+secondary_comparison: "Dynamic Ensemble vs Best single model"
+regimes: [TREND_UP, TREND_DOWN, HIGH_VOL, LOW_VOL, RISK_ON, RISK_OFF, EVENT, NON_EVENT]
+regime_min_sample: 30
+no_auto_champion: true
+block_conditions:
+  - future_leakage
+  - wrong_trading_date_assignment
+  - roll_contamination_unhandled
+  - continuous_series_mislabeled_contract_level
+  - raw_225labo_tracked_in_github

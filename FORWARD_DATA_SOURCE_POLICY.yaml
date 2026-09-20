@@ -1,0 +1,45 @@
+# FORWARD DATA SOURCE POLICY
+# 不得因方便就違反 provider terms；不得假設可自動 scrape / redistribute。
+
+sources:
+  - source: 225LABO
+    instrument: "OSE Nikkei 225 Micro Futures (center-month continuous)"
+    classification: LOCAL_RESEARCH_SOURCE
+    latency: "T+0 (manual download)"
+    resolution: "1-minute OHLCV"
+    direct_or_proxy: DIRECT
+    license_terms_status: "僅下載者本人使用，不得向第三方提供/販售"
+    automated_access_allowed: false       # 未經證據不建 web scraper
+    redistribution_allowed: false
+    current_availability: "MANUAL_DOWNLOAD（本機已驗證 2023-07-24 ~ 2026-09-01）"
+    refresh_workflow: MANUAL_REFRESH_WORKFLOW
+    raw_data_github: "NEVER"
+
+  - source: JPX official settlement
+    instrument: "OSE Nikkei 225 Micro settlement"
+    classification: OFFICIAL_EXCHANGE
+    latency: "T+1 settlement"
+    resolution: daily
+    direct_or_proxy: DIRECT (settlement target)
+    automated_access_allowed: false
+    redistribution_allowed: "per JPX terms (research)"
+    current_availability: "current-day only; historical 404 (needs J-Quants/Data Cloud)"
+    note: "settlement history insufficient for DIRECT_SETTLEMENT OOS"
+
+  - source: yfinance ^N225
+    instrument: "Nikkei 225 spot index"
+    classification: PUBLIC_MARKET_PROVIDER
+    direct_or_proxy: PROXY   # 不得當 direct Micro target 替代
+    automated_access_allowed: true
+    note: "only for REFERENCE_PROXY exam; never substitute direct Micro"
+
+inbox:
+  path: "D:\\MARKET_AI_HUB_PRIVATE_INBOX\\225labo"
+  purpose: "使用者將合法下載的新 225LABO 檔案放入；script 只 detect/validate/import，不自動下載"
+
+rules:
+  - no_auto_scrape
+  - no_redistribution
+  - raw_source_immutable
+  - incremental_import_idempotent
+  - schema_change_fails_closed

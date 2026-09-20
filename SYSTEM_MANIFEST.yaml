@@ -1,0 +1,109 @@
+# MARKET_AI_HUB — SYSTEM MANIFEST（machine-readable，供未來 AI / Agent 使用）
+# 所有值依目前真實程式；不得使用過期 Phase 1 資料。
+schema_version: 3
+
+system:
+  name: MARKET_AI_HUB
+  version: "Phase 2"
+  phase: "2I-B"
+  role: "Financial Research Backend + MCP Server + Local Model Research System"
+  build_id: "ccabe1e1552d9ae7"
+  python: "3.12.13"
+  primary_os: "Windows"
+  tested_platforms: ["Windows x64"]
+
+targets:
+  primary: "OSE_NIKKEI225_MICRO_FUTURES"
+  references:
+    - "OSE Nikkei 225 mini"
+    - "OSE Nikkei 225 Futures (Large)"
+    - "Nikkei Spot"
+    - "SGX Nikkei"
+    - "CME Nikkei"
+  proxies:
+    - "^N225"
+
+architecture:
+  data_layer: "automation/data_lake.py"
+  feature_store: "feature_store/store.py"
+  prediction_registry: "research/registry.py"
+  model_tournament: "research/tournament/"
+  regime_engine: "regime/engine.py"
+  scenario_engine: "forecast/scenario.py"
+  dynamic_ensemble: "forecast/dynamic_ensemble.py"
+  strategy_research: "strategy/"
+  automation: "automation/"
+  mcp: "mcp/server.py"
+  skills: "skills/"
+
+models:
+  registry_file: "config/model_registry.yaml"
+  manifest_file: "config/model_manifest.yaml"
+  download_script: "scripts/download_models.py"
+  weights_in_repo: false
+
+data:
+  lake_root: "data/"
+  provider_matrix: "docs/DATA_SOURCE_MATRIX.md"
+  authoritative_sources: ["JPX", "BLS", "Cboe", "SEC EDGAR", "BOJ"]
+  proxy_sources: ["yfinance", "^N225"]
+
+automation:
+  scheduler: "scripts/register_research_tasks.ps1 (opt-in)"
+  daily_loop: "automation/loop.py"
+  training_policy: "automation/training_policy.py"
+  auto_promote_champion: false
+
+mcp:
+  transport: "stdio"
+  entrypoint: "market_ai_hub.mcp.server:main_sync"
+  executable: ".venv\\Scripts\\market-ai-mcp.exe"
+  tool_reference: "docs/MCP_TOOL_REFERENCE.md"
+  tool_count: 21
+
+skills:
+  locations: ["skills/"]
+  names: ["osaka-micro-analysis", "taiwan-stock-v28", "model-validation-audit"]
+
+integrations:
+  tradingview:
+    status: "OPTIONAL"
+    installed: false
+  yuanta:
+    note: "YUANTA API IS MULTI-FAMILY: SPARK(securities+futures) + Legacy Quote COM + Legacy Trading API"
+    spark:
+      securities:
+        auth_verified: true
+        status: "AUTH_VERIFIED"
+      futures:
+        auth_verified: false
+        status: "CONTRADICTION"   # user says enabled; server 0112
+      component: "YuantaSparkAPI.dll v2.2026.0918.0"
+      interop: "PYTHONNET_DOTNET8"
+    futures_quote_com:
+      component: "YuantaQuote_v2.1.2.9.ocx (x86)"
+      interop: "COMTYPES_32BIT"
+      scope: "OVERSEAS_UNVERIFIED (官方頁名「國內行情」；未證實排除海外)"
+      auth_status: "T+1 盤成功 / T 盤無登入權（疑 login ID 非帳號）"
+      login_identifier: "LEGACY_LOGIN_ID (身份證ID，非期貨帳號)"
+    futures_trading_api:
+      version: "1.6.1.3"
+      status: "FUTURE_RESEARCH_ONLY / NOT_IMPLEMENTED"
+    leveraged_trading:
+      product: "LEVERAGED_GLOBAL_WINNER"
+      instruments: ["CFD", "FX", "METAL", "INDEX_CFD"]
+      current_status: "DOCUMENTED_ONLY"
+      primary_target_source: false
+      account: "SEPARATE_LEVERAGED_ACCOUNT_REQUIRED"
+  realtime_recorder:
+    enabled: false
+
+safety:
+  live_trading: false
+  order_tools_exposed: false
+  broker_credentials_in_repo: false
+
+validation:
+  tests: "pytest tests/"
+  research_gates: "services/model_catalog.py"
+  predictive_edge_status: "UNPROVEN (no forward-validated edge yet)"

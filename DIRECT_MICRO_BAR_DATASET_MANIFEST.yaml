@@ -1,0 +1,48 @@
+bar_interval: daily (exchange day)
+close_semantics: BAR_CLOSE
+continuous_series: true
+contract_specific: false
+derived_dataset: D:\MARKET_AI_HUB\data\normalized\ose_micro\ose_micro_daily_bar_v1.parquet
+first_trading_date: '2023-07-24'
+last_trading_date: '2026-09-01'
+minute_source_files:
+  '2023':
+    daily_bars: 139
+    first_trading_date: '2023-07-24'
+    last_trading_date: '2024-01-04'
+    minute_rows: 137839
+    source: D:\data\N225microf_2023.zip
+  '2024':
+    daily_bars: 310
+    first_trading_date: '2024-01-03'
+    last_trading_date: '2025-01-04'
+    minute_rows: 307321
+    source: D:\data\N225microf_2024.zip
+  '2025':
+    daily_bars: 313
+    first_trading_date: '2024-12-30'
+    last_trading_date: '2026-01-06'
+    minute_rows: 309695
+    source: D:\data\N225microf_2025.zip
+  '2026':
+    daily_bars: 208
+    first_trading_date: '2025-12-30'
+    last_trading_date: '2026-09-01'
+    minute_rows: 206744
+    source: D:\data\N225microf_2026.zip
+night_session_rule: time >= 16:30 JST -> next trading date
+price_semantics: BAR_OHLC
+provider: 225LABO
+provider_url: https://225labo.com/
+redistribution_allowed: false
+session_semantics: OSE night 16:30-06:00 + day 08:45-15:15
+settlement: false
+source_files:
+- D:\data\N225microf_2023.zip
+- D:\data\N225microf_2024.zip
+- D:\data\N225microf_2025.zip
+- D:\data\N225microf_2026.zip
+tick_size: 5
+timezone: Asia/Tokyo
+trading_days: 960
+volume_semantics: PER_EXCHANGE_DAY_TOTAL_CONTRACT_VOLUME

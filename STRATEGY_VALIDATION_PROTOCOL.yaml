@@ -1,0 +1,69 @@
+# STRATEGY VALIDATION PROTOCOL v1 (frozen before results)
+protocol_version: 1
+frozen_at: "2026-09-20"
+purpose: >
+  Evaluate whether VAR(1) forecast edge on DIRECT_MICRO_CONTINUOUS_BAR
+  (h=1, MASE=0.958) translates to positive research expectancy under
+  conservative transaction costs and execution assumptions.
+candidate:
+  model: VAR(1)
+  target: DIRECT_MICRO_CONTINUOUS_BAR
+  horizon: 1 trading day
+  source_exam: "2V-B.3 (OOS walk-forward, expanding, 960 bars, ~832 origins)"
+  historical_oos: {mase: 0.958, dir_accuracy: 0.622, mcc: 0.241}
+  status: CHAMPION_CANDIDATE
+signal_source: "VAR(1) OOS forecast stream (frozen 2V-B.3 exam)"
+secondary_candidates:
+  - model: timesfm-3.0
+    status: SECONDARY_CANDIDATE
+    note: "MASE=0.995 h=1, same simple strategy mapping, no separate threshold"
+  - model: xgboost
+    status: SECONDARY_DIRECTION
+    note: "dir_accuracy=0.564, direction-only strategy"
+entry_timing: "T+1 first eligible bar open (after forecast generated at T close)"
+exit_timing: "T+1 close (horizon=1 end)"
+position_states: [-1 SHORT, 0 FLAT, +1 LONG]
+position_sizing: fixed 1 unit (no Kelly/pyramiding/scale)
+threshold_rules:
+  A_ZERO: "threshold=0, always long if forecast>0, short if <0"
+  B_VOL_SCALED: "threshold = training-period volatility percentile (train only)"
+  C_NO_TRADE: "no-trade band = training-period volatility semi-interquartile"
+threshold_selection: "NOT from test period; all thresholds determined per-origin in training window"
+execution_quality: APPROXIMATE_RESEARCH_EXECUTION
+contract_multiplier: "JPY 10 per index point"
+pnl_label: RESEARCH_PNL
+cost_scenarios:
+  C0: {name: THEORETICAL_ZERO_COST, tick_slippage: 0, commission_pts: 0}
+  C1: {name: LOW_COST, tick_slippage: 1, commission_pts: 0.5}
+  C2: {name: BASE_CONSERVATIVE_COST, tick_slippage: 2, commission_pts: 1}
+  C3: {name: HIGH_STRESS_COST, tick_slippage: 4, commission_pts: 2}
+tick_size: 5 index_points
+roll_treatment: "continuous series roll periods flagged; not excluded"
+risk_limits: "none (research only; no live money)"
+metrics:
+  gross: [gross_pnl_pts, avg_trade_pts, median_trade, win_rate, profit_factor, expectancy_pts, max_dd_pts, sharpe_like, sortino_like, calmar_like]
+  net: [net_pnl_pts, net_expectancy, net_win_rate, net_profit_factor, net_sharpe_like]
+  turnover: [trades, position_changes, trades_per_year, avg_holding_days]
+baselines:
+  - BUY_AND_HOLD_LONG
+  - ALWAYS_FLAT
+  - PREVIOUS_DIRECTION
+  - MA_TREND
+primary_comparison: "VAR strategy vs BEST_SIMPLE_STRATEGY_BASELINE at C2 cost"
+holdout:
+  last_20pct: SECONDARY_HOLDOUT (not pristine; 2V-D needed for pristine)
+final_status_labels:
+  - ROBUST_RESEARCH_EDGE
+  - TENTATIVE_RESEARCH_EDGE
+  - FRAGILE_EDGE
+  - NO_ECONOMIC_EDGE
+  - INSUFFICIENT_EVIDENCE
+block_conditions:
+  - lookahead_violation
+  - pnl_accounting_error
+  - cost_omission
+  - same_close_impossible_fill
+  - test_set_optimization_via_threshold
+  - roll_contamination
+  - continuous_series_mislabeled_executable
+  - trade_ledger_reconciliation_failure

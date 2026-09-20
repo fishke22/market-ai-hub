@@ -1,0 +1,40 @@
+# DIRECT MICRO BAR OOS PROTOCOL — DRAFT (Phase 2V-B.2)
+# 下一棒正式 pre-register（protocol_version: 1）；本棒只建立草稿。
+# 與 settlement exam 完全分開。target 不是 NEXT_SETTLEMENT。
+protocol_version: 0        # draft
+status: DRAFT_NOT_REGISTERED
+created_at: "2026-09-20"
+
+target:
+  id: OSE_NIKKEI225_MICRO_FUTURES
+  semantic: NEXT_SESSION_BAR_CLOSE       # 或 NEXT_DAILY_LAST_TRADE
+  authority: VERIFIED_MARKET_BAR_SOURCE  # 225LABO minute OHLCV
+  forbidden_mislabels: [NEXT_SETTLEMENT, proxy_as_target]
+
+data_source:
+  path: "D:\\data\\N225microf_2023..2026.zip"
+  instrument: OSE_NIKKEI225_MICRO_FUTURES
+  timezone: Asia/Tokyo
+  tick_size: 5
+  price_semantics: BAR_OHLC
+  close_semantics: BAR_CLOSE               # 不得叫 settlement
+  volume_semantics: PER_MINUTE_CONTRACT_VOLUME
+  verified_trading_days: 796
+  pre_listing_rows: 0
+  authority: DATA_VENDOR_225LABO
+
+# 與 settlement protocol 分離
+separate_from_settlement_exam: true
+settlement_exam_status: DIRECT_SETTLEMENT_INSUFFICIENT
+
+horizons_candidate: [1, 3, 5]              # trading days (bar-close target)
+split: expanding_walk_forward              # 禁止 random split
+point_in_time_rule: "available_at <= cutoff"
+metrics:
+  price: [MAE, RMSE, MASE, sMAPE, MedianAE]
+  direction: [accuracy, balanced_accuracy, MCC]
+statistical_tests:
+  bootstrap: moving_block_bootstrap
+  forecast_comparison: Diebold-Mariano (HAC)
+  multiple_testing: Benjamini-Hochberg FDR
+no_auto_champion: true

@@ -1,0 +1,18 @@
+protocol_version: 1
+exam_hash: dc29f0e527bab7d9
+dataset_hash: 6963396b68de7137
+target: ^N225 (REFERENCE_PROXY)
+horizons:
+- 1
+- 3
+- 5
+history_len: 128
+seed: 42
+block_bootstrap:
+  n: 500
+  block: 5
+python: 3.12.13
+torch: 2.14.0+cu130
+cuda: true
+build_id: ccabe1e1552d9ae7
+generated_at: '2026-09-19T22:09:31.167184+00:00'

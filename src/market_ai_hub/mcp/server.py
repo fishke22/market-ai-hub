@@ -512,6 +512,115 @@ def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
     return run(stock, horizon)
 
 
+@mcp.tool()
+def get_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MICRO_FUTURES",
+                        horizon: str = "1d", detail_level: str = "compact",
+                        save_analysis: bool = True) -> dict:
+    """正式分析封包（backend 先完成大部分工作）。
+
+    market: osaka | taiwan。target 例：OSE_NIKKEI225_MICRO_FUTURES / 3706.TW。
+    horizon: 1d/2d/5d/10d。detail_level: compact | normal | audit。
+    ^N225 只能是 PROXY/REFERENCE，不得當 execution target。
+    """
+    from market_ai_hub.packet.builder import build_analysis_packet
+
+    return build_analysis_packet(market=market, target=target, horizon=horizon,
+                                 detail_level=detail_level, save_analysis=save_analysis)
+
+
+@mcp.tool()
+def get_data_coverage() -> dict:
+    """大阪微型日經各 factor 資料覆蓋摘要（LIVE_VERIFIED/CONTRACT_ONLY/NEEDS_CONFIG/...）。不得隱藏缺口。"""
+    from market_ai_hub.targets.coverage import LiveCoverageAuditor, LIVE_VERIFIED
+
+    overrides = {
+        "Micro settlement": {"status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
+        "VIX": {"status": LIVE_VERIFIED, "source": "Cboe official"},
+        "CPI": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
+        "NFP": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
+    }
+    recs = LiveCoverageAuditor().audit_osaka(overrides)
+    return {"factors": [r.model_dump() for r in recs],
+            "summary": LiveCoverageAuditor().summary([r for r in recs])}
+
+
+@mcp.tool()
+def get_event_calendar(days: int = 14, top_n: int = 10) -> dict:
+    """近期重要官方事件日曆（BOJ/Fed/CPI/NFP/PCE/GDP/MOF），只回 Top-N。"""
+    from market_ai_hub.packet.builder import _event_snapshot
+
+    return {"events": _event_snapshot(top_n=top_n), "days": days}
+
+
+@mcp.tool()
+def get_official_release_snapshot() -> dict:
+    """官方 macro 來源狀態快照（LIVE_VERIFIED / NEEDS_CONFIG / CONTRACT_ONLY）。"""
+    from market_ai_hub.targets.macro import PROVIDER_STATUS
+
+    return {"providers": PROVIDER_STATUS}
+
+
+@mcp.tool()
+def get_target_instrument_state() -> dict:
+    """真正交易標的狀態（OSE_NIKKEI225_MICRO_FUTURES）+ Micro settlement + 角色標記。"""
+    from market_ai_hub.targets.contract import TargetInstrumentContract, role_of
+    from market_ai_hub.packet.builder import _load_latest_micro_settlement
+
+    contract = TargetInstrumentContract()
+    micro = _load_latest_micro_settlement()
+    return {
+        "contract": contract.model_dump(),
+        "latest_micro_settlement": micro,
+        "roles": {
+            "OSE_NIKKEI225_MICRO_FUTURES": role_of("OSE_NIKKEI225_MICRO_FUTURES"),
+            "^N225": role_of("^N225"),
+            "NIKKEI_SPOT": role_of("NIKKEI_SPOT"),
+        },
+        "note": "^N225 為 PROXY，非 Micro 成交價",
+    }
+
+
+@mcp.tool()
+def get_model_leaderboard(target: str = "", horizon: str = "") -> dict:
+    """模型 leaderboard（tournament PerformanceStore，含 BEST_BASELINE）。"""
+    from market_ai_hub.research.tournament.performance_store import PerformanceStore
+
+    rows = PerformanceStore().leaderboard(target=target or None, horizon=horizon or None)
+    return {"records": rows, "note": "performance store（樣本不足不宣稱 edge）"}
+
+
+@mcp.tool()
+def get_forward_test_status() -> dict:
+    """Forward test 註冊狀態（Prediction Registry 中 joint/scenario/ensemble 預測是否已結算）。"""
+    from market_ai_hub.research.registry import PredictionRegistry
+
+    reg = PredictionRegistry()
+    preds = reg.list_predictions(settled=None, limit=200)
+    by_task: dict = {}
+    for p in preds:
+        t = p.get("model_task", "unknown")
+        by_task.setdefault(t, {"registered": 0, "settled": 0})
+        by_task[t]["registered"] += 1
+        if p.get("settled"):
+            by_task[t]["settled"] += 1
+    return {"forward_test_by_task": by_task,
+            "note": "forward paper 累積中；尚不足以宣稱 ensemble 提高預測能力"}
+
+
+@mcp.tool()
+def get_analysis_archive_status() -> dict:
+    """Analysis Archive 狀態（不可變分析 / append-only outcome / reanalysis）。"""
+    from market_ai_hub.automation.archive import AnalysisArchive
+
+    a = AnalysisArchive()
+    unsettled = a.unsettled_ids()
+    return {
+        "unsettled_count": len(unsettled),
+        "unsettled_ids": unsettled[:20],
+        "note": "archive 不可變；outcome append-only；reanalysis 以 supersedes 記錄",
+    }
+
+
 def main_sync() -> None:
     import asyncio
 

@@ -1,0 +1,114 @@
+# PUBLICATION EXCLUDE MANIFEST — 明確不得提交 GitHub 的項目
+# 產生於 Phase 2I-B。這些項目由 .gitignore 排除；提交前請二次確認。
+
+# — model weights / checkpoints（NEVER commit）—
+models/cache/**
+models/checkpoints/**
+checkpoints/**
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+
+# — 市場資料 / licensed data（NEVER commit）—
+data/raw/**
+data/processed/**
+data/cache/**
+data/private/**
+data/registry/**
+data/tournament/**
+data/feature_store/**
+data/analysis_archive/**
+data/strategy/**
+data/events/**
+data/normalized/**
+data/features/**
+data/predictions/**
+data/manifests/**
+*.parquet
+*.feather
+
+# — 資料庫 / 本地 DB —
+*.duckdb
+*.sqlite
+*.sqlite3
+*.db
+
+# — credentials / secrets —
+.env
+.env.*（除 .env.example）
+*.key
+*.pem
+*.pfx
+*.crt
+credentials/**
+secrets/**
+
+# — logs / artifacts —
+logs/**
+*.log
+mlruns/**
+output/**
+outputs/**
+
+# — 第三方 vendor / 外部 repo —
+external/fincast/**
+Yuanta vendor/**
+broker metadata/**
+Yuanta proprietary API specifications (PDF/docs)
+Yuanta Web API internal docs
+private uploaded Yuanta PDF
+Microsoft.WebView2.FixedVersionRuntime*.cab
+
+# Yuanta proprietary SDK binaries (NEVER commit) — Phase 2Y-H
+YuantaQuote_v2.1.2.9.ocx
+YuantaQuote_v2.1.2.7.ocx
+YuantaOrd.ocx
+YuantaOrd64.ocx
+YuantaCAPIDLL*.dll
+YuantaOrdLib*.dll
+YuantaCAPIServiSignAdapterSetup.exe
+YuantaOneAPI_*.zip
+YuantaSparkAPI_*.zip
+元大行情API.pdf
+元大BToCAPI格式.pdf
+元大API交易PYTHON注意事項.docx
+*.ocx
+*.tlb
+
+# — 本地環境 / 備份 —
+.venv/**
+.venv-fincast/**
+.venv-yuanta-futures-x86/**
+.remediation_backup_*/
+environment_export/**
+MARKET_AI_BACKUP/**
+.opencode/**
+# Phase 2V-B.1 ?�現??proprietary 檔�?
+D:\data\N225microf_*.zip
+D:\data\N225minif_*.zip
+D:\data\225mini*d.xls
+D:\data\*_download*.py
+D:\QROS\data\derived\jnu_225labo*
+D:\QROS\data\derived\jnu_basis_change_g1*
+D:\QROS\data\derived\jnu_boj_mpm*
+D:\QROS\data\derived\jnu_momrev*
+D:\QROS\data\derived\jnu_overnight_overreaction*
+D:\QROS\data\derived\jnu_prior_night_usdjpy*
+D:\QROS\data\model_lab\backtests\unified_data\unified_ohlcv_inst_rev.parquet
+D:\QROS\data\model_lab\backtests\unified_data\pb_daily_cache.json
+D:\QROS\data\model_lab\evidence\jpx_ose_session_semantics\*.html
+D:\QROS\data\model_lab\evidence\jpx_ose_session_semantics\jpx_sitemap.xml
+D:\QROS\data\model_lab\handoff\*.md
+D:\QROS\data\model_lab\contracts\*.json
+D:\QROS\data\metadata\*.json
+D:\QROS\data\metadata\artifacts\*.json
+225LABO_MARKET_DATA_PRIVATE_LOCAL_ONLY
+
+# Phase 2V-E 225LABO private data boundary (LOCAL_ONLY, never GitHub)
+D:\MARKET_AI_HUB_PRIVATE_INBOX\**
+data\raw\ylab225\**
+data\normalized\ose_micro\**
+225LABO_MARKET_DATA_PRIVATE_LOCAL_ONLY

@@ -1,0 +1,59 @@
+# MARKET_AI_HUB — Release Candidate Manifest（machine-readable）
+schema_version: 1
+release_candidate: "Phase2-RC1"
+phase: "2Z"
+build_id: "ccabe1e1552d9ae7"
+python: "3.12.13"
+test_count: 503
+mcp_tool_count: 21
+skill_count: 3
+
+primary_target: "OSE_NIKKEI225_MICRO_FUTURES"
+
+models_enabled:
+  - chronos-2
+  - timesfm-3.0
+  - xgboost
+  - lightgbm
+  - nhits
+  - nbeatsx
+models_optional:
+  - fincast
+models_disabled:
+  - kronos-tw
+  - sundial
+  - moirai-2
+  - ttm
+  - tinytimemixer
+
+data_providers:
+  live_verified: [JPX settlement, JPX volume, JPX OI, BLS, Cboe, SEC EDGAR, BOJ]
+  needs_config: [BEA, e-Stat, EIA, EDINET]
+  contract_only: [JPX OHLC, JPX investor flow, Fed FOMC, MOF, CFTC]
+
+integrations:
+  tradingview:
+    status: OPTIONAL
+    enabled: false
+    note: "免費方案 15 分鐘延遲；pin c05b8f5755..."
+  yuanta:
+    securities_spark: AUTH_VERIFIED
+    futures_spark: "0112 observed / CONTRADICTION / NOT RESOLVED"
+    legacy_quote_tplus1: SERVER_CONFIRMED
+    legacy_quote_t: REQUIRES_SESSION_AWARE_RETEST
+    legacy_trading: DOCUMENTED_ONLY
+    ose_micro_public_code: JNU
+    ose_micro_spark_stkcode: UNVERIFIED
+
+known_limitations:
+  - "per-contract OSE Micro OHLC unavailable (settlement=close proxy)"
+  - "Dynamic Ensemble UNVALIDATED_FORWARD"
+  - "BEA/e-Stat/EIA/EDINET needs config"
+  - "TradingView 15-min delayed"
+  - "SPARK Futures 0112 unresolved"
+
+deferred_validations:
+  - "Legacy Quote T session retest (正常 T 時段)"
+
+security_status: PASS
+publication_ready: false   # 本棒不 push；下一棒才正式發布

@@ -64,6 +64,7 @@ def test_get_system_info():
 
 def test_get_data_source_status():
     st = asyncio.run(_call_tool("get_data_source_status"))
-    assert st["jquants"]["status"] == "disabled"
+    # Phase 2B：J-Quants 改為 Free-tier 支援（無 key → needs_config）
+    assert st["jquants"]["status"] in ("needs_config", "ok")
     assert st["broker"]["status"] == "disabled"
     assert st["tradingview"]["status"] == "disabled"

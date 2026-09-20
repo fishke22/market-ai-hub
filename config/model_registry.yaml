@@ -1,0 +1,239 @@
+# MARKET_AI_HUB — Model Registry（Phase 2D）
+# 每個模型記錄 license / hardware / 狀態。RTX 4060 Ti 16GB 為本機硬體上限。
+# 禁止為了硬跑模型造成長時間 OOM / swap。
+
+schema_version: 1
+hardware_limit_vram_mb: 16380
+
+models:
+  - name: chronos-2
+    task: PRICE_FORECAST
+    provider: amazon
+    repo: https://huggingface.co/amazon/chronos-2
+    model_id: amazon/chronos-2
+    revision: 29ec3766d36d6f73f0696f85560a422f50e8498c
+    code_license: Apache-2.0
+    weight_license: Apache-2.0
+    commercial_use: true
+    training_start: unknown
+    training_cutoff: unknown
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: false
+    supports_probabilistic: true
+    supports_finetune: true
+    estimated_vram_mb: 1200
+    status: AVAILABLE
+
+  - name: timesfm-3.0
+    task: PRICE_FORECAST
+    provider: google
+    repo: https://huggingface.co/google/timesfm-3.0-pytorch
+    model_id: google/timesfm-3.0-pytorch
+    revision: 43046b85ec22d584a13f8098c2ed39c889e129c2
+    code_license: Apache-2.0
+    weight_license: timesfm-non-commercial-license-v1.0
+    commercial_use: false
+    training_start: unknown
+    training_cutoff: unknown
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: true
+    supports_finetune: true
+    estimated_vram_mb: 3000
+    status: AVAILABLE
+
+  - name: xgboost
+    task: DIRECTION_CLASSIFICATION
+    provider: xgboost
+    repo: https://github.com/dmlc/xgboost
+    model_id: ""
+    revision: 3.4.1
+    code_license: Apache-2.0
+    weight_license: n/a（無 pretrained weights）
+    commercial_use: true
+    training_start: n/a
+    training_cutoff: per-fit（train window 末端）
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: false
+    supports_finetune: n/a
+    estimated_vram_mb: 0
+    status: AVAILABLE
+
+  - name: lightgbm
+    task: DIRECTION_CLASSIFICATION
+    provider: microsoft
+    repo: https://github.com/microsoft/LightGBM
+    model_id: ""
+    revision: 4.7.0
+    code_license: MIT
+    weight_license: n/a
+    commercial_use: true
+    training_start: n/a
+    training_cutoff: per-fit
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: false
+    supports_finetune: n/a
+    estimated_vram_mb: 0
+    status: AVAILABLE
+
+  - name: fincast
+    task: PRICE_FORECAST
+    provider: vincent05r
+    repo: https://huggingface.co/Vincent05R/FinCast
+    model_id: Vincent05R/FinCast
+    revision: 2d7d90b159db8961d27c2cf165d51195902ef92b
+    code_license: Apache-2.0（repo）；README 標 research/education
+    weight_license: Apache-2.0（repo）/ research-only
+    commercial_use: false
+    training_start: unknown
+    training_cutoff: unknown
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: false
+    supports_finetune: true
+    estimated_vram_mb: 4000（CPU bridge）
+    status: PARTIAL
+
+  - name: kronos-tw
+    task: PRICE_FORECAST
+    provider: talant28
+    repo: https://huggingface.co/talant28/Kronos-TW-Predictor
+    model_id: talant28/Kronos-TW-Predictor
+    revision: 6e66d3c16b25
+    code_license: MIT
+    weight_license: MIT
+    commercial_use: true
+    training_start: 2010-01-01
+    training_cutoff: 2024-12-31
+    supported_horizons: ["1d"]
+    input_frequency: daily
+    supports_covariates: false
+    supports_probabilistic: false
+    supports_finetune: unknown
+    estimated_vram_mb: unknown
+    status: CHALLENGER
+    note: "需搭配 talant28/Kronos-TW-Tokenizer；乾淨 OOS 需 2025+"
+
+  - name: kronos-tw-tokenizer
+    task: TOKENIZER
+    provider: talant28
+    repo: https://huggingface.co/talant28/Kronos-TW-Tokenizer
+    model_id: talant28/Kronos-TW-Tokenizer
+    revision: a5ae468e6358
+    code_license: MIT
+    weight_license: MIT
+    commercial_use: true
+    training_start: 2010-01-01
+    training_cutoff: 2024-12-31
+    supported_horizons: []
+    input_frequency: daily
+    supports_covariates: false
+    supports_probabilistic: false
+    supports_finetune: false
+    estimated_vram_mb: 100
+    status: CHALLENGER
+
+  - name: sundial
+    task: PRICE_FORECAST
+    provider: thuml
+    repo: https://huggingface.co/thuml/sundial-base-128m
+    model_id: thuml/sundial-base-128m
+    revision: 3212e4256449
+    code_license: Apache-2.0
+    weight_license: Apache-2.0
+    commercial_use: true
+    training_start: unknown
+    training_cutoff: unknown
+    supported_horizons: ["1d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: false
+    supports_probabilistic: true
+    supports_finetune: false
+    estimated_vram_mb: 1500
+    status: CHALLENGER
+    note: "公開 model（先前 401 為 repo id 打錯，非 gated）；需 trust_remote_code"
+
+  - name: tinytimemixer
+    task: PRICE_FORECAST
+    provider: ibm-granite
+    repo: https://huggingface.co/ibm-granite/granite-timeseries-ttm-v1
+    model_id: ibm-granite/granite-timeseries-ttm-v1
+    revision: f04bebdd4c13
+    code_license: Apache-2.0
+    weight_license: Apache-2.0
+    commercial_use: true
+    training_start: unknown
+    training_cutoff: unknown
+    supported_horizons: ["1d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: false
+    supports_probabilistic: false
+    supports_finetune: false
+    estimated_vram_mb: 300
+    status: CHALLENGER
+    note: "DEFERRED_DEPENDENCY_CONFLICT：granite-tsfm 會將 torch 釘在 2.11（與 V1 cu130 衝突），未強裝"
+
+  - name: nhits
+    task: PRICE_FORECAST
+    provider: nixtla
+    repo: https://github.com/Nixtla/neuralforecast
+    model_id: ""
+    revision: 3.2.2
+    code_license: Apache-2.0
+    weight_license: n/a（fit-on-the-fly，無 pretrained weights）
+    commercial_use: true
+    training_start: n/a
+    training_cutoff: per-fit
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: false
+    supports_finetune: n/a
+    estimated_vram_mb: 1000
+    status: CHALLENGER
+
+  - name: nbeatsx
+    task: PRICE_FORECAST
+    provider: nixtla
+    repo: https://github.com/Nixtla/neuralforecast
+    model_id: ""
+    revision: 3.2.2
+    code_license: Apache-2.0
+    weight_license: n/a（fit-on-the-fly）
+    commercial_use: true
+    training_start: n/a
+    training_cutoff: per-fit
+    supported_horizons: ["1d", "2d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: false
+    supports_finetune: n/a
+    estimated_vram_mb: 1000
+    status: CHALLENGER
+
+  - name: moirai-2
+    task: PRICE_FORECAST
+    provider: salesforce
+    repo: https://huggingface.co/Salesforce/moirai-2.0-R-small
+    model_id: Salesforce/moirai-2.0-R-small
+    revision: 30f43ff08c84
+    code_license: Apache-2.0（uni2ts repo）
+    weight_license: CC-BY-NC-4.0
+    commercial_use: false
+    training_start: unknown
+    training_cutoff: unknown
+    supported_horizons: ["1d", "5d", "10d"]
+    input_frequency: daily
+    supports_covariates: true
+    supports_probabilistic: true
+    supports_finetune: true
+    estimated_vram_mb: 500
+    status: CHALLENGER
+    note: "NONCOMMERCIAL_RESEARCH_ONLY；公開下載但權重非商業，不得重新發布"
