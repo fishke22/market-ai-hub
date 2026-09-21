@@ -1,10 +1,11 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 2Q-F.6（Final Public Response Contract Closure + MCP Routing Lockdown + Secure FRED/FinMind Credential Setup）**
-- Gate: **PHASE2QF6_FINAL_UAT_PREP_PASS**（最近；前置 PHASE2QF5_PUBLIC_SAFE_PASS）
+- Current phase: **Phase 2Q-F.6.1（Credential UX Closure + WinCred Post-Install Verification）**
+- Gate: **PHASE2QF61_CREDENTIAL_UX_PASS**（最近；前置 PHASE2QF6_FINAL_UAT_PREP_PASS）
 - build_id：**1fa0f15a0764eb4f**（fingerprint 全部 runtime source + config）
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
-- Credential setup：`D:\MARKET_AI_HUB\.venv\Scripts\python.exe scripts\setup_api_credentials.py`
+- Credential setup：`D:\MARKET_AI_HUB\.venv\Scripts\python.exe scripts\setup_api_credentials.py`（`--status` 可查）
+- Credential 狀態：FRED_API_KEY = CONFIGURED（WINCRED）；FINMIND_API_TOKEN = CONFIGURED（WINCRED）
 
 ## Phase 2 全歷程 Gate
 
