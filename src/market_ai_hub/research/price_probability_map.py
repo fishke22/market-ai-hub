@@ -52,9 +52,12 @@ DISTRIBUTION_METHODS = ("EMPIRICAL", "MODEL_DISTRIBUTION", "GAUSSIAN_BASELINE_DI
 
 @dataclass
 class DistributionDiagnostics:
-    """§B13：分布診斷。sample 不足 → INSUFFICIENT_EVIDENCE。"""
+    """§B13/§3A.1 §7：分布診斷。sample 不足 → INSUFFICIENT_EVIDENCE。
 
-    method: str = "EMPIRICAL"
+    method default = NOT_ESTABLISHED（sample_size=0 不得叫 EMPIRICAL）。
+    """
+
+    method: str = "NOT_ESTABLISHED"  # NOT_ESTABLISHED / EMPIRICAL / MODEL_DISTRIBUTION / GAUSSIAN_BASELINE_DIAGNOSTIC
     sample_size: int = 0
     skewness: float | None = None
     excess_kurtosis: float | None = None
@@ -89,14 +92,17 @@ class ZoneProbability:
 
 @dataclass
 class ProbabilityMap:
-    """§B8/§B9-§B11：Probability Map（versioned）。"""
+    """§B8/§B9-§B11：Probability Map（versioned）。
+
+    3A.1：無 distribution → calibration_status=INSUFFICIENT_EVIDENCE、distribution_method=NOT_ESTABLISHED。
+    """
 
     instrument: str
     target_family: str
     horizon: str
     zones: list[ZoneProbability] = field(default_factory=list)
-    calibration_status: str = "UNCALIBRATED"
-    distribution_method: str = "EMPIRICAL"
+    calibration_status: str = "INSUFFICIENT_EVIDENCE"  # 無 distribution 時非 UNCALIBRATED
+    distribution_method: str = "NOT_ESTABLISHED"
     version: str = PRICE_PROBABILITY_MAP_VERSION
 
     def public_view(self) -> dict:
@@ -148,10 +154,14 @@ class PriceMap:
     distribution_center: dict = field(default_factory=dict)  # predictive_mean/median/mode
     zones: dict = field(default_factory=dict)
     zone_boundaries: dict = field(default_factory=dict)
-    market_state: str = "NEUTRAL_ZONE"
+    # 3A.1 §4-§6/§11：fail-closed defaults（未評估 ≠ NEUTRAL/RANGE/NORMAL）
+    market_state: str | None = None
+    market_state_status: str = "NOT_EVALUATED"  # NOT_EVALUATED / EVALUATED
     state_is_trade_instruction: bool = False  # §B2
-    regime: str = "RANGE_LOW_VOL"
-    model_failure_status: str = "NORMAL"
+    regime: str | None = None
+    regime_status: str = "NOT_EVALUATED"  # NOT_EVALUATED / EVALUATED
+    model_failure_state: str | None = None
+    model_failure_evaluation_status: str = "NOT_EVALUATED"  # NOT_EVALUATED / EVALUATED
     confirmation_status: str = "NOT_ESTABLISHED"  # §B3
     data_provenance: dict = field(default_factory=dict)
     evidence_status: str = "NOT_YET_VALIDATED"
@@ -159,6 +169,7 @@ class PriceMap:
     probability_map: ProbabilityMap | None = None
     reward_risk_reference: dict = field(default_factory=dict)
     actionability_status: str = "NOT_VALIDATED"  # §B19
+    strategy_candidate: str = "NONE"  # §12：regime 未評估 → NONE
     profile: dict = field(default_factory=dict)
     version: str = PRICE_PROBABILITY_MAP_VERSION
 
@@ -167,25 +178,54 @@ class PriceMap:
         return d
 
 
-# ── §B5：profiles ──
+# ── §B5/§3A.1 §2：三個 first-class profiles（不得跨 family fallback）──
 PROFILES = {
     "TAIWAN_STOCK_PROFILE": {
+        "target_family": "TAIWAN_STOCK",
         "version": "3A.1",
         "structural_asymmetry": True,
         "note": "equity: structural asymmetry research allowed; long/short not symmetric",
     },
+    "TAIWAN_INDEX_PROFILE": {
+        "target_family": "TAIWAN_INDEX",
+        "version": "3A.1",
+        "forecast_reference_target": "TAIEX",
+        "execution_instruments": ["TX", "MTX", "TMF"],
+        "cash_index_executable": False,
+        "execution_validation": "NOT_ESTABLISHED",
+        "structural_asymmetry": True,
+        "note": "TAIEX cash index forecast/reference (non-executable); execution via TX/MTX/TMF; "
+                "equity-index semantics, asymmetric",
+    },
     "OSAKA_MICRO_PROFILE": {
+        "target_family": "OSAKA_MICRO",
         "version": "3A.1",
         "structural_asymmetry": False,
         "note": "futures: long/short more symmetric research assumption allowed",
     },
 }
 
+UNKNOWN_PROFILE = {
+    "target_family": "UNKNOWN",
+    "version": "3A.1",
+    "status": "NOT_ESTABLISHED",
+    "actionability": "NOT_VALIDATED",
+    "note": "unknown target_family; no family-specific assumptions",
+}
+
+_FAMILY_TO_PROFILE = {
+    "TAIWAN_STOCK": "TAIWAN_STOCK_PROFILE",
+    "TAIWAN_INDEX": "TAIWAN_INDEX_PROFILE",
+    "OSAKA_MICRO": "OSAKA_MICRO_PROFILE",
+}
+
 
 def profile_for(target_family: str) -> dict:
-    if target_family == "TAIWAN_STOCK":
-        return dict(PROFILES["TAIWAN_STOCK_PROFILE"])
-    return dict(PROFILES["OSAKA_MICRO_PROFILE"])
+    """§3A.1 §1-§3：target-family 明確映射；未知 family → fail closed（不 fallback 大阪）。"""
+    name = _FAMILY_TO_PROFILE.get(target_family)
+    if name is None:
+        raise ValueError(f"unknown target_family: {target_family!r} (no cross-family fallback)")
+    return dict(PROFILES[name])
 
 
 # ── §B20：strategy switching（candidate，不是 instruction）──
@@ -198,10 +238,15 @@ STRATEGY_SWITCHING = {
 }
 
 
-def strategy_candidate_for(regime: str) -> dict:
+def strategy_candidate_for(regime: str | None, regime_status: str = "NOT_EVALUATED") -> dict:
+    """§12：regime 未評估 → NONE（不得因 default regime 給 mean_reversion_candidate）。"""
+    if regime_status != "EVALUATED" or regime is None:
+        return {"regime": regime, "regime_status": regime_status, "candidate": "NONE",
+                "is_instruction": False, "note": "regime not evaluated; no candidate"}
     return {
         "regime": regime,
-        "candidate": STRATEGY_SWITCHING.get(regime, "none"),
+        "regime_status": regime_status,
+        "candidate": STRATEGY_SWITCHING.get(regime, "NONE"),
         "is_instruction": False,
         "note": "research candidate only; not a trade instruction",
     }
@@ -232,16 +277,23 @@ def six_state_research_view(
     reference_price: float | None,
     distribution_center: dict | None = None,
     zone_boundaries: dict | None = None,
-    market_state: str = "NEUTRAL_ZONE",
-    regime: str = "RANGE_LOW_VOL",
-    model_failure_status: str = "NORMAL",
+    market_state: str | None = None,
+    regime: str | None = None,
+    model_failure_state: str | None = None,
     diagnostics: DistributionDiagnostics | None = None,
 ) -> PriceMap:
-    """建立 research PriceMap（不含任何 trade instruction / 個人化下單）。"""
-    if market_state not in MARKET_STATES:
+    """建立 research PriceMap（不含任何 trade instruction / 個人化下單）。
+
+    3A.1：omitted argument → 保持 NOT_EVALUATED（不自動 NEUTRAL/RANGE/NORMAL）。
+    只有明確傳入才驗證 enum 並標 EVALUATED。
+    """
+    if market_state is not None and market_state not in MARKET_STATES:
         raise ValueError(f"unknown market_state: {market_state}")
-    if regime not in REGIMES:
+    if regime is not None and regime not in REGIMES:
         raise ValueError(f"unknown regime: {regime}")
+    if model_failure_state is not None and model_failure_state not in MODEL_FAILURE_STATUSES:
+        raise ValueError(f"unknown model_failure_state: {model_failure_state}")
+    regime_status = "EVALUATED" if regime is not None else "NOT_EVALUATED"
     return PriceMap(
         instrument=instrument,
         target_family=target_family,
@@ -250,11 +302,28 @@ def six_state_research_view(
         distribution_center=distribution_center or {},
         zone_boundaries=zone_boundaries or {},
         market_state=market_state,
+        market_state_status="EVALUATED" if market_state is not None else "NOT_EVALUATED",
         state_is_trade_instruction=False,
         regime=regime,
-        model_failure_status=model_failure_status,
+        regime_status=regime_status,
+        model_failure_state=model_failure_state,
+        model_failure_evaluation_status="EVALUATED" if model_failure_state is not None else "NOT_EVALUATED",
         distribution_diagnostics=diagnostics or DistributionDiagnostics(),
+        strategy_candidate=strategy_candidate_for(regime, regime_status)["candidate"],
         profile=profile_for(target_family),
+    )
+
+
+def empty_price_map(
+    instrument: str,
+    target_family: str,
+    horizon: str,
+    reference_price: float | None = None,
+) -> PriceMap:
+    """§9：canonical fail-closed PriceMap（只有 instrument/family/horizon/reference price）。"""
+    return six_state_research_view(
+        target_family=target_family, instrument=instrument, horizon=horizon,
+        reference_price=reference_price,
     )
 
 
@@ -271,8 +340,8 @@ def probability_from_quantiles_only(zones: list[str], instrument: str = "", targ
     return ProbabilityMap(
         instrument=instrument, target_family=target_family, horizon=horizon,
         zones=[ZoneProbability(zone=z, availability_status="NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION",
-                               calibration_status="UNCALIBRATED", method="QUANTILES_ONLY")
+                               calibration_status="INSUFFICIENT_EVIDENCE", method="QUANTILES_ONLY")
                for z in zones],
-        calibration_status="UNCALIBRATED",
+        calibration_status="INSUFFICIENT_EVIDENCE",
         distribution_method="QUANTILES_ONLY",
     )
