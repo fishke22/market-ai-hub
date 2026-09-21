@@ -1,12 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 3A.2（Typed Evidence Contract + Calibration Safety Closure + Distribution Schema Consistency + Evaluation Provenance）**
-- Gate: **PHASE3A2_EVIDENCE_CONTRACT_PASS**（最近；前置 PHASE3A1_SEMANTIC_DEFAULTS_PASS）
-- build_id：**e8b30b454b3b574b**（fingerprint 全部 runtime source + config）
-- Price/Probability Map schema version：**3A.2**
+- Current phase: **Phase 3A.2.1（Adversarial Probability Contract Closure + Scope Enforcement + Sample Sufficiency Enforcement + Status/Reason Consistency + Path Capability Semantics）**
+- Gate: **PHASE3A21_ADVERSARIAL_CONTRACT_CLOSURE_PASS**（最近；前置 PHASE3A2_EVIDENCE_CONTRACT_PASS）
+- build_id：**46538342bd31e6bb**（fingerprint 全部 runtime source + config）
+- Price/Probability Map schema version：**3A.2.1**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
-- Probability availability：全部 NOT_AVAILABLE（QUANTILES_ONLY / INSUFFICIENT_DISTRIBUTION；無 calibration）
+- Probability availability：全部 NOT_AVAILABLE（capability/scope/sample/calibration gate；無 calibration）
 
 ## Phase 2 全歷程 Gate
 

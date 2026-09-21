@@ -146,7 +146,8 @@ def test_six_state_view_enum_without_evidence_is_unverified():
 def test_six_state_view_with_evidence_is_evaluated():
     from market_ai_hub.research.price_probability_map import EvaluationEvidence, six_state_research_view
 
-    ev = EvaluationEvidence(status="ESTABLISHED", method="detector", sample_count=100)
+    ev = EvaluationEvidence(status="EVALUATED", method="detector", method_version="v1",
+                            data_version="d1", sample_count=100, evaluated_at="2026-09-21", source="regime")
     pm = six_state_research_view("TAIWAN_STOCK", "3706.TW", "1d", 79.8,
                                  market_state="BUY_ZONE", market_state_evidence=ev,
                                  regime="RANGE_LOW_VOL", regime_evidence=ev)
@@ -184,4 +185,4 @@ def test_existing_invariants_preserved():
     pbm = probability_from_quantiles_only(["BUY_ZONE"])
     z = pbm.zones[0]
     assert hasattr(z, "terminal") and hasattr(z, "touch") and hasattr(z, "first_passage")
-    assert pbm.public_view()["zones"][0]["terminal_status"] == "NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION"
+    assert pbm.public_view()["zones"][0]["terminal_status"] == "NOT_AVAILABLE_UNSUPPORTED_CAPABILITY"

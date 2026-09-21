@@ -38,8 +38,41 @@ Capability matrix (`distribution_capability`):
 | `NONE` | no | no | no |
 | `QUANTILES_ONLY` | no | no | no |
 | `TERMINAL_SAMPLES` | yes | no | no |
+| `TERMINAL_DISTRIBUTION` | yes | no | no |
 | `PATH_SAMPLES` | yes | yes | yes |
-| `FULL_DISTRIBUTION` | yes | yes | yes |
+| `PATH_DISTRIBUTION` | yes | yes | yes |
+| `FULL_DISTRIBUTION` | yes | no | no |
+
+## Adversarial contract closure (3A.2.1)
+
+Schema version `3A.2.1`. Closes the failure modes where a well-formed but out-of-scope or
+unsupported probability could surface as a public number.
+
+1. **Scope is enforced, not assumed.** A probability is public only when its
+   `ProbabilityProvenance` matches the map on normalized `target_family` / `instrument` / `horizon`.
+   Any mismatch → `NOT_AVAILABLE_SCOPE_MISMATCH` with `TARGET_/INSTRUMENT_/HORIZON_SCOPE_MISMATCH`
+   reason codes. (`1D`≡`1d`, `3706`≡`3706.TW`.)
+2. **Sample sufficiency is numeric.** `SUFFICIENT` requires `minimum_required_sample > 0` **and**
+   `sample_count >= minimum` **and** `effective_sample_count >= minimum`. A zero-sample record
+   labelled `SUFFICIENT` is rejected → `INSUFFICIENT_SAMPLE`.
+3. **Public status is derived, never echoed.** `ProbabilityValue.status` is internal; the public
+   status is computed from the gate chain (`NOT_AVAILABLE_<REASON>`). `AVAILABLE` in the internal
+   record does not leak out.
+4. **Reason codes are truthful.** Every failed gate appends its code; the public view carries the
+   full accumulated list.
+5. **Enums normalize or reject.** `VALID`/`ESTABLISHED` → `EVALUATED`; unknown values raise.
+   `EvaluationEvidence.is_valid()` requires `method_version` + `data_version` + `evaluated_at` +
+   `source` + `sample_count`.
+6. **Method ↔ capability consistency.** A distribution method may only claim capabilities in
+   `METHOD_CAPABILITY_RULES`; e.g. `QUANTILES_ONLY` cannot claim `PATH_SAMPLES`.
+7. **Path is a hard gate.** `touch` / `first_passage` require a path-capable distribution **and**
+   complete path metadata (`path_count`, `steps_per_path`, `bar_frequency`,
+   `target_market_calendar`, `session_semantics`, `generation_method`). `FULL_DISTRIBUTION` is
+   terminal-only and never implies path.
+8. **Calibration is scoped.** `SINGLE_INSTRUMENT` / `PANEL` / `GLOBAL` each require their own
+   evidence; a panel/global calibration without matching scope evidence grants nothing.
+9. **Provenance is cross-checked.** `distribution_method` must match the distribution record;
+   calibration method/version must be present.
 
 
 
