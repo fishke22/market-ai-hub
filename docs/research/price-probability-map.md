@@ -3,6 +3,22 @@
 > Phase 3A research architecture. **Not a live strategy.** All states/zones/probabilities are
 > research semantics; `state_is_trade_instruction = false`.
 
+## Semantic invariants (fail-closed)
+
+1. **Unknown is not Neutral.** No state evidence → `market_state = null`,
+   `market_state_status = NOT_EVALUATED` (never `NEUTRAL_ZONE`).
+2. **No regime evidence is not Range.** → `regime = null`, `regime_status = NOT_EVALUATED`
+   (never `RANGE_LOW_VOL`).
+3. **No failure evaluation is not Normal.** → `model_failure_state = null`,
+   `model_failure_evaluation_status = NOT_EVALUATED` (never `NORMAL`).
+4. **No samples is not Empirical distribution.** `sample_size = 0` → `method = NOT_ESTABLISHED`
+   (never `EMPIRICAL`); calibration `INSUFFICIENT_EVIDENCE` (never `UNCALIBRATED` when no
+   distribution exists).
+
+Target families are isolated: `TAIWAN_STOCK` / `TAIWAN_INDEX` / `OSAKA_MICRO` have distinct
+profiles; unknown family fails closed (no cross-family fallback).
+
+
 ## Purpose
 
 Upgrade from a single `point forecast` + `p10/p50/p90` to a structured research view:

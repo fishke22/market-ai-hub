@@ -141,9 +141,11 @@ def test_benchmark_registry_no_best_claim():
 def test_strategy_switching_not_instruction():
     from market_ai_hub.research.price_probability_map import strategy_candidate_for
 
-    c = strategy_candidate_for("RANGE_LOW_VOL")
+    c = strategy_candidate_for("RANGE_LOW_VOL", regime_status="EVALUATED")
     assert c["candidate"] == "mean_reversion_candidate"
     assert c["is_instruction"] is False
+    # regime 未評估 → NONE
+    assert strategy_candidate_for(None)["candidate"] == "NONE"
 
 
 # ── cross-ref：Taiwan truth not inherit Osaka ──
