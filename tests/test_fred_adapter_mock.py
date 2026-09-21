@@ -7,7 +7,9 @@ from market_ai_hub.providers.fred import FredProvider
 
 
 def test_status_without_key_needs_config(monkeypatch):
-    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    import market_ai_hub.providers.fred as fred_mod
+
+    monkeypatch.setattr(fred_mod, "get_secret", lambda n: "")
     assert FredProvider().status().status.value == "needs_config"
 
 
@@ -40,7 +42,9 @@ def test_fetch_series_mocked(monkeypatch):
 
 
 def test_fetch_series_no_key_raises(monkeypatch):
-    monkeypatch.delenv("FRED_API_KEY", raising=False)
+    import market_ai_hub.providers.fred as fred_mod
+
+    monkeypatch.setattr(fred_mod, "get_secret", lambda n: "")
     p = FredProvider()
     with pytest.raises(Exception):
         p.fetch_series("DGS10")

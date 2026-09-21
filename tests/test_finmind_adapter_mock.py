@@ -6,7 +6,9 @@ from market_ai_hub.providers.finmind import FinMindProvider
 
 
 def test_status_without_token_needs_config(monkeypatch):
-    monkeypatch.delenv("FINMIND_TOKEN", raising=False)
+    import market_ai_hub.providers.finmind as fm_mod
+
+    monkeypatch.setattr(fm_mod, "get_secret", lambda n: "")
     p = FinMindProvider()
     assert p.status().status.value == "needs_config"
 
