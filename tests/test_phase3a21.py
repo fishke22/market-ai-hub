@@ -32,8 +32,24 @@ def _pv(**kw):
     return ProbabilityValue(**base)
 
 
+def _cal_ev(ptype="TERMINAL", family="TAIWAN_STOCK", instrument="X", horizon="1d"):
+    from market_ai_hub.research.price_probability_map import CalibrationEvidence
+
+    return CalibrationEvidence(
+        status="CALIBRATED", calibration_domain="PRICE_DISTRIBUTION", probability_type=ptype,
+        method="isotonic", method_version="v1", calibration_version="c1",
+        model_id="m", model_version="v1", distribution_id="d1", distribution_version="v1",
+        dataset_version="d1", protocol_version="p1",
+        target_family=family, instrument=instrument, horizon=horizon, scope="SINGLE_INSTRUMENT",
+        fit_window_start="2026-01-01", fit_window_end="2026-06-30",
+        evaluation_window_start="2026-07-01", evaluation_window_end="2026-09-21",
+        fit_partition_role="CALIBRATION",
+        sample_count=100, effective_sample_count=100, minimum_required_sample=50,
+        sample_sufficiency_status="SUFFICIENT", evaluated_at="t", source="synthetic")
+
+
 def _pbm(*, zones=None, dist=None, cal="CALIBRATED", prov=None, scope="SINGLE_INSTRUMENT",
-         scope_ev=None, family="TAIWAN_STOCK", instrument="X", horizon="1d"):
+         scope_ev=None, family="TAIWAN_STOCK", instrument="X", horizon="1d", cev=None):
     from market_ai_hub.research.price_probability_map import (
         DistributionRecord, ProbabilityMap, ZoneProbability)
 
@@ -44,9 +60,14 @@ def _pbm(*, zones=None, dist=None, cal="CALIBRATED", prov=None, scope="SINGLE_IN
             distribution_id="d1", distribution_version="v1",
             sample_count=100, effective_sample_count=100, minimum_required_sample=50,
             sample_sufficiency_status="SUFFICIENT")
+    if zones is None:
+        pv = _pv()
+        if cev is not None:
+            pv.calibration_evidence = cev
+        zones = [ZoneProbability(zone="BUY_ZONE", terminal=pv)]
     return ProbabilityMap(
         instrument, family, horizon,
-        zones=zones or [ZoneProbability(zone="BUY_ZONE", terminal=_pv())],
+        zones=zones,
         distribution=dist,
         calibration_status=cal, calibration_scope=scope, calibration_scope_evidence=scope_ev or {},
         provenance=prov if prov is not None else _prov(family, instrument, horizon),
@@ -56,7 +77,7 @@ def _pbm(*, zones=None, dist=None, cal="CALIBRATED", prov=None, scope="SINGLE_IN
 # ── §25：scope mismatch ──
 
 def test_adversarial_scope_mismatch_blocked():
-    pbm = _pbm(prov=_prov("OTHER", "OTHER", "5d"))
+    pbm = _pbm(prov=_prov("OTHER", "OTHER", "5d"), cev=_cal_ev())
     pub = pbm.public_view()["zones"][0]
     assert "terminal_probability" not in pub
     assert pub["terminal_status"] == "NOT_AVAILABLE_SCOPE_MISMATCH"
@@ -66,13 +87,14 @@ def test_adversarial_scope_mismatch_blocked():
 
 def test_horizon_normalization_matches():
     # 1D == 1d
-    pbm = _pbm(horizon="1D", prov=_prov("TAIWAN_STOCK", "X", "1d"))
+    pbm = _pbm(horizon="1D", prov=_prov("TAIWAN_STOCK", "X", "1d"), cev=_cal_ev(horizon="1d"))
     assert "terminal_probability" in pbm.public_view()["zones"][0]
 
 
 def test_instrument_normalization_matches():
     # 3706 == 3706.TW
-    pbm = _pbm(instrument="3706", prov=_prov("TAIWAN_STOCK", "3706.TW", "1d"))
+    pbm = _pbm(instrument="3706", prov=_prov("TAIWAN_STOCK", "3706.TW", "1d"),
+               cev=_cal_ev(instrument="3706.TW"))
     assert "terminal_probability" in pbm.public_view()["zones"][0]
 
 
@@ -87,7 +109,7 @@ def test_adversarial_zero_sample_fake_sufficient():
     assert "INSUFFICIENT_SAMPLE" in pub["terminal_reason_codes"]
 
 
-# ── §27：AVAILABLE + UNCALIBRATED ──
+# ── §27：AVAILABLE + UNCALIBRATED（string 不再 authoritative）──
 
 def test_adversarial_available_but_uncalibrated():
     pv = _pv(calibration_status="UNCALIBRATED")
@@ -97,7 +119,7 @@ def test_adversarial_available_but_uncalibrated():
     pub = pbm.public_view()["zones"][0]
     assert pub["terminal_status"] != "AVAILABLE"
     assert "terminal_probability" not in pub
-    assert "UNCALIBRATED" in pub["terminal_reason_codes"]
+    assert "CALIBRATION_EVIDENCE_MISSING" in pub["terminal_reason_codes"]
 
 
 # ── §28：invalid enum ──
@@ -192,7 +214,7 @@ def test_path_metadata_present_allows_touch():
         distribution_id="d1", distribution_version="v1",
         sample_count=1000, effective_sample_count=1000, minimum_required_sample=100,
         sample_sufficiency_status="SUFFICIENT")
-    pbm = _pbm(dist=dist, zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv())])
+    pbm = _pbm(dist=dist, zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv(calibration_evidence=_cal_ev("TOUCH")))])
     assert pbm.public_view()["zones"][0].get("touch_probability") == 0.61
 
 
@@ -262,7 +284,7 @@ def test_current_all_probabilities_unavailable():
 def test_version_3a21():
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
 
-    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.2"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.3"
 
 
 # ── §32：existing invariants ──

@@ -37,6 +37,22 @@ def _complete_prov():
     )
 
 
+def _cal_ev(ptype="TERMINAL", family="TAIWAN_STOCK", instrument="X", horizon="1d"):
+    from market_ai_hub.research.price_probability_map import CalibrationEvidence
+
+    return CalibrationEvidence(
+        status="CALIBRATED", calibration_domain="PRICE_DISTRIBUTION", probability_type=ptype,
+        method="isotonic", method_version="v1", calibration_version="c1",
+        model_id="m", model_version="v1", distribution_id="d1", distribution_version="v1",
+        dataset_version="d1", protocol_version="p1",
+        target_family=family, instrument=instrument, horizon=horizon, scope="SINGLE_INSTRUMENT",
+        fit_window_start="2026-01-01", fit_window_end="2026-06-30",
+        evaluation_window_start="2026-07-01", evaluation_window_end="2026-09-21",
+        fit_partition_role="CALIBRATION",
+        sample_count=100, effective_sample_count=100, minimum_required_sample=50,
+        sample_sufficiency_status="SUFFICIENT", evaluated_at="2026-09-21", source="synthetic")
+
+
 def test_uncalibrated_no_public_percent():
     from market_ai_hub.research.price_probability_map import (
         DistributionRecord, ProbabilityMap, ProbabilityValue, ZoneProbability,
@@ -66,7 +82,7 @@ def test_calibrated_public_percent_ok():
         zones=[ZoneProbability(zone="BUY_ZONE", terminal=ProbabilityValue(
             value=0.18, status="AVAILABLE", calibration_status="CALIBRATED",
             sample_sufficiency_status="SUFFICIENT", sample_count=100, effective_sample_count=100,
-            minimum_required_sample=50))],
+            minimum_required_sample=50, calibration_evidence=_cal_ev()))],
         calibration_status="CALIBRATED",
         distribution=DistributionRecord(
             method="EMPIRICAL", capability="TERMINAL_SAMPLES",

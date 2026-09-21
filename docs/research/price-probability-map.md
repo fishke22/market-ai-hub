@@ -118,6 +118,42 @@ source — was not part of the public eligibility chain.
    `provenance_scope`, `distribution_scope`, `distribution_identity`, `market_semantics`,
    `calibration`, `calibration_scope`, `path`. Any critical check false → `eligible=false`.
 
+## Calibration evidence closure (3A.2.3)
+
+Schema version `3A.2.3`. Closes the hole where `CALIBRATED` was a caller-declared string with no
+typed proof that calibration was actually fit and evaluated.
+
+1. **CALIBRATED is evidence-derived, not caller-declared.** A public probability requires a typed
+   `CalibrationEvidence` with `status == CALIBRATED`. `ProbabilityMap.calibration_status` and
+   `ProbabilityValue.calibration_status` are compat summaries only. No evidence →
+   `CALIBRATION_EVIDENCE_MISSING`; non-`CALIBRATED` → `CALIBRATION_NOT_CALIBRATED`.
+2. **Terminal calibration is not Touch calibration.** Each probability type carries its own
+   `CalibrationEvidence` (`probability_type` ∈ `TERMINAL`/`TOUCH`/`FIRST_PASSAGE`); a terminal
+   evidence cannot vouch for touch (`CALIBRATION_TYPE_MISMATCH`).
+3. **Distribution samples are not calibration samples.** Three sample families are separate:
+   distribution sample, probability/event sample, and calibration evaluation sample. Calibration
+   evidence has its own numeric gate (`CALIBRATION_INSUFFICIENT_SAMPLE`).
+4. **Probability samples are not calibration samples.** A `ProbabilityValue` sample basis never
+   substitutes for calibration evaluation evidence.
+5. **Calibration identity is bound.** Evidence `distribution_id`/`distribution_version` must match
+   the distribution (`CALIBRATION_DISTRIBUTION_MISMATCH`); `model_id`/`model_version` must match the
+   provenance (`CALIBRATION_MODEL_MISMATCH`).
+6. **Calibration target/horizon is bound.** `SINGLE_INSTRUMENT` evidence must exact-match
+   `target_family`/`instrument`/`horizon` (`CALIBRATION_TARGET_SCOPE_MISMATCH`,
+   `CALIBRATION_HORIZON_SCOPE_MISMATCH`). A 3706·1d calibration never applies to 2330/TAIEX/5d/Osaka.
+7. **Panel calibration must bind family and horizon.** `PANEL` scope evidence requires
+   `universe_id` + `universe_version` + `members` + `target_families` + `supported_horizons` +
+   `calibration_domain` + `scope_version` (all mandatory). `GLOBAL` requires `scope_definition` +
+   `scope_version` + `supported_target_families` + `supported_horizons` + `calibration_domain`.
+   Missing any → `CALIBRATION_SCOPE_EVIDENCE_MISSING`.
+8. **Calibration fit data is not its evaluation data.** `fit_window_*` and
+   `evaluation_window_*` must not overlap (`CALIBRATION_TEMPORAL_LEAKAGE`). `FINAL_OOS` may never
+   fit calibration (`CALIBRATION_PARTITION_VIOLATION`).
+9. **Map-level status is derived.** `derived_calibration_summary()` returns
+   `NONE_CALIBRATED` / `PARTIALLY_CALIBRATED` / `CALIBRATED_FOR_TERMINAL_ONLY` /
+   `CALIBRATED_FOR_PATH_EVENTS` from actual per-type evidence; callers cannot declare a whole map
+   `CALIBRATED`.
+
 
 
 ## Purpose
