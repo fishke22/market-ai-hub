@@ -1,9 +1,10 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 2Q-F.5（Public MCP Safe View + Position-Aware Research Guard + Manual UAT Contract Closure）**
-- Gate: **PHASE2QF5_PUBLIC_SAFE_PASS**（最近；前置 PHASE2QF4_RUNTIME_OUTPUT_PASS）
-- build_id：**4286537b8a8ae4f7**（fingerprint 全部 runtime source + config）
-- Manual Cherry UAT：**RETEST_REQUIRED**
+- Current phase: **Phase 2Q-F.6（Final Public Response Contract Closure + MCP Routing Lockdown + Secure FRED/FinMind Credential Setup）**
+- Gate: **PHASE2QF6_FINAL_UAT_PREP_PASS**（最近；前置 PHASE2QF5_PUBLIC_SAFE_PASS）
+- build_id：**1fa0f15a0764eb4f**（fingerprint 全部 runtime source + config）
+- Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
+- Credential setup：`D:\MARKET_AI_HUB\.venv\Scripts\python.exe scripts\setup_api_credentials.py`
 
 ## Phase 2 全歷程 Gate
 
