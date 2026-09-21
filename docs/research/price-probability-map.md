@@ -74,6 +74,50 @@ unsupported probability could surface as a public number.
 9. **Provenance is cross-checked.** `distribution_method` must match the distribution record;
    calibration method/version must be present.
 
+## Distribution evidence closure (3A.2.2)
+
+Schema version `3A.2.2`. Closes the case where the distribution record — the actual evidence
+source — was not part of the public eligibility chain.
+
+1. **Three-way scope contract.** Public probability requires
+   `MAP == PROVENANCE == DISTRIBUTION` on canonicalized `target_family` / `instrument` / `horizon`.
+   Distribution mismatch → `DISTRIBUTION_TARGET_/INSTRUMENT_/HORIZON_SCOPE_MISMATCH`.
+2. **Distribution scope cannot be empty.** Any non-`NONE`/`QUANTILES_ONLY` distribution must carry
+   non-empty scope, else `MISSING_DISTRIBUTION_SCOPE`.
+3. **Distribution-level numeric sample gate.** `TERMINAL_SAMPLES` / `PATH_SAMPLES` require
+   `minimum_required_sample > 0` and both counts ≥ minimum and `SUFFICIENT`; else
+   `DISTRIBUTION_INSUFFICIENT_SAMPLE`. A `ProbabilityValue` can no longer self-declare sufficiency
+   while the underlying distribution has zero evidence.
+4. **Probability sample cannot exceed its source.** `TERMINAL_SAMPLES`: `pv.sample_count` ≤
+   `distribution.sample_count` (same for effective). `PATH_SAMPLES`: path basis ≤ `path_count`.
+   Violation → `PROBABILITY_SAMPLE_EXCEEDS_SOURCE`.
+5. **Analytic vs sampled.** `TERMINAL_DISTRIBUTION` / `PATH_DISTRIBUTION` may be analytic/model-based
+   and are not forced to carry Monte Carlo samples; their calibration evidence still must be real.
+6. **Distribution identity.** `distribution_id` / `distribution_version` must be present for a
+   public probability and must match the provenance (`MISSING_DISTRIBUTION_IDENTITY` /
+   `DISTRIBUTION_IDENTITY_MISMATCH`). Two distributions sharing only a `method` are not the same
+   evidence.
+7. **Market calendar / session isolation.** A central validator maps
+   (`target_family`, `instrument_role`) → (`target_market_calendar`, `session_semantics`):
+
+   | family | role | calendar | session |
+   |---|---|---|---|
+   | `TAIWAN_STOCK` | DIRECT | `XTAI` | `day` |
+   | `TAIWAN_INDEX` | DIRECT | `XTAI` | `day` |
+   | `OSAKA_MICRO` | DIRECT | `OSE_DERIVATIVES` | `day+night` |
+   | `OSAKA_MICRO` | PROXY | `XTKS` | `day` |
+
+   Mismatch → `MARKET_CALENDAR_MISMATCH` / `SESSION_SEMANTICS_MISMATCH`. A Taiwan stock path can
+   never use OSE day/night semantics; a direct Osaka Micro path can never use `XTKS`; an `^N225`
+   proxy uses `XTKS` but must be `PROXY_MODEL_REFERENCE`.
+8. **Typed calibration-scope reasons.** `PANEL` / `GLOBAL` scope failures report
+   `CALIBRATION_SCOPE_EVIDENCE_MISSING`, `CALIBRATION_UNIVERSE_MISMATCH`, or
+   `CALIBRATION_GLOBAL_SCOPE_MISMATCH` — never a bare `UNCALIBRATED`.
+9. **Extended eligibility checks.** `ProbabilityEligibilityResult.checks` now exposes
+   `capability`, `value`, `probability_sample`, `distribution_sample`, `provenance`,
+   `provenance_scope`, `distribution_scope`, `distribution_identity`, `market_semantics`,
+   `calibration`, `calibration_scope`, `path`. Any critical check false → `eligible=false`.
+
 
 
 ## Purpose

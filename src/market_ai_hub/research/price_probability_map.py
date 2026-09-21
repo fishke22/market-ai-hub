@@ -16,11 +16,11 @@ import math
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-PRICE_PROBABILITY_MAP_VERSION = "3A.2.1"
-ZONE_POLICY_VERSION = "3A.2.1"
-REGIME_VERSION = "3A.2.1"
-MODEL_FAILURE_RULE_VERSION = "3A.2.1"
-BENCHMARK_REGISTRY_VERSION = "3A.2.1"
+PRICE_PROBABILITY_MAP_VERSION = "3A.2.2"
+ZONE_POLICY_VERSION = "3A.2.2"
+REGIME_VERSION = "3A.2.2"
+MODEL_FAILURE_RULE_VERSION = "3A.2.2"
+BENCHMARK_REGISTRY_VERSION = "3A.2.2"
 
 # ── canonical distribution methods ──
 DISTRIBUTION_METHODS = (
@@ -79,12 +79,36 @@ REASON_CODES = (
     "HORIZON_SCOPE_MISMATCH", "INSTRUMENT_SCOPE_MISMATCH", "DISTRIBUTION_METHOD_MISMATCH",
     "CALIBRATION_PROVENANCE_MISSING", "CALIBRATION_DOMAIN_MISMATCH", "INVALID_VALUE",
     "NOT_EVALUATED", "METHOD_CAPABILITY_MISMATCH", "PATH_METADATA_MISSING",
+    # ── 3A.2.2 ──
+    "MISSING_DISTRIBUTION_SCOPE", "DISTRIBUTION_TARGET_SCOPE_MISMATCH",
+    "DISTRIBUTION_INSTRUMENT_SCOPE_MISMATCH", "DISTRIBUTION_HORIZON_SCOPE_MISMATCH",
+    "DISTRIBUTION_INSUFFICIENT_SAMPLE", "PROBABILITY_SAMPLE_EXCEEDS_SOURCE",
+    "DISTRIBUTION_IDENTITY_MISMATCH", "MISSING_DISTRIBUTION_IDENTITY",
+    "MARKET_CALENDAR_MISMATCH", "SESSION_SEMANTICS_MISMATCH", "FORECAST_SCOPE_MISMATCH",
+    "MISSING_INSTRUMENT_ROLE", "UNKNOWN_MARKET_SEMANTICS",
+    "CALIBRATION_SCOPE_EVIDENCE_MISSING", "CALIBRATION_UNIVERSE_MISMATCH",
+    "CALIBRATION_GLOBAL_SCOPE_MISMATCH",
 )
 
 CALIBRATION_DOMAINS = ("PRICE_DISTRIBUTION", "DIRECTION_CLASSIFICATION")
 CALIBRATION_STATUSES = ("UNCALIBRATED", "CALIBRATING", "CALIBRATED", "INSUFFICIENT_EVIDENCE")
 SAMPLE_SUFFICIENCY = ("SUFFICIENT", "INSUFFICIENT", "NOT_EVALUATED")
 CALIBRATION_SCOPES = ("SINGLE_INSTRUMENT", "PANEL", "GLOBAL")
+
+# ── 3A.2.2 §10-§14：instrument role / forecast scope（沿用現有 target semantics 語彙）──
+INSTRUMENT_ROLES = ("DIRECT", "PROXY")
+FORECAST_SCOPES = ("DIRECT_INSTRUMENT", "PROXY_MODEL_REFERENCE")
+_SAMPLING_CAPABILITIES = ("TERMINAL_SAMPLES", "PATH_SAMPLES")
+
+# canonical market semantics：family + role → (calendar, session_semantics)。
+# calendar 名稱沿用 services/calendar.py（XTAI=TWSE、XTKS=TSE cash、OSE_DERIVATIVES=OSE）。
+# ponytail: 小型 canonical 表；若 target 種類膨脹再改讀 config/primary_targets.yaml。
+_MARKET_SEMANTICS = {
+    ("TAIWAN_STOCK", "DIRECT"): ("XTAI", "day"),
+    ("TAIWAN_INDEX", "DIRECT"): ("XTAI", "day"),
+    ("OSAKA_MICRO", "DIRECT"): ("OSE_DERIVATIVES", "day+night"),
+    ("OSAKA_MICRO", "PROXY"): ("XTKS", "day"),
+}
 
 MARKET_STATES = ("BUY_ZONE", "NEUTRAL_ZONE", "PROFIT_ZONE", "BREAKOUT", "BREAKDOWN", "MODEL_FAILURE")
 REGIMES = ("RANGE_LOW_VOL", "BULL_TREND", "BEAR_TREND", "HIGH_VOL_EVENT", "ABNORMAL_MODEL_FAILURE")
@@ -144,6 +168,9 @@ class ProbabilityProvenance:
     target_family: str = ""
     instrument: str = ""
     horizon: str = ""
+    # ── 3A.2.2 §17：可追溯使用的 DistributionRecord ──
+    distribution_id: str = ""
+    distribution_version: str = ""
 
     def is_complete(self) -> bool:
         required = ("model_id", "model_version", "dataset_version", "feature_version",
@@ -169,6 +196,104 @@ def validate_provenance_scope(prov: ProbabilityProvenance | None, target_family:
     if normalize_horizon(prov.horizon) != normalize_horizon(horizon):
         reasons.append("HORIZON_SCOPE_MISMATCH")
     return reasons
+
+
+# ── 3A.2.2 §2/§3 distribution scope ──
+def validate_distribution_scope(dist: "DistributionRecord", target_family: str,
+                                instrument: str, horizon: str) -> list[str]:
+    """§2/§3：map == provenance == distribution 三方 scope（canonical normalized）。"""
+    if dist.capability in ("NONE", "QUANTILES_ONLY"):
+        return []  # 無 public probability capability，不需 scope
+    if not (dist.target_family and dist.instrument and dist.horizon):
+        return ["MISSING_DISTRIBUTION_SCOPE"]
+    reasons: list[str] = []
+    if normalize_family(dist.target_family) != normalize_family(target_family):
+        reasons.append("DISTRIBUTION_TARGET_SCOPE_MISMATCH")
+    if normalize_instrument(dist.instrument) != normalize_instrument(instrument):
+        reasons.append("DISTRIBUTION_INSTRUMENT_SCOPE_MISMATCH")
+    if normalize_horizon(dist.horizon) != normalize_horizon(horizon):
+        reasons.append("DISTRIBUTION_HORIZON_SCOPE_MISMATCH")
+    return reasons
+
+
+def validate_distribution_market_semantics(dist: "DistributionRecord") -> list[str]:
+    """§10-§15：集中式 market calendar / session semantics validator（path capability 才需）。"""
+    if dist.capability not in _PATH_CAPABILITIES:
+        return []
+    role = (dist.instrument_role or "").upper()
+    if role not in INSTRUMENT_ROLES:
+        return ["MISSING_INSTRUMENT_ROLE"]
+    expected = _MARKET_SEMANTICS.get((normalize_family(dist.target_family), role))
+    if expected is None:
+        return ["UNKNOWN_MARKET_SEMANTICS"]
+    exp_cal, exp_sess = expected
+    reasons: list[str] = []
+    if dist.target_market_calendar != exp_cal:
+        reasons.append("MARKET_CALENDAR_MISMATCH")
+    if dist.session_semantics != exp_sess:
+        reasons.append("SESSION_SEMANTICS_MISMATCH")
+    exp_scope = "DIRECT_INSTRUMENT" if role == "DIRECT" else "PROXY_MODEL_REFERENCE"
+    if dist.forecast_scope != exp_scope:
+        reasons.append("FORECAST_SCOPE_MISMATCH")
+    return reasons
+
+
+# ── 3A.2.2 §5/§6/§7 distribution-level sample contract ──
+def distribution_sample_ok(dist: "DistributionRecord") -> bool:
+    """§5/§7：只有 sampling-based distribution 需要自身 numeric sample evidence。"""
+    if dist.capability not in _SAMPLING_CAPABILITIES:
+        return True  # analytic/model distribution 不強制 Monte Carlo samples
+    return (
+        dist.sample_sufficiency_status == "SUFFICIENT"
+        and dist.minimum_required_sample > 0
+        and dist.sample_count >= dist.minimum_required_sample
+        and dist.effective_sample_count >= dist.minimum_required_sample
+    )
+
+
+def probability_sample_within_source(pv: "ProbabilityValue", dist: "DistributionRecord") -> bool:
+    """§6：probability 的 sample basis 不得超過 underlying distribution evidence。"""
+    if dist.capability == "TERMINAL_SAMPLES":
+        return (pv.sample_count <= dist.sample_count
+                and pv.effective_sample_count <= dist.effective_sample_count)
+    if dist.capability == "PATH_SAMPLES":
+        return (pv.sample_count <= dist.path_count
+                and pv.effective_sample_count <= dist.path_count)
+    return True  # analytic/model distribution：sample basis 由 protocol 定義
+
+
+# ── 3A.2.2 §18/§20/§21 calibration scope（typed reasons）──
+def calibration_scope_eligibility(scope: str, evidence: dict | None, instrument: str,
+                                  target_family: str, horizon: str) -> tuple[bool, list[str]]:
+    """§18：typed calibration scope eligibility（reason 不得假裝只是 UNCALIBRATED）。"""
+    if scope == "SINGLE_INSTRUMENT":
+        return True, []
+    ev = evidence or {}
+    reasons: list[str] = []
+    if scope == "PANEL":
+        if not ev.get("universe_id") or not ev.get("universe_version"):
+            reasons.append("CALIBRATION_SCOPE_EVIDENCE_MISSING")
+        members = {normalize_instrument(x) for x in ev.get("members", [])}
+        if normalize_instrument(instrument) not in members:
+            reasons.append("CALIBRATION_UNIVERSE_MISMATCH")
+        fams = {normalize_family(x) for x in ev.get("target_families", [])}
+        if fams and normalize_family(target_family) not in fams:
+            reasons.append("CALIBRATION_UNIVERSE_MISMATCH")
+        hzs = {normalize_horizon(x) for x in ev.get("supported_horizons", [])}
+        if hzs and normalize_horizon(horizon) not in hzs:
+            reasons.append("CALIBRATION_UNIVERSE_MISMATCH")
+        return (not reasons), reasons
+    if scope == "GLOBAL":
+        if not ev.get("scope_definition") or not ev.get("scope_version"):
+            reasons.append("CALIBRATION_SCOPE_EVIDENCE_MISSING")
+        fams = {normalize_family(x) for x in ev.get("supported_target_families", [])}
+        if normalize_family(target_family) not in fams:
+            reasons.append("CALIBRATION_GLOBAL_SCOPE_MISMATCH")
+        hzs = {normalize_horizon(x) for x in ev.get("supported_horizons", [])}
+        if normalize_horizon(horizon) not in hzs:
+            reasons.append("CALIBRATION_GLOBAL_SCOPE_MISMATCH")
+        return (not reasons), reasons
+    return False, ["CALIBRATION_SCOPE_EVIDENCE_MISSING"]
 
 
 # ── §11/§12/§13 evidence ──
@@ -262,14 +387,19 @@ def evaluate_probability(
     horizon: str,
     provenance: ProbabilityProvenance | None,
     distribution_method: str = "",
+    distribution: "DistributionRecord | None" = None,
     calibration_domain: str = "PRICE_DISTRIBUTION",
     calibration_scope: str = "SINGLE_INSTRUMENT",
+    calibration_scope_reasons: list[str] | None = None,
     path_meta: dict | None = None,
 ) -> ProbabilityEligibilityResult:
-    """§8/§9/§10：deterministic gate 評估，回 authoritative result（truthful reason codes）。"""
+    """§8/§9/§10/§22：deterministic gate 評估，回 authoritative result（truthful reason codes）。"""
     reasons: list[str] = []
-    checks: dict = {"capability": False, "value": False, "calibration": False,
-                    "sample": False, "provenance": False, "scope": False, "path": False}
+    checks: dict = {"capability": False, "value": False, "probability_sample": False,
+                    "distribution_sample": False, "provenance": False, "provenance_scope": False,
+                    "distribution_scope": False, "distribution_identity": False,
+                    "market_semantics": False, "calibration": False, "calibration_scope": False,
+                    "path": False}
 
     # 1. capability support（含 path hard gate）
     cap_ok = capability_supports(capability, probability_type)
@@ -294,7 +424,7 @@ def evaluate_probability(
     if not val_ok:
         reasons.append("INVALID_VALUE")
 
-    # 3. calibration（map + zone + domain）
+    # 3. calibration（map + zone + domain）+ §18 calibration scope
     cal_ok = (map_calibration == "CALIBRATED" and pv.calibration_status == "CALIBRATED"
               and calibration_domain == "PRICE_DISTRIBUTION" and pv.calibration_domain == "PRICE_DISTRIBUTION")
     checks["calibration"] = cal_ok
@@ -302,14 +432,32 @@ def evaluate_probability(
         reasons.append("UNCALIBRATED")
     if calibration_domain != "PRICE_DISTRIBUTION" or pv.calibration_domain != "PRICE_DISTRIBUTION":
         reasons.append("CALIBRATION_DOMAIN_MISMATCH")
+    cal_scope_reasons = list(calibration_scope_reasons or [])
+    checks["calibration_scope"] = not cal_scope_reasons
+    reasons.extend(cal_scope_reasons)
 
-    # 4. numeric sample sufficiency
+    # 4. probability numeric sample sufficiency
     samp_ok = pv.is_sample_sufficient()
-    checks["sample"] = samp_ok
+    checks["probability_sample"] = samp_ok
     if not samp_ok:
         reasons.append("INSUFFICIENT_SAMPLE")
 
-    # 5. provenance completeness + method consistency + calibration provenance
+    # 5. distribution-level sample contract（§5/§7）
+    dist_samp_ok = True
+    if distribution is not None:
+        dist_samp_ok = distribution_sample_ok(distribution)
+        if not dist_samp_ok:
+            reasons.append("DISTRIBUTION_INSUFFICIENT_SAMPLE")
+    checks["distribution_sample"] = dist_samp_ok
+
+    # 6. probability sample cannot exceed source evidence（§6）
+    src_ok = True
+    if distribution is not None:
+        src_ok = probability_sample_within_source(pv, distribution)
+        if not src_ok:
+            reasons.append("PROBABILITY_SAMPLE_EXCEEDS_SOURCE")
+
+    # 7. provenance completeness + method consistency + calibration provenance + §17 identity
     prov_ok = provenance is not None and provenance.is_complete()
     if provenance is not None and distribution_method and provenance.distribution_method != distribution_method:
         reasons.append("DISTRIBUTION_METHOD_MISMATCH")
@@ -318,17 +466,56 @@ def evaluate_probability(
         if not (provenance.calibration_method and provenance.calibration_version):
             reasons.append("CALIBRATION_PROVENANCE_MISSING")
             prov_ok = False
+    ident_ok = True
+    if provenance is not None and distribution is not None:
+        if distribution.distribution_id:
+            ident_ok = (provenance.distribution_id == distribution.distribution_id
+                        and provenance.distribution_version == distribution.distribution_version)
+            if not ident_ok:
+                reasons.append("DISTRIBUTION_IDENTITY_MISMATCH")
+        elif distribution.capability not in ("NONE", "QUANTILES_ONLY"):
+            ident_ok = False
+            reasons.append("MISSING_DISTRIBUTION_IDENTITY")
     checks["provenance"] = prov_ok
+    checks["distribution_identity"] = ident_ok
     if not prov_ok and "MISSING_PROVENANCE" not in reasons and not any(
             r in reasons for r in ("DISTRIBUTION_METHOD_MISMATCH", "CALIBRATION_PROVENANCE_MISSING")):
         reasons.append("MISSING_PROVENANCE")
 
-    # 6. scope match
+    # 8. provenance scope match
     scope_reasons = validate_provenance_scope(provenance, map_family, instrument, horizon)
-    checks["scope"] = not scope_reasons
+    checks["provenance_scope"] = not scope_reasons
     reasons.extend(scope_reasons)
 
-    eligible = (cap_ok and val_ok and cal_ok and samp_ok and prov_ok and not scope_reasons)
+    # 9. distribution scope（§2/§3）+ §16 dist scope == prov scope
+    dist_scope_reasons: list[str] = []
+    if distribution is not None:
+        dist_scope_reasons = validate_distribution_scope(distribution, map_family, instrument, horizon)
+        if (not dist_scope_reasons and provenance is not None
+                and normalize_family(distribution.target_family)
+                != normalize_family(provenance.target_family)):
+            dist_scope_reasons.append("DISTRIBUTION_TARGET_SCOPE_MISMATCH")
+        if (not dist_scope_reasons and provenance is not None
+                and normalize_instrument(distribution.instrument)
+                != normalize_instrument(provenance.instrument)):
+            dist_scope_reasons.append("DISTRIBUTION_INSTRUMENT_SCOPE_MISMATCH")
+        if (not dist_scope_reasons and provenance is not None
+                and normalize_horizon(distribution.horizon)
+                != normalize_horizon(provenance.horizon)):
+            dist_scope_reasons.append("DISTRIBUTION_HORIZON_SCOPE_MISMATCH")
+    checks["distribution_scope"] = not dist_scope_reasons
+    reasons.extend(dist_scope_reasons)
+
+    # 10. market calendar / session semantics（§10-§15）
+    mkt_reasons: list[str] = []
+    if distribution is not None:
+        mkt_reasons = validate_distribution_market_semantics(distribution)
+    checks["market_semantics"] = not mkt_reasons
+    reasons.extend(mkt_reasons)
+
+    eligible = (cap_ok and val_ok and cal_ok and not cal_scope_reasons and samp_ok
+                and dist_samp_ok and src_ok and prov_ok and ident_ok
+                and not scope_reasons and not dist_scope_reasons and not mkt_reasons)
     if probability_type in ("touch", "first_passage"):
         eligible = eligible and checks["path"] is True
     eligible = bool(eligible)
@@ -340,13 +527,15 @@ def evaluate_probability(
         public_status = "NOT_AVAILABLE_UNSUPPORTED_CAPABILITY"
     elif probability_type in ("touch", "first_passage") and checks["path"] is not True:
         public_status = "NOT_AVAILABLE_UNSUPPORTED_CAPABILITY"
-    elif not cal_ok:
+    elif not cal_ok or cal_scope_reasons:
         public_status = "NOT_AVAILABLE_UNCALIBRATED"
-    elif not samp_ok:
+    elif not samp_ok or not dist_samp_ok or not src_ok:
         public_status = "NOT_AVAILABLE_INSUFFICIENT_SAMPLE"
-    elif scope_reasons:
+    elif scope_reasons or dist_scope_reasons:
         public_status = "NOT_AVAILABLE_SCOPE_MISMATCH"
-    elif not prov_ok:
+    elif mkt_reasons:
+        public_status = "NOT_AVAILABLE_SCOPE_MISMATCH"
+    elif not prov_ok or not ident_ok:
         public_status = "NOT_AVAILABLE_MISSING_PROVENANCE"
     elif not val_ok:
         public_status = "NOT_AVAILABLE_INVALID_VALUE"
@@ -410,6 +599,11 @@ class DistributionRecord:
     session_semantics: str = ""
     bar_frequency: str = ""
     generation_method: str = ""
+    # ── 3A.2.2 §10/§17 ──
+    instrument_role: str = ""
+    forecast_scope: str = ""
+    distribution_id: str = ""
+    distribution_version: str = ""
 
     def __post_init__(self):
         if self.method not in DISTRIBUTION_METHODS:
@@ -419,6 +613,14 @@ class DistributionRecord:
         if not method_capability_ok(self.method, self.capability):
             raise ValueError(
                 f"method/capability mismatch: method={self.method} capability={self.capability}")
+        # §8：sample status 不得只是任意字串
+        if self.sample_sufficiency_status not in SAMPLE_SUFFICIENCY:
+            raise ValueError(
+                f"unknown sample_sufficiency_status: {self.sample_sufficiency_status!r}")
+        if self.instrument_role and self.instrument_role not in INSTRUMENT_ROLES:
+            raise ValueError(f"unknown instrument_role: {self.instrument_role!r}")
+        if self.forecast_scope and self.forecast_scope not in FORECAST_SCOPES:
+            raise ValueError(f"unknown forecast_scope: {self.forecast_scope!r}")
 
     def path_meta(self) -> dict:
         return {"path_count": self.path_count, "steps_per_path": self.steps_per_path,
@@ -460,39 +662,40 @@ class ProbabilityMap:
         return self.distribution.method
 
     def _scope_ok(self) -> bool:
-        """§3：calibration scope enforcement。"""
-        if self.calibration_scope == "SINGLE_INSTRUMENT":
-            return True
-        ev = self.calibration_scope_evidence or {}
-        if self.calibration_scope == "PANEL":
-            return bool(ev.get("universe_id")) and bool(ev.get("universe_version")) and \
-                normalize_instrument(self.instrument) in {normalize_instrument(x) for x in ev.get("members", [])}
-        if self.calibration_scope == "GLOBAL":
-            return (bool(ev.get("scope_definition")) and bool(ev.get("scope_version"))
-                    and normalize_family(self.target_family) in {normalize_family(x) for x in ev.get("supported_target_families", [])}
-                    and normalize_horizon(self.horizon) in {normalize_horizon(x) for x in ev.get("supported_horizons", [])})
-        return False
+        """§3：calibration scope enforcement（backward-compat wrapper）。"""
+        return self._scope_result()[0]
+
+    def _scope_result(self) -> tuple[bool, list[str]]:
+        """§18：typed calibration scope eligibility。"""
+        return calibration_scope_eligibility(
+            self.calibration_scope, self.calibration_scope_evidence,
+            self.instrument, self.target_family, self.horizon)
 
     def public_view(self) -> dict:
         out = {
             "instrument": self.instrument, "target_family": self.target_family,
             "horizon": self.horizon, "version": self.version,
             "calibration_status": self.calibration_status,
+            "calibration_scope": self.calibration_scope,
             "distribution_method": self.distribution.method,
             "distribution_capability": self.distribution.capability,
             "is_full_distribution": self.distribution.is_full_distribution,
             "zones": [],
         }
-        scope_ok = self._scope_ok()
+        scope_ok, scope_reasons = self._scope_result()
+        if not scope_ok:
+            out["calibration_scope_reason_codes"] = scope_reasons
         for z in self.zones:
             zd: dict = {"zone": z.zone}
             for ptype, pv in (("terminal", z.terminal), ("touch", z.touch), ("first_passage", z.first_passage)):
                 res = evaluate_probability(
                     pv, probability_type=ptype, capability=self.distribution.capability,
-                    map_calibration=self.calibration_status if scope_ok else "INSUFFICIENT_EVIDENCE",
+                    map_calibration=self.calibration_status,
                     map_family=self.target_family, instrument=self.instrument, horizon=self.horizon,
                     provenance=self.provenance, distribution_method=self.distribution.method,
+                    distribution=self.distribution,
                     calibration_domain=pv.calibration_domain, calibration_scope=self.calibration_scope,
+                    calibration_scope_reasons=scope_reasons,
                     path_meta=self.distribution.path_meta(),
                 )
                 if res.eligible:
