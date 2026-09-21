@@ -398,9 +398,12 @@ def _fill_research_truth(packet: AnalysisPacket) -> None:
     # §12：driver panel 只標 CONTEXT / EXPLANATORY FEATURES，非 formal causal validation
     packet.driver_panel = {
         "status": "CONTEXT_ONLY",
+        "evidence_role": "CONTEXT_ONLY",
+        "causal_validation": "NOT_ESTABLISHED",
+        "trading_edge": "NOT_ESTABLISHED",
         "top_positive_drivers": packet.top_positive_drivers,
         "top_negative_drivers": packet.top_negative_drivers,
-        "note": "explanatory features only; formal causal layer reads Phase2V-C.1 evidence (NON_EXECUTABLE_FORECAST_EDGE)",
+        "note": "explanatory features only; NOT a causal claim; use '同期間觀察到...' wording, not '有利/支撐上漲'",
     }
 
     # 2Q-F.4：display policy（answer layer 不需重建 safety logic）

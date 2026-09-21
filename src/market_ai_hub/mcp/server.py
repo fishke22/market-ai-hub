@@ -580,22 +580,24 @@ def run_ts_validation(symbol: str = "^N225", period: str = "1y", n_folds: int = 
 
 
 @mcp.tool()
-def analyze_osaka_nikkei(horizon: str = "1d", requested_dates: str = "") -> dict:
-    """大阪日經 PROXY 分析（^N225 index + 跨市場；非 OSE micro 即時）。
+def analyze_osaka_nikkei(horizon: str = "1d", requested_dates: str = "", view: str = "public") -> dict:
+    """^N225 PROXY ANALYSIS ONLY（非 OSE Micro direct）。
 
-    requested_dates（可選）："YYYY-MM-DD..YYYY-MM-DD"。^N225 依 TSE 日曆交易；
-    若窗口含 TSE 休市日（OSE futures 可能 Holiday Trading）→ CALENDAR_TARGET_MISMATCH。"""
+    預設 view="public"：只回 public-safe 欄位（semantic_scope=PROXY_ONLY；raw model tree 需 view="audit"）。
+    """
     from market_ai_hub.services.analysis import analyze_osaka_nikkei as run
+    from market_ai_hub.services.public_view import sanitize_analysis_output
 
-    return run(horizon, requested_dates)
+    return sanitize_analysis_output(run(horizon, requested_dates), market="osaka", audit=(view == "audit"))
 
 
 @mcp.tool()
-def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
-    """台股分析（如 2330 / 3706.TW / 華邦電）。只回傳 structured evidence。"""
+def analyze_taiwan_stock(stock: str, horizon: str = "1d", view: str = "public") -> dict:
+    """台股分析（如 2330 / 3706.TW）。預設 view="public"：public-safe（raw model tree 需 view="audit"）。"""
     from market_ai_hub.services.analysis import analyze_taiwan_stock as run
+    from market_ai_hub.services.public_view import sanitize_analysis_output
 
-    return run(stock, horizon)
+    return sanitize_analysis_output(run(stock, horizon), market="taiwan", audit=(view == "audit"))
 
 
 @mcp.tool()

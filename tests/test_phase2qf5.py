@@ -25,8 +25,10 @@ def test_public_uncalibrated_no_probability():
     out = sanitize_forecast_dump(d)
     assert "class_probabilities" not in out
     assert "confidence" not in out
-    assert "raw_class_scores" in out
-    assert out["raw_class_scores_research_only"] is True
+    assert "direction" not in out
+    # §3：public 只標 raw score 可用性，不暴露 raw numeric
+    assert out["raw_score_available"] is True
+    assert out["calibrated_probability_available"] is False
     assert out["direction_value"] is None
 
 
@@ -54,10 +56,11 @@ def test_public_zero_vote_no_agreement():
         },
     }
     out = sanitize_ensemble_dump(d)
-    mm = out["model_metadata"]
-    assert "legacy_raw_unvalidated_agreement" not in mm
-    assert "model_agreement" not in mm
-    assert "class_probabilities" not in mm["direction_ensemble"]
+    assert "model_agreement" not in out
+    assert "legacy_raw_unvalidated_agreement" not in out
+    assert "model_metadata" not in out  # whitelist 不暴露 raw metadata
+    assert out["validated_direction_agreement"] == "N/A"
+    assert out["direction_status"] == "NO_VALIDATED_MODEL_CONSENSUS"
 
 
 def test_quantile_no_support_alias():

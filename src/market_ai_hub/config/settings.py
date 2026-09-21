@@ -17,7 +17,16 @@ def load_env() -> None:
 
 
 def get_secret(name: str) -> str:
+    """中央 secret resolver：Windows Credential Manager 優先，env fallback。不得 log value。"""
     load_env()
+    try:
+        from market_ai_hub.services.secret_store import get_secret as _central
+
+        v = _central(name)
+        if v:
+            return v
+    except Exception:
+        pass
     return os.environ.get(name, "") or ""
 
 
