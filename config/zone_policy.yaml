@@ -1,0 +1,29 @@
+# Phase 3A — Zone Policy（versioned research parameter）
+# 區界是 research parameter，可做 OOS comparison；不得硬編碼成金融真理。
+# 預設圖形中心優先使用 median（除非 research protocol 另有定義）。
+
+policy_id: default
+version: "3A.1"
+note: "research parameter; not a hardcoded financial truth; OOS comparison required"
+
+center_policy:
+  default_center: predictive_median   # mean / median / mode
+  note: "multimodal 分布下不得用 mean 假裝最可能價格"
+
+zone_boundaries:
+  buy_zone_upper_quantile: 0.25       # 下四分位以下 = BUY_ZONE research zone
+  profit_zone_lower_quantile: 0.75    # 上四分位以上 = PROFIT_ZONE research zone
+  neutral_band: [0.25, 0.75]
+
+state_semantics:
+  state_is_trade_instruction: false   # 所有 state 皆 research 語義
+  BUY_ZONE: "price in lower research zone; NOT a buy order"
+  NEUTRAL_ZONE: "price in middle band"
+  PROFIT_ZONE: "price in upper research zone; NOT a sell order"
+  BREAKOUT: "price behavior confirms upward break (requires confirmation evidence)"
+  BREAKDOWN: "price behavior confirms downward break (requires confirmation evidence)"
+  MODEL_FAILURE: "distribution/calibration failure, NOT a price level"
+
+confirmation_policy:
+  note: "進入 lower zone 不等於 long；必須另有 price_behavior_confirmation"
+  default: NOT_ESTABLISHED
