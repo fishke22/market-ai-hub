@@ -33,6 +33,7 @@ def _complete_prov():
         protocol_version="p1", distribution_method="EMPIRICAL", calibration_method="isotonic",
         calibration_version="c1", evaluation_window="2026-01..2026-06", generated_at="2026-09-21",
         target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+        distribution_id="d1", distribution_version="v1",
     )
 
 
@@ -67,7 +68,12 @@ def test_calibrated_public_percent_ok():
             sample_sufficiency_status="SUFFICIENT", sample_count=100, effective_sample_count=100,
             minimum_required_sample=50))],
         calibration_status="CALIBRATED",
-        distribution=DistributionRecord(capability="TERMINAL_SAMPLES", method="EMPIRICAL"),
+        distribution=DistributionRecord(
+            method="EMPIRICAL", capability="TERMINAL_SAMPLES",
+            target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+            distribution_id="d1", distribution_version="v1",
+            sample_count=100, effective_sample_count=100, minimum_required_sample=50,
+            sample_sufficiency_status="SUFFICIENT"),
         provenance=_complete_prov(),
     )
     assert pbm.public_view()["zones"][0]["terminal_probability"] == 0.18

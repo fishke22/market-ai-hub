@@ -18,7 +18,8 @@ def _prov(family="TAIWAN_STOCK", instrument="X", horizon="1d", method="EMPIRICAL
         model_id="m", model_version="v1", dataset_version="d1", feature_version="f1",
         protocol_version="p1", distribution_method=method, calibration_method=cal_method,
         calibration_version=cal_version, evaluation_window="w", generated_at="t",
-        target_family=family, instrument=instrument, horizon=horizon)
+        target_family=family, instrument=instrument, horizon=horizon,
+        distribution_id="d1", distribution_version="v1")
 
 
 def _pv(**kw):
@@ -36,10 +37,17 @@ def _pbm(*, zones=None, dist=None, cal="CALIBRATED", prov=None, scope="SINGLE_IN
     from market_ai_hub.research.price_probability_map import (
         DistributionRecord, ProbabilityMap, ZoneProbability)
 
+    if dist is None:
+        dist = DistributionRecord(
+            method="EMPIRICAL", capability="TERMINAL_SAMPLES",
+            target_family=family, instrument=instrument, horizon=horizon,
+            distribution_id="d1", distribution_version="v1",
+            sample_count=100, effective_sample_count=100, minimum_required_sample=50,
+            sample_sufficiency_status="SUFFICIENT")
     return ProbabilityMap(
         instrument, family, horizon,
         zones=zones or [ZoneProbability(zone="BUY_ZONE", terminal=_pv())],
-        distribution=dist or DistributionRecord(method="EMPIRICAL", capability="TERMINAL_SAMPLES"),
+        distribution=dist,
         calibration_status=cal, calibration_scope=scope, calibration_scope_evidence=scope_ev or {},
         provenance=prov if prov is not None else _prov(family, instrument, horizon),
     )
@@ -154,29 +162,37 @@ def test_full_distribution_not_path_capability():
 
 
 def test_path_metadata_missing_blocks_touch():
-    from market_ai_hub.research.price_probability_map import (
-        DistributionRecord, ProbabilityMap, ZoneProbability)
+    from market_ai_hub.research.price_probability_map import DistributionRecord, ZoneProbability
 
-    dist = DistributionRecord(method="EMPIRICAL", capability="PATH_SAMPLES")  # no path metadata
-    pbm = ProbabilityMap("X", "TAIWAN_STOCK", "1d",
-                         zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv())],
-                         distribution=dist, calibration_status="CALIBRATED", provenance=_prov())
+    # Taiwan semantics correct，但缺 path metadata
+    dist = DistributionRecord(
+        method="EMPIRICAL", capability="PATH_SAMPLES",
+        target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+        instrument_role="DIRECT", forecast_scope="DIRECT_INSTRUMENT",
+        target_market_calendar="XTAI", session_semantics="day",
+        distribution_id="d1", distribution_version="v1",
+        sample_count=1000, effective_sample_count=1000, minimum_required_sample=100,
+        sample_sufficiency_status="SUFFICIENT")
+    pbm = _pbm(dist=dist, zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv())])
     pub = pbm.public_view()["zones"][0]
     assert "touch_probability" not in pub
     assert "PATH_METADATA_MISSING" in pub["touch_reason_codes"]
 
 
 def test_path_metadata_present_allows_touch():
-    from market_ai_hub.research.price_probability_map import (
-        DistributionRecord, ProbabilityMap, ZoneProbability)
+    from market_ai_hub.research.price_probability_map import DistributionRecord, ZoneProbability
 
-    dist = DistributionRecord(method="EMPIRICAL", capability="PATH_SAMPLES", path_count=1000,
-                              steps_per_path=5, bar_frequency="1d",
-                              target_market_calendar="OSE_DERIVATIVES",
-                              session_semantics="day+night", generation_method="block_bootstrap")
-    pbm = ProbabilityMap("X", "TAIWAN_STOCK", "1d",
-                         zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv())],
-                         distribution=dist, calibration_status="CALIBRATED", provenance=_prov())
+    # §9/§26：正確 Taiwan path = XTAI / day（不得用 OSE_DERIVATIVES）
+    dist = DistributionRecord(
+        method="EMPIRICAL", capability="PATH_SAMPLES", path_count=1000,
+        steps_per_path=5, bar_frequency="1d", generation_method="block_bootstrap",
+        target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+        instrument_role="DIRECT", forecast_scope="DIRECT_INSTRUMENT",
+        target_market_calendar="XTAI", session_semantics="day",
+        distribution_id="d1", distribution_version="v1",
+        sample_count=1000, effective_sample_count=1000, minimum_required_sample=100,
+        sample_sufficiency_status="SUFFICIENT")
+    pbm = _pbm(dist=dist, zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv())])
     assert pbm.public_view()["zones"][0].get("touch_probability") == 0.61
 
 
@@ -246,7 +262,7 @@ def test_current_all_probabilities_unavailable():
 def test_version_3a21():
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
 
-    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.1"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.2"
 
 
 # ── §32：existing invariants ──

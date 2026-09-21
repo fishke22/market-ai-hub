@@ -17,7 +17,8 @@ def _prov():
         model_id="m", model_version="v1", dataset_version="d1", feature_version="f1",
         protocol_version="p1", distribution_method="EMPIRICAL", calibration_method="isotonic",
         calibration_version="c1", evaluation_window="w", generated_at="t",
-        target_family="TAIWAN_STOCK", instrument="X", horizon="1d")
+        target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+        distribution_id="d1", distribution_version="v1")
 
 
 # ── §1/§35：enum consistency ──
@@ -97,7 +98,12 @@ def test_mixed_probability_types_only_calibrated_output():
                                        calibration_status="INSUFFICIENT_EVIDENCE"),
     )
     pbm = ProbabilityMap("X", "TAIWAN_STOCK", "1d", zones=[z], calibration_status="CALIBRATED",
-                         distribution=DistributionRecord(capability="PATH_SAMPLES", method="EMPIRICAL"),
+                         distribution=DistributionRecord(
+                             method="EMPIRICAL", capability="TERMINAL_SAMPLES",
+                             target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+                             distribution_id="d1", distribution_version="v1",
+                             sample_count=100, effective_sample_count=100,
+                             minimum_required_sample=50, sample_sufficiency_status="SUFFICIENT"),
                          provenance=_prov())
     pub = pbm.public_view()["zones"][0]
     assert pub.get("terminal_probability") == 0.61
@@ -206,4 +212,4 @@ def test_calibration_metrics_interface_only():
 def test_version_bumped():
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
 
-    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.1"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.2"
