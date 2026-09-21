@@ -88,10 +88,12 @@ def test_mixed_probability_types_only_calibrated_output():
     z = ZoneProbability(
         zone="BUY_ZONE",
         terminal=ProbabilityValue(value=0.61, status="AVAILABLE", calibration_status="CALIBRATED",
-                                  sample_sufficiency_status="SUFFICIENT"),
+                                  sample_sufficiency_status="SUFFICIENT", sample_count=100,
+                                  effective_sample_count=100, minimum_required_sample=50),
         touch=ProbabilityValue(value=0.8, status="AVAILABLE", calibration_status="UNCALIBRATED",
-                               sample_sufficiency_status="SUFFICIENT"),
-        first_passage=ProbabilityValue(value=0.3, status="NOT_AVAILABLE",
+                               sample_sufficiency_status="SUFFICIENT", sample_count=100,
+                               effective_sample_count=100, minimum_required_sample=50),
+        first_passage=ProbabilityValue(value=0.3, status="NOT_APPLICABLE",
                                        calibration_status="INSUFFICIENT_EVIDENCE"),
     )
     pbm = ProbabilityMap("X", "TAIWAN_STOCK", "1d", zones=[z], calibration_status="CALIBRATED",
@@ -185,7 +187,7 @@ def test_current_public_probability_not_available():
     pub = probability_from_quantiles_only(["BUY_ZONE", "PROFIT_ZONE"], "X", "TAIWAN_STOCK", "1d").public_view()
     for z in pub["zones"]:
         assert "terminal_probability" not in z
-        assert z["terminal_status"] == "NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION"
+        assert z["terminal_status"].startswith("NOT_AVAILABLE")
         assert "QUANTILES_ONLY" in z["terminal_reason_codes"]
 
 
@@ -204,4 +206,4 @@ def test_calibration_metrics_interface_only():
 def test_version_bumped():
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
 
-    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.1"

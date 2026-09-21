@@ -64,7 +64,8 @@ def test_calibrated_public_percent_ok():
         "X", "TAIWAN_STOCK", "1d",
         zones=[ZoneProbability(zone="BUY_ZONE", terminal=ProbabilityValue(
             value=0.18, status="AVAILABLE", calibration_status="CALIBRATED",
-            sample_sufficiency_status="SUFFICIENT"))],
+            sample_sufficiency_status="SUFFICIENT", sample_count=100, effective_sample_count=100,
+            minimum_required_sample=50))],
         calibration_status="CALIBRATED",
         distribution=DistributionRecord(capability="TERMINAL_SAMPLES", method="EMPIRICAL"),
         provenance=_complete_prov(),
@@ -167,7 +168,8 @@ def test_benchmark_registry_no_best_claim():
 def test_strategy_switching_not_instruction():
     from market_ai_hub.research.price_probability_map import EvaluationEvidence, strategy_candidate_for
 
-    ev = EvaluationEvidence(status="ESTABLISHED", method="regime_detector", sample_count=100)
+    ev = EvaluationEvidence(status="ESTABLISHED", method="regime_detector", method_version="v1",
+                            data_version="d1", sample_count=100, evaluated_at="2026-09-21", source="regime")
     c = strategy_candidate_for("RANGE_LOW_VOL", regime_status="EVALUATED", regime_evidence=ev)
     assert c["candidate"] == "mean_reversion_candidate"
     assert c["is_instruction"] is False
