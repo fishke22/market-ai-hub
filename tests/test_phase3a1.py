@@ -132,13 +132,26 @@ def test_six_state_view_omitted_not_evaluated():
     assert pm.regime is None and pm.regime_status == "NOT_EVALUATED"
 
 
-def test_six_state_view_explicit_evaluated():
+def test_six_state_view_enum_without_evidence_is_unverified():
     from market_ai_hub.research.price_probability_map import six_state_research_view
 
+    # 只有 enum 字串、無 evidence → UNVERIFIED（不是 EVALUATED）
     pm = six_state_research_view("TAIWAN_STOCK", "3706.TW", "1d", 79.8,
                                  market_state="BUY_ZONE", regime="RANGE_LOW_VOL")
-    assert pm.market_state == "BUY_ZONE" and pm.market_state_status == "EVALUATED"
-    assert pm.regime == "RANGE_LOW_VOL" and pm.regime_status == "EVALUATED"
+    assert pm.market_state == "BUY_ZONE" and pm.market_state_status == "UNVERIFIED"
+    assert pm.regime == "RANGE_LOW_VOL" and pm.regime_status == "UNVERIFIED"
+    assert pm.strategy_candidate == "NONE"
+
+
+def test_six_state_view_with_evidence_is_evaluated():
+    from market_ai_hub.research.price_probability_map import EvaluationEvidence, six_state_research_view
+
+    ev = EvaluationEvidence(status="ESTABLISHED", method="detector", sample_count=100)
+    pm = six_state_research_view("TAIWAN_STOCK", "3706.TW", "1d", 79.8,
+                                 market_state="BUY_ZONE", market_state_evidence=ev,
+                                 regime="RANGE_LOW_VOL", regime_evidence=ev)
+    assert pm.market_state_status == "EVALUATED"
+    assert pm.regime_status == "EVALUATED"
     assert pm.strategy_candidate == "mean_reversion_candidate"
 
 
@@ -170,5 +183,5 @@ def test_existing_invariants_preserved():
     assert pm.actionability_status == "NOT_VALIDATED"
     pbm = probability_from_quantiles_only(["BUY_ZONE"])
     z = pbm.zones[0]
-    assert hasattr(z, "terminal_probability") and hasattr(z, "touch_probability") and hasattr(z, "first_passage_probability")
-    assert pbm.public_view()["zones"][0]["availability_status"] == "NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION"
+    assert hasattr(z, "terminal") and hasattr(z, "touch") and hasattr(z, "first_passage")
+    assert pbm.public_view()["zones"][0]["terminal_status"] == "NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION"

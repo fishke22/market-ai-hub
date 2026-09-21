@@ -17,32 +17,58 @@ def test_p10_p50_p90_only_no_fake_probability():
 
     pbm = probability_from_quantiles_only(["BUY_ZONE", "NEUTRAL_ZONE", "PROFIT_ZONE"], "X", "TAIWAN_STOCK", "1d")
     for z in pbm.zones:
-        assert z.availability_status == "NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION"
-        assert z.terminal_probability is None
-        assert z.touch_probability is None
+        assert z.terminal.status == "NOT_AVAILABLE_INSUFFICIENT_DISTRIBUTION"
+        assert z.terminal.value is None
+        assert z.touch.value is None
+        assert z.first_passage.value is None
 
 
 # ── §B15/§B27：uncalibrated → no public % ──
 
-def test_uncalibrated_no_public_percent():
-    from market_ai_hub.research.price_probability_map import ProbabilityMap, ZoneProbability
+def _complete_prov():
+    from market_ai_hub.research.price_probability_map import ProbabilityProvenance
 
-    pbm = ProbabilityMap("X", "TAIWAN_STOCK", "1d",
-                         zones=[ZoneProbability(zone="BUY_ZONE", terminal_probability=0.18,
-                                                availability_status="AVAILABLE", calibration_status="UNCALIBRATED")],
-                         calibration_status="UNCALIBRATED")
+    return ProbabilityProvenance(
+        model_id="m", model_version="v1", dataset_version="d1", feature_version="f1",
+        protocol_version="p1", distribution_method="EMPIRICAL", calibration_method="isotonic",
+        calibration_version="c1", evaluation_window="2026-01..2026-06", generated_at="2026-09-21",
+        target_family="TAIWAN_STOCK", instrument="X", horizon="1d",
+    )
+
+
+def test_uncalibrated_no_public_percent():
+    from market_ai_hub.research.price_probability_map import (
+        DistributionRecord, ProbabilityMap, ProbabilityValue, ZoneProbability,
+    )
+
+    pbm = ProbabilityMap(
+        "X", "TAIWAN_STOCK", "1d",
+        zones=[ZoneProbability(zone="BUY_ZONE", terminal=ProbabilityValue(
+            value=0.18, status="AVAILABLE", calibration_status="UNCALIBRATED",
+            sample_sufficiency_status="SUFFICIENT"))],
+        calibration_status="CALIBRATED",
+        distribution=DistributionRecord(capability="TERMINAL_SAMPLES", method="EMPIRICAL"),
+        provenance=_complete_prov(),
+    )
     pub = pbm.public_view()
     assert "terminal_probability" not in pub["zones"][0]
     assert "18" not in str(pub)
 
 
 def test_calibrated_public_percent_ok():
-    from market_ai_hub.research.price_probability_map import ProbabilityMap, ZoneProbability
+    from market_ai_hub.research.price_probability_map import (
+        DistributionRecord, ProbabilityMap, ProbabilityValue, ZoneProbability,
+    )
 
-    pbm = ProbabilityMap("X", "TAIWAN_STOCK", "1d",
-                         zones=[ZoneProbability(zone="BUY_ZONE", terminal_probability=0.18,
-                                                availability_status="AVAILABLE", calibration_status="CALIBRATED")],
-                         calibration_status="CALIBRATED")
+    pbm = ProbabilityMap(
+        "X", "TAIWAN_STOCK", "1d",
+        zones=[ZoneProbability(zone="BUY_ZONE", terminal=ProbabilityValue(
+            value=0.18, status="AVAILABLE", calibration_status="CALIBRATED",
+            sample_sufficiency_status="SUFFICIENT"))],
+        calibration_status="CALIBRATED",
+        distribution=DistributionRecord(capability="TERMINAL_SAMPLES", method="EMPIRICAL"),
+        provenance=_complete_prov(),
+    )
     assert pbm.public_view()["zones"][0]["terminal_probability"] == 0.18
 
 
@@ -139,13 +165,16 @@ def test_benchmark_registry_no_best_claim():
 # ── §B20：strategy switching is candidate, not instruction ──
 
 def test_strategy_switching_not_instruction():
-    from market_ai_hub.research.price_probability_map import strategy_candidate_for
+    from market_ai_hub.research.price_probability_map import EvaluationEvidence, strategy_candidate_for
 
-    c = strategy_candidate_for("RANGE_LOW_VOL", regime_status="EVALUATED")
+    ev = EvaluationEvidence(status="ESTABLISHED", method="regime_detector", sample_count=100)
+    c = strategy_candidate_for("RANGE_LOW_VOL", regime_status="EVALUATED", regime_evidence=ev)
     assert c["candidate"] == "mean_reversion_candidate"
     assert c["is_instruction"] is False
     # regime 未評估 → NONE
     assert strategy_candidate_for(None)["candidate"] == "NONE"
+    # 有值但無 evidence → NONE
+    assert strategy_candidate_for("RANGE_LOW_VOL", regime_status="UNVERIFIED")["candidate"] == "NONE"
 
 
 # ── cross-ref：Taiwan truth not inherit Osaka ──

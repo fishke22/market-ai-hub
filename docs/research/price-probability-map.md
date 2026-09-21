@@ -18,6 +18,30 @@
 Target families are isolated: `TAIWAN_STOCK` / `TAIWAN_INDEX` / `OSAKA_MICRO` have distinct
 profiles; unknown family fails closed (no cross-family fallback).
 
+## Typed evidence invariants (3A.2)
+
+1. **Available is not Validated.** `AVAILABLE` probability requires value validity + calibrated
+   (map **and** zone) + sufficient sample + complete provenance + capability support.
+2. **Map calibrated is not Zone calibrated.** Both must be `CALIBRATED`; otherwise no public %.
+3. **Terminal calibrated is not Touch calibrated.** Each probability type has its own
+   calibration status; one does not vouch for another.
+4. **Enum input is not Evaluation Evidence.** `market_state="BUY_ZONE"` without a valid
+   `EvaluationEvidence` is `UNVERIFIED`, never `EVALUATED`.
+5. **Quantile boundary is not Zone Probability.** `buy_zone_upper_quantile=0.25` does **not** mean
+   `P(BUY_ZONE)=25%`.
+6. **1d calibration is not 5d calibration.** Calibration is instrument/family/horizon-scoped.
+
+Capability matrix (`distribution_capability`):
+
+| capability | terminal | touch | first_passage |
+|------------|----------|-------|---------------|
+| `NONE` | no | no | no |
+| `QUANTILES_ONLY` | no | no | no |
+| `TERMINAL_SAMPLES` | yes | no | no |
+| `PATH_SAMPLES` | yes | yes | yes |
+| `FULL_DISTRIBUTION` | yes | yes | yes |
+
+
 
 ## Purpose
 
