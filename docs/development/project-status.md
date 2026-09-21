@@ -1,11 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 2Q-F.6.1（Credential UX Closure + WinCred Post-Install Verification）**
-- Gate: **PHASE2QF61_CREDENTIAL_UX_PASS**（最近；前置 PHASE2QF6_FINAL_UAT_PREP_PASS）
-- build_id：**1fa0f15a0764eb4f**（fingerprint 全部 runtime source + config）
+- Current phase: **Phase 3A（Price Map + Probability Map Research Foundation）**
+- Gate: **PHASE3A_PRICE_PROBABILITY_MAP_FOUNDATION_PASS**（最近；前置 PHASE2QF7_TARGET_TRUTH_PASS）
+- build_id：**ab65970bf0f29dfe**（fingerprint 全部 runtime source + config）
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
-- Credential setup：`D:\MARKET_AI_HUB\.venv\Scripts\python.exe scripts\setup_api_credentials.py`（`--status` 可查）
 - Credential 狀態：FRED_API_KEY = CONFIGURED（WINCRED）；FINMIND_API_TOKEN = CONFIGURED（WINCRED）
+- Research truth：OSAKA frozen（VAR=STATISTICAL_FORECAST_EVIDENCE / NO_ECONOMIC_EDGE）；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
+- Probability availability：全部 NOT_AVAILABLE（distribution/calibration 未建立）
 
 ## Phase 2 全歷程 Gate
 
