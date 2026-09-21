@@ -87,18 +87,21 @@ def evidence_by_target() -> dict:
         "TAIWAN_STOCK": {
             "TAIWAN_INDIVIDUAL_STOCK": {
                 "proxy_historical": "NO_EVIDENCE",
-                "direct_historical": "NOT_YET_VALIDATED",
-                "causal": "NOT_YET_VALIDATED",
-                "economic": "NO_ECONOMIC_EDGE",
+                "historical_oos": "NOT_YET_VALIDATED",
+                "direct_historical": "NOT_YET_VALIDATED",  # compat alias
+                "causal": "NOT_ESTABLISHED",
+                "economic": "NOT_ESTABLISHED",
                 "forward": "NOT_YET_VALIDATED",
             },
         },
         "TAIWAN_INDEX": {
             "TAIEX": {
                 "proxy_historical": "NO_EVIDENCE",
-                "direct_historical": "NOT_YET_VALIDATED",
-                "causal": "NOT_YET_VALIDATED",
-                "economic": "NO_ECONOMIC_EDGE",
+                "historical_oos": "NOT_YET_VALIDATED",
+                "direct_historical": "NOT_YET_VALIDATED",  # compat alias
+                "causal": "NOT_ESTABLISHED",
+                "economic": "NOT_ESTABLISHED",
+                "execution_validation": "NOT_ESTABLISHED",
                 "forward": "NOT_YET_VALIDATED",
             },
         },
@@ -106,12 +109,26 @@ def evidence_by_target() -> dict:
 
 
 def evidence_for(family: str, target: str = "") -> dict:
-    """取單一 target 的 evidence（找不到 → 全 NO_EVIDENCE / NOT_YET_VALIDATED）。"""
+    """取單一 target 的 evidence。
+
+    - 精確 target 命中 → 回該 target。
+    - TAIWAN_STOCK 之 target 為動態代碼（如 3706.TW）→ fallback 到 family 預設 entry。
+    - 未知 family → 全 NO_EVIDENCE / NOT_YET_VALIDATED（不得繼承 Osaka）。
+    """
     by = evidence_by_target().get(family, {})
-    if target:
-        return by.get(target, {"status": "UNKNOWN_TARGET"})
-    # 回 family 下第一個 target（通常唯一）
-    return next(iter(by.values()), {"status": "UNKNOWN_TARGET"})
+    if target and target in by:
+        return by[target]
+    # fallback：family 預設 entry（TAIWAN_STOCK 動態代碼用）
+    if by:
+        return next(iter(by.values()))
+    return {
+        "proxy_historical": "NO_EVIDENCE",
+        "historical_oos": "NOT_YET_VALIDATED",
+        "causal": "NOT_ESTABLISHED",
+        "economic": "NOT_ESTABLISHED",
+        "forward": "NOT_YET_VALIDATED",
+        "status": "UNKNOWN_TARGET",
+    }
 
 
 def economic_gate_explanation() -> str:

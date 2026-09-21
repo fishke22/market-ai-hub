@@ -369,11 +369,14 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
         packet.direct_next_session = ""
 
 
-def _fill_research_truth(packet: AnalysisPacket) -> None:
-    """§8：單一來源 ValidationTruth；§12/§13：driver panel / market environment 非 causal / economic。"""
-    from market_ai_hub.services.research_truth import research_evidence_summary, validation_truth
+def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", target: str = "") -> None:
+    """§8：單一來源 ValidationTruth；§12/§13：driver panel / market environment 非 causal / economic。
 
-    packet.validation_truth = validation_truth()
+    2Q-F.7：validation_truth 必須 target-scoped（不得用 Osaka evidence 替 Taiwan 背書）。
+    """
+    from market_ai_hub.services.research_truth import evidence_for
+
+    packet.validation_truth = evidence_for(family, target)
 
     # 支援壓力：不可用時 NOT_AVAILABLE，不用 P10/P90 冒充（§16）
     packet.support_resistance_status = "NOT_AVAILABLE"
@@ -531,7 +534,7 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
 
     # 5.5 V2 target semantics / calendar 分離 / research truth / environment / driver panel
     _fill_target_semantics(packet, market, target)
-    _fill_research_truth(packet)
+    _fill_research_truth(packet, family, target)
 
     # 6. coverage / gates（family 隔離，§8）
     if detail_level == "compact":
