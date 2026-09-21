@@ -16,11 +16,11 @@ import math
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-PRICE_PROBABILITY_MAP_VERSION = "3A.2.2"
-ZONE_POLICY_VERSION = "3A.2.2"
-REGIME_VERSION = "3A.2.2"
-MODEL_FAILURE_RULE_VERSION = "3A.2.2"
-BENCHMARK_REGISTRY_VERSION = "3A.2.2"
+PRICE_PROBABILITY_MAP_VERSION = "3A.2.3"
+ZONE_POLICY_VERSION = "3A.2.3"
+REGIME_VERSION = "3A.2.3"
+MODEL_FAILURE_RULE_VERSION = "3A.2.3"
+BENCHMARK_REGISTRY_VERSION = "3A.2.3"
 
 # ── canonical distribution methods ──
 DISTRIBUTION_METHODS = (
@@ -88,12 +88,28 @@ REASON_CODES = (
     "MISSING_INSTRUMENT_ROLE", "UNKNOWN_MARKET_SEMANTICS",
     "CALIBRATION_SCOPE_EVIDENCE_MISSING", "CALIBRATION_UNIVERSE_MISMATCH",
     "CALIBRATION_GLOBAL_SCOPE_MISMATCH",
+    # ── 3A.2.3 ──
+    "CALIBRATION_EVIDENCE_MISSING", "CALIBRATION_NOT_CALIBRATED",
+    "CALIBRATION_TYPE_MISMATCH", "CALIBRATION_MODEL_MISMATCH",
+    "CALIBRATION_DISTRIBUTION_MISMATCH", "CALIBRATION_TARGET_SCOPE_MISMATCH",
+    "CALIBRATION_HORIZON_SCOPE_MISMATCH", "CALIBRATION_INSUFFICIENT_SAMPLE",
+    "CALIBRATION_TEMPORAL_LEAKAGE", "CALIBRATION_PARTITION_VIOLATION",
+    "CALIBRATION_SCOPE_MISMATCH",
 )
 
 CALIBRATION_DOMAINS = ("PRICE_DISTRIBUTION", "DIRECTION_CLASSIFICATION")
 CALIBRATION_STATUSES = ("UNCALIBRATED", "CALIBRATING", "CALIBRATED", "INSUFFICIENT_EVIDENCE")
 SAMPLE_SUFFICIENCY = ("SUFFICIENT", "INSUFFICIENT", "NOT_EVALUATED")
 CALIBRATION_SCOPES = ("SINGLE_INSTRUMENT", "PANEL", "GLOBAL")
+
+# ── 3A.2.3 §7/§9/§19 canonical calibration evidence enums ──
+CALIBRATION_EVIDENCE_STATUSES = (
+    "NOT_FITTED", "FITTED_NOT_EVALUATED", "EVALUATED_UNCALIBRATED",
+    "CALIBRATED", "INSUFFICIENT_EVIDENCE", "ERROR",
+)
+PROBABILITY_TYPES = ("TERMINAL", "TOUCH", "FIRST_PASSAGE")
+DATA_PARTITION_ROLES = ("TRAIN", "CALIBRATION", "VALIDATION", "FINAL_OOS", "FORWARD")
+_FIT_FORBIDDEN_PARTITIONS = ("FINAL_OOS",)
 
 # ── 3A.2.2 §10-§14：instrument role / forecast scope（沿用現有 target semantics 語彙）──
 INSTRUMENT_ROLES = ("DIRECT", "PROXY")
@@ -262,38 +278,201 @@ def probability_sample_within_source(pv: "ProbabilityValue", dist: "Distribution
     return True  # analytic/model distribution：sample basis 由 protocol 定義
 
 
-# ── 3A.2.2 §18/§20/§21 calibration scope（typed reasons）──
+# ── 3A.2.2 §18/§20/§21 + 3A.2.3 §3/§4 calibration scope（typed reasons）──
 def calibration_scope_eligibility(scope: str, evidence: dict | None, instrument: str,
                                   target_family: str, horizon: str) -> tuple[bool, list[str]]:
-    """§18：typed calibration scope eligibility（reason 不得假裝只是 UNCALIBRATED）。"""
+    """§18/§3/§4：typed calibration scope eligibility（reason 不得假裝只是 UNCALIBRATED）。
+
+    PANEL 現在 REQUIRED：universe_id + universe_version + members + target_families +
+    supported_horizons + calibration_domain + scope_version。缺任一 → MISSING。
+    GLOBAL REQUIRED：scope_definition + scope_version + supported_target_families +
+    supported_horizons + calibration_domain。
+    """
     if scope == "SINGLE_INSTRUMENT":
         return True, []
     ev = evidence or {}
     reasons: list[str] = []
     if scope == "PANEL":
-        if not ev.get("universe_id") or not ev.get("universe_version"):
+        # §3：required fields（不得 if-exists 才檢查）
+        missing = [k for k in ("universe_id", "universe_version", "members",
+                               "target_families", "supported_horizons",
+                               "calibration_domain", "scope_version")
+                   if not ev.get(k)]
+        if missing:
             reasons.append("CALIBRATION_SCOPE_EVIDENCE_MISSING")
+            return False, reasons
         members = {normalize_instrument(x) for x in ev.get("members", [])}
         if normalize_instrument(instrument) not in members:
             reasons.append("CALIBRATION_UNIVERSE_MISMATCH")
         fams = {normalize_family(x) for x in ev.get("target_families", [])}
-        if fams and normalize_family(target_family) not in fams:
+        if normalize_family(target_family) not in fams:
             reasons.append("CALIBRATION_UNIVERSE_MISMATCH")
         hzs = {normalize_horizon(x) for x in ev.get("supported_horizons", [])}
-        if hzs and normalize_horizon(horizon) not in hzs:
+        if normalize_horizon(horizon) not in hzs:
             reasons.append("CALIBRATION_UNIVERSE_MISMATCH")
+        if ev.get("calibration_domain") != "PRICE_DISTRIBUTION":
+            reasons.append("CALIBRATION_DOMAIN_MISMATCH")
         return (not reasons), reasons
     if scope == "GLOBAL":
-        if not ev.get("scope_definition") or not ev.get("scope_version"):
+        # §15：required fields
+        missing = [k for k in ("scope_definition", "scope_version",
+                               "supported_target_families", "supported_horizons",
+                               "calibration_domain")
+                   if not ev.get(k)]
+        if missing:
             reasons.append("CALIBRATION_SCOPE_EVIDENCE_MISSING")
+            return False, reasons
         fams = {normalize_family(x) for x in ev.get("supported_target_families", [])}
         if normalize_family(target_family) not in fams:
             reasons.append("CALIBRATION_GLOBAL_SCOPE_MISMATCH")
         hzs = {normalize_horizon(x) for x in ev.get("supported_horizons", [])}
         if normalize_horizon(horizon) not in hzs:
             reasons.append("CALIBRATION_GLOBAL_SCOPE_MISMATCH")
+        if ev.get("calibration_domain") != "PRICE_DISTRIBUTION":
+            reasons.append("CALIBRATION_DOMAIN_MISMATCH")
         return (not reasons), reasons
     return False, ["CALIBRATION_SCOPE_EVIDENCE_MISSING"]
+
+
+# ── 3A.2.3 §18/§19 temporal + partition helpers ──
+def _windows_overlap(a_start: str, a_end: str, b_start: str, b_end: str) -> bool:
+    if not (a_start and a_end and b_start and b_end):
+        return False
+    return a_start < b_end and b_start < a_end
+
+
+def calibration_temporal_ok(ev: "CalibrationEvidence") -> bool:
+    """§18：evaluation window 不得與 fit window 非法重疊（未完整提供則由其他 gate 判定）。"""
+    if not (ev.fit_window_start and ev.fit_window_end
+            and ev.evaluation_window_start and ev.evaluation_window_end):
+        return True
+    return not _windows_overlap(ev.fit_window_start, ev.fit_window_end,
+                                ev.evaluation_window_start, ev.evaluation_window_end)
+
+
+def calibration_partition_ok(ev: "CalibrationEvidence") -> bool:
+    """§19：FINAL_OOS 不得用於 fit calibration。"""
+    return ev.fit_partition_role not in _FIT_FORBIDDEN_PARTITIONS
+
+
+# ── 3A.2.3 §6/§7/§9 typed calibration evidence ──
+@dataclass
+class CalibrationEvidence:
+    """Canonical typed calibration evidence（不得只靠 string status 證明 fit/evaluated）。"""
+
+    status: str = "NOT_FITTED"
+    calibration_domain: str = "PRICE_DISTRIBUTION"
+    probability_type: str = "TERMINAL"
+    method: str = ""
+    method_version: str = ""
+    calibration_version: str = ""
+    model_id: str = ""
+    model_version: str = ""
+    distribution_id: str = ""
+    distribution_version: str = ""
+    dataset_version: str = ""
+    protocol_version: str = ""
+    target_family: str = ""
+    instrument: str = ""
+    horizon: str = ""
+    scope: str = "SINGLE_INSTRUMENT"
+    fit_window: str = ""
+    evaluation_window: str = ""
+    fit_window_start: str = ""
+    fit_window_end: str = ""
+    evaluation_window_start: str = ""
+    evaluation_window_end: str = ""
+    fit_partition_role: str = "CALIBRATION"
+    fold_id: str = ""
+    train_end: str = ""
+    sample_count: int = 0
+    effective_sample_count: int = 0
+    minimum_required_sample: int = 0
+    sample_sufficiency_status: str = "NOT_EVALUATED"
+    evaluated_at: str = ""
+    source: str = ""
+    metrics: dict = field(default_factory=dict)
+    notes: str = ""
+
+    def __post_init__(self):
+        if self.status not in CALIBRATION_EVIDENCE_STATUSES:
+            raise ValueError(f"unknown calibration evidence status: {self.status!r}")
+        if self.calibration_domain not in CALIBRATION_DOMAINS:
+            raise ValueError(f"unknown calibration_domain: {self.calibration_domain!r}")
+        if self.probability_type not in PROBABILITY_TYPES:
+            raise ValueError(f"unknown probability_type: {self.probability_type!r}")
+        if self.scope not in CALIBRATION_SCOPES:
+            raise ValueError(f"unknown calibration scope: {self.scope!r}")
+        if self.sample_sufficiency_status not in SAMPLE_SUFFICIENCY:
+            raise ValueError(
+                f"unknown sample_sufficiency_status: {self.sample_sufficiency_status!r}")
+        if self.fit_partition_role not in DATA_PARTITION_ROLES:
+            raise ValueError(f"unknown fit_partition_role: {self.fit_partition_role!r}")
+
+    def is_sample_sufficient(self) -> bool:
+        """§16：calibration evaluation sample 自己的 numeric gate（與 dist/PV sample 分開）。"""
+        return (
+            self.sample_sufficiency_status == "SUFFICIENT"
+            and self.minimum_required_sample > 0
+            and self.sample_count >= self.minimum_required_sample
+            and self.effective_sample_count >= self.minimum_required_sample
+        )
+
+    def model_dump(self) -> dict:
+        return asdict(self)
+
+
+def calibration_evidence_ok(
+    ev: CalibrationEvidence | None,
+    *,
+    probability_type: str,
+    calibration_domain: str,
+    calibration_scope: str,
+    provenance: "ProbabilityProvenance | None",
+    distribution: "DistributionRecord | None",
+    map_family: str,
+    instrument: str,
+    horizon: str,
+) -> tuple[bool, list[str]]:
+    """§8-§18：calibration evidence 完整 gate（只有 CALIBRATED + 完整 binding 才過）。"""
+    if ev is None:
+        return False, ["CALIBRATION_EVIDENCE_MISSING"]
+    reasons: list[str] = []
+    if ev.status != "CALIBRATED":
+        reasons.append("CALIBRATION_NOT_CALIBRATED")
+    if ev.calibration_domain != calibration_domain:
+        reasons.append("CALIBRATION_DOMAIN_MISMATCH")
+    if ev.probability_type != probability_type.upper():
+        reasons.append("CALIBRATION_TYPE_MISMATCH")
+    if ev.scope != calibration_scope:
+        reasons.append("CALIBRATION_SCOPE_MISMATCH")
+    # §16 numeric sample
+    if not ev.is_sample_sufficient():
+        reasons.append("CALIBRATION_INSUFFICIENT_SAMPLE")
+    # §11 distribution identity
+    if distribution is not None:
+        if (ev.distribution_id != distribution.distribution_id
+                or ev.distribution_version != distribution.distribution_version):
+            reasons.append("CALIBRATION_DISTRIBUTION_MISMATCH")
+    # §12 model identity
+    if provenance is not None:
+        if (ev.model_id != provenance.model_id
+                or ev.model_version != provenance.model_version):
+            reasons.append("CALIBRATION_MODEL_MISMATCH")
+    # §13 target/horizon binding
+    if normalize_family(ev.target_family) != normalize_family(map_family):
+        reasons.append("CALIBRATION_TARGET_SCOPE_MISMATCH")
+    if normalize_horizon(ev.horizon) != normalize_horizon(horizon):
+        reasons.append("CALIBRATION_HORIZON_SCOPE_MISMATCH")
+    if ev.scope == "SINGLE_INSTRUMENT" and normalize_instrument(ev.instrument) != normalize_instrument(instrument):
+        reasons.append("CALIBRATION_TARGET_SCOPE_MISMATCH")
+    # §18 temporal
+    if not calibration_temporal_ok(ev):
+        reasons.append("CALIBRATION_TEMPORAL_LEAKAGE")
+    # §19 partition
+    if not calibration_partition_ok(ev):
+        reasons.append("CALIBRATION_PARTITION_VIOLATION")
+    return (not reasons), reasons
 
 
 # ── §11/§12/§13 evidence ──
@@ -338,6 +517,8 @@ class ProbabilityValue:
     minimum_required_sample: int = 0
     sample_sufficiency_status: str = "NOT_EVALUATED"
     reason_codes: list[str] = field(default_factory=list)
+    # ── 3A.2.3 §9：type-specific calibration evidence（terminal/touch/first_passage 各自獨立）──
+    calibration_evidence: CalibrationEvidence | None = None
 
     def __post_init__(self):
         if self.status not in PROBABILITY_STATUSES:
@@ -398,8 +579,10 @@ def evaluate_probability(
     checks: dict = {"capability": False, "value": False, "probability_sample": False,
                     "distribution_sample": False, "provenance": False, "provenance_scope": False,
                     "distribution_scope": False, "distribution_identity": False,
-                    "market_semantics": False, "calibration": False, "calibration_scope": False,
-                    "path": False}
+                    "market_semantics": False, "calibration_scope": False, "path": False,
+                    "calibration_evidence": False, "calibration_type": False,
+                    "calibration_identity": False, "calibration_sample": False,
+                    "calibration_temporal": False, "calibration_target_scope": False}
 
     # 1. capability support（含 path hard gate）
     cap_ok = capability_supports(capability, probability_type)
@@ -424,17 +607,29 @@ def evaluate_probability(
     if not val_ok:
         reasons.append("INVALID_VALUE")
 
-    # 3. calibration（map + zone + domain）+ §18 calibration scope
-    cal_ok = (map_calibration == "CALIBRATED" and pv.calibration_status == "CALIBRATED"
-              and calibration_domain == "PRICE_DISTRIBUTION" and pv.calibration_domain == "PRICE_DISTRIBUTION")
-    checks["calibration"] = cal_ok
-    if not cal_ok:
-        reasons.append("UNCALIBRATED")
+    # 3. calibration domain（string status 僅 compat，不再 authoritative）
     if calibration_domain != "PRICE_DISTRIBUTION" or pv.calibration_domain != "PRICE_DISTRIBUTION":
         reasons.append("CALIBRATION_DOMAIN_MISMATCH")
+    # 3a. calibration scope（map-level, §3/§4/§15）
     cal_scope_reasons = list(calibration_scope_reasons or [])
     checks["calibration_scope"] = not cal_scope_reasons
     reasons.extend(cal_scope_reasons)
+    # 3b. typed calibration evidence（§8-§18 authoritative）
+    cal_ev_ok, cal_ev_reasons = calibration_evidence_ok(
+        pv.calibration_evidence, probability_type=probability_type,
+        calibration_domain=calibration_domain, calibration_scope=calibration_scope,
+        provenance=provenance, distribution=distribution,
+        map_family=map_family, instrument=instrument, horizon=horizon)
+    reasons.extend(cal_ev_reasons)
+    checks["calibration_evidence"] = not any(
+        r in cal_ev_reasons for r in ("CALIBRATION_EVIDENCE_MISSING", "CALIBRATION_NOT_CALIBRATED"))
+    checks["calibration_type"] = "CALIBRATION_TYPE_MISMATCH" not in cal_ev_reasons
+    checks["calibration_identity"] = not any(
+        r in cal_ev_reasons for r in ("CALIBRATION_DISTRIBUTION_MISMATCH", "CALIBRATION_MODEL_MISMATCH"))
+    checks["calibration_sample"] = "CALIBRATION_INSUFFICIENT_SAMPLE" not in cal_ev_reasons
+    checks["calibration_temporal"] = "CALIBRATION_TEMPORAL_LEAKAGE" not in cal_ev_reasons
+    checks["calibration_target_scope"] = not any(
+        r in cal_ev_reasons for r in ("CALIBRATION_TARGET_SCOPE_MISMATCH", "CALIBRATION_HORIZON_SCOPE_MISMATCH"))
 
     # 4. probability numeric sample sufficiency
     samp_ok = pv.is_sample_sufficient()
@@ -513,7 +708,7 @@ def evaluate_probability(
     checks["market_semantics"] = not mkt_reasons
     reasons.extend(mkt_reasons)
 
-    eligible = (cap_ok and val_ok and cal_ok and not cal_scope_reasons and samp_ok
+    eligible = (cap_ok and val_ok and cal_ev_ok and not cal_scope_reasons and samp_ok
                 and dist_samp_ok and src_ok and prov_ok and ident_ok
                 and not scope_reasons and not dist_scope_reasons and not mkt_reasons)
     if probability_type in ("touch", "first_passage"):
@@ -527,7 +722,7 @@ def evaluate_probability(
         public_status = "NOT_AVAILABLE_UNSUPPORTED_CAPABILITY"
     elif probability_type in ("touch", "first_passage") and checks["path"] is not True:
         public_status = "NOT_AVAILABLE_UNSUPPORTED_CAPABILITY"
-    elif not cal_ok or cal_scope_reasons:
+    elif not cal_ev_ok or cal_scope_reasons:
         public_status = "NOT_AVAILABLE_UNCALIBRATED"
     elif not samp_ok or not dist_samp_ok or not src_ok:
         public_status = "NOT_AVAILABLE_INSUFFICIENT_SAMPLE"
@@ -671,11 +866,28 @@ class ProbabilityMap:
             self.calibration_scope, self.calibration_scope_evidence,
             self.instrument, self.target_family, self.horizon)
 
+    def derived_calibration_summary(self) -> str:
+        """§24/§25：由 actual calibration evidence 導出 summary，不讓 caller 宣告整張 map CALIBRATED。"""
+        calibrated_types = set()
+        for z in self.zones:
+            for ptype, pv in (("TERMINAL", z.terminal), ("TOUCH", z.touch),
+                              ("FIRST_PASSAGE", z.first_passage)):
+                if pv.calibration_evidence is not None and pv.calibration_evidence.status == "CALIBRATED":
+                    calibrated_types.add(ptype)
+        if not calibrated_types:
+            return "NONE_CALIBRATED"
+        if calibrated_types == {"TERMINAL"}:
+            return "CALIBRATED_FOR_TERMINAL_ONLY"
+        if calibrated_types >= {"TERMINAL", "TOUCH", "FIRST_PASSAGE"}:
+            return "CALIBRATED_FOR_PATH_EVENTS"
+        return "PARTIALLY_CALIBRATED"
+
     def public_view(self) -> dict:
         out = {
             "instrument": self.instrument, "target_family": self.target_family,
             "horizon": self.horizon, "version": self.version,
             "calibration_status": self.calibration_status,
+            "calibration_summary": self.derived_calibration_summary(),
             "calibration_scope": self.calibration_scope,
             "distribution_method": self.distribution.method,
             "distribution_capability": self.distribution.capability,

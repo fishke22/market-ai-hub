@@ -21,6 +21,22 @@ def _prov():
         distribution_id="d1", distribution_version="v1")
 
 
+def _cal_ev(ptype="TERMINAL"):
+    from market_ai_hub.research.price_probability_map import CalibrationEvidence
+
+    return CalibrationEvidence(
+        status="CALIBRATED", calibration_domain="PRICE_DISTRIBUTION", probability_type=ptype,
+        method="isotonic", method_version="v1", calibration_version="c1",
+        model_id="m", model_version="v1", distribution_id="d1", distribution_version="v1",
+        dataset_version="d1", protocol_version="p1",
+        target_family="TAIWAN_STOCK", instrument="X", horizon="1d", scope="SINGLE_INSTRUMENT",
+        fit_window_start="2026-01-01", fit_window_end="2026-06-30",
+        evaluation_window_start="2026-07-01", evaluation_window_end="2026-09-21",
+        fit_partition_role="CALIBRATION",
+        sample_count=100, effective_sample_count=100, minimum_required_sample=50,
+        sample_sufficiency_status="SUFFICIENT", evaluated_at="t", source="synthetic")
+
+
 # ── §1/§35：enum consistency ──
 
 def test_distribution_methods_include_runtime_values():
@@ -90,7 +106,8 @@ def test_mixed_probability_types_only_calibrated_output():
         zone="BUY_ZONE",
         terminal=ProbabilityValue(value=0.61, status="AVAILABLE", calibration_status="CALIBRATED",
                                   sample_sufficiency_status="SUFFICIENT", sample_count=100,
-                                  effective_sample_count=100, minimum_required_sample=50),
+                                  effective_sample_count=100, minimum_required_sample=50,
+                                  calibration_evidence=_cal_ev("TERMINAL")),
         touch=ProbabilityValue(value=0.8, status="AVAILABLE", calibration_status="UNCALIBRATED",
                                sample_sufficiency_status="SUFFICIENT", sample_count=100,
                                effective_sample_count=100, minimum_required_sample=50),
@@ -212,4 +229,4 @@ def test_calibration_metrics_interface_only():
 def test_version_bumped():
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
 
-    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.2"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.3"

@@ -47,6 +47,22 @@ def _pv(**kw):
     return ProbabilityValue(**base)
 
 
+def _cal_ev(ptype="TERMINAL", family="TAIWAN_STOCK", instrument="X", horizon="1d"):
+    from market_ai_hub.research.price_probability_map import CalibrationEvidence
+
+    return CalibrationEvidence(
+        status="CALIBRATED", calibration_domain="PRICE_DISTRIBUTION", probability_type=ptype,
+        method="isotonic", method_version="v1", calibration_version="c1",
+        model_id="m", model_version="v1", distribution_id="d1", distribution_version="v1",
+        dataset_version="d1", protocol_version="p1",
+        target_family=family, instrument=instrument, horizon=horizon, scope="SINGLE_INSTRUMENT",
+        fit_window_start="2026-01-01", fit_window_end="2026-06-30",
+        evaluation_window_start="2026-07-01", evaluation_window_end="2026-09-21",
+        fit_partition_role="CALIBRATION",
+        sample_count=100, effective_sample_count=100, minimum_required_sample=50,
+        sample_sufficiency_status="SUFFICIENT", evaluated_at="t", source="synthetic")
+
+
 def _prov(family="TAIWAN_STOCK", instrument="X", horizon="1d", did="d1", dver="v1"):
     from market_ai_hub.research.price_probability_map import ProbabilityProvenance
 
@@ -71,7 +87,8 @@ def _pbm(*, zones, dist, family="TAIWAN_STOCK", instrument="X", horizon="1d",
 def _touch_map(dist, *, family="TAIWAN_STOCK", instrument="X", horizon="1d"):
     from market_ai_hub.research.price_probability_map import ZoneProbability
 
-    return _pbm(zones=[ZoneProbability(zone="BUY_ZONE", touch=_pv())], dist=dist,
+    touch = _pv(calibration_evidence=_cal_ev("TOUCH", family, instrument, horizon))
+    return _pbm(zones=[ZoneProbability(zone="BUY_ZONE", touch=touch)], dist=dist,
                 family=family, instrument=instrument, horizon=horizon)
 
 
@@ -144,12 +161,8 @@ def test_29_correct_osaka_proxy_passes():
     dist = _path_dist(target_family="OSAKA_MICRO", instrument="^N225", horizon="1d",
                       instrument_role="PROXY", forecast_scope="PROXY_MODEL_REFERENCE",
                       target_market_calendar="XTKS", session_semantics="day")
-    pbm = _pbm(zones=[__import__("market_ai_hub.research.price_probability_map",
-                                 fromlist=["ZoneProbability"]).ZoneProbability(
-        zone="BUY_ZONE", touch=_pv())],
-        dist=dist, family="OSAKA_MICRO", instrument="^N225",
-        prov=_prov("OSAKA_MICRO", "^N225", "1d"))
-    assert pbm.public_view()["zones"][0].get("touch_probability") == 0.61
+    pub = _touch_map(dist, family="OSAKA_MICRO", instrument="^N225").public_view()["zones"][0]
+    assert pub.get("touch_probability") == 0.61
 
 
 # ── §30：wrong Osaka direct XTKS fails closed ──
@@ -258,7 +271,11 @@ def test_20_panel_scope_universe_mismatch_typed_reason():
 
     pbm = _pbm(zones=[ZoneProbability(zone="BUY_ZONE", terminal=_pv())], dist=_dist(),
                scope="PANEL", scope_ev={"universe_id": "u1", "universe_version": "v1",
-                                        "members": ["OTHER"]})
+                                        "members": ["OTHER"],
+                                        "target_families": ["TAIWAN_STOCK"],
+                                        "supported_horizons": ["1d"],
+                                        "calibration_domain": "PRICE_DISTRIBUTION",
+                                        "scope_version": "v1"})
     pub = pbm.public_view()["zones"][0]
     assert "CALIBRATION_UNIVERSE_MISMATCH" in pub["terminal_reason_codes"]
 
@@ -269,7 +286,8 @@ def test_21_global_scope_mismatch_typed_reason():
     pbm = _pbm(zones=[ZoneProbability(zone="BUY_ZONE", terminal=_pv())], dist=_dist(),
                scope="GLOBAL", scope_ev={"scope_definition": "d", "scope_version": "v1",
                                          "supported_target_families": ["OSAKA_MICRO"],
-                                         "supported_horizons": ["1d"]})
+                                         "supported_horizons": ["1d"],
+                                         "calibration_domain": "PRICE_DISTRIBUTION"})
     pub = pbm.public_view()["zones"][0]
     assert "CALIBRATION_GLOBAL_SCOPE_MISMATCH" in pub["terminal_reason_codes"]
 
@@ -321,4 +339,4 @@ def test_33_actionability_and_instruction_invariants():
 def test_35_version_3a22():
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
 
-    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.2"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.3"

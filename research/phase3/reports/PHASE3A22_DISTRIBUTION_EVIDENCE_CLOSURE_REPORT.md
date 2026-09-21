@@ -3,7 +3,7 @@
 - **Schema version**: `3A.2.2` (`PRICE_PROBABILITY_MAP_VERSION`)
 - **Baseline main**: `8dc0c47f3b15c25b9573e005d67559b236632e27`
 - **Runtime build_id (new)**: `de60666063633e64` (was `46538342bd31e6bb`)
-- **Tests**: `937 passed, 20 deselected` (was `914`; +26 new 3A.2.2 adversarial)
+- **Tests**: `940 passed, 20 deselected` (was `914`; +26 new 3A.2.2 adversarial). Note: the 3 build_id snapshot tests are counted in the 940; the interim 937 was the run before those snapshots were bumped.
 - **Focused Phase 3A~3A.2.1**: 74 passed; **3A.2.2** file: 26 passed
 - **Central artifact**: `src/market_ai_hub/research/price_probability_map.py`
 
@@ -98,7 +98,7 @@ no fitting/training/strategy/execution.
 ```
 python -m pytest tests/test_phase3a22.py -q                                    # 26 passed
 python -m pytest tests/test_phase3a.py tests/test_phase3a1.py tests/test_phase3a2.py tests/test_phase3a21.py -q  # 74 passed
-python -m pytest tests/ -q                                                     # 937 passed, 20 deselected
+python -m pytest tests/ -q                                                     # 940 passed, 20 deselected
 ```
 
 ## Manual UAT
