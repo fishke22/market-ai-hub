@@ -1,12 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase 3A.1（Target Profile Isolation + Unknown/Unevaluated Semantics + Fail-Closed Price Map Defaults）**
-- Gate: **PHASE3A1_SEMANTIC_DEFAULTS_PASS**（最近；前置 PHASE3A_PRICE_PROBABILITY_MAP_FOUNDATION_PASS）
-- build_id：**8488def718b8672c**（fingerprint 全部 runtime source + config）
+- Current phase: **Phase 3A.2（Typed Evidence Contract + Calibration Safety Closure + Distribution Schema Consistency + Evaluation Provenance）**
+- Gate: **PHASE3A2_EVIDENCE_CONTRACT_PASS**（最近；前置 PHASE3A1_SEMANTIC_DEFAULTS_PASS）
+- build_id：**e8b30b454b3b574b**（fingerprint 全部 runtime source + config）
+- Price/Probability Map schema version：**3A.2**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
-- Credential 狀態：FRED_API_KEY = CONFIGURED（WINCRED）；FINMIND_API_TOKEN = CONFIGURED（WINCRED）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
-- Price/Probability Map：fail-closed defaults（state/regime/model_failure = null + NOT_EVALUATED；distribution NOT_ESTABLISHED；probability NOT_AVAILABLE）
+- Probability availability：全部 NOT_AVAILABLE（QUANTILES_ONLY / INSUFFICIENT_DISTRIBUTION；無 calibration）
 
 ## Phase 2 全歷程 Gate
 
