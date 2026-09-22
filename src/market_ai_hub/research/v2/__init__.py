@@ -1,0 +1,1 @@
+"""V2 research track — as-of / timestamp / data-truth foundation (Phase V2-A)."""
