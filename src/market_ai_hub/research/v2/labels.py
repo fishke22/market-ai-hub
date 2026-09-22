@@ -27,6 +27,9 @@ V2_DAILY_LABEL_SCHEMA_VERSION = "2C.1"
 BARRIER_DIRECTIONS = ("UP", "DOWN")
 ROLL_STATUSES = ("NONE", "ROLL_BOUNDARY", "UNKNOWN", "NOT_APPLICABLE")
 SERIES_SEMANTICS = ("CONTINUOUS", "CONTRACT", "CASH", "INDEX", "UNKNOWN")
+# calendar provenance trust (§C): a plain expected_sessions list is NOT authoritative by itself
+CALENDAR_PROVENANCE_STATUS = ("AUTHORITATIVE", "VERIFIED_INPUT", "UNKNOWN")
+_CALENDAR_TRUSTED = ("AUTHORITATIVE", "VERIFIED_INPUT")
 
 # event-level statuses (§12)
 EVENT_STATUSES = (
@@ -349,8 +352,15 @@ def build_daily_barrier_labels(
     bars: list[DailyOutcomeBar],
     policy: DailyLabelPolicy | None = None,
     expected_sessions: list[str] | None = None,
+    calendar_provenance: str = "UNKNOWN",
 ) -> DailyBarrierLabelResult:
-    """Core V2-C engine. Fail closed on any series-level blocker."""
+    """Core V2-C engine. Fail closed on any series-level blocker.
+
+    `expected_sessions` alone is NOT authoritative calendar provenance; the caller must also
+    declare `calendar_provenance` (AUTHORITATIVE / VERIFIED_INPUT) for negative labels to resolve.
+    """
+    if calendar_provenance not in CALENDAR_PROVENANCE_STATUS:
+        raise ValueError(f"unknown calendar_provenance: {calendar_provenance!r}")
     policy = policy or DailyLabelPolicy()
     res = DailyBarrierLabelResult(
         instrument=request.instrument, target_family=request.target_family,
@@ -437,10 +447,10 @@ def build_daily_barrier_labels(
     outcome_bars = sorted_bars
 
     # 8. maturity + expected sessions
-    # Negative labels require authoritative calendar provenance: `expected_sessions` MUST be
-    # provided. Without it, "H rows observed" is NOT proof of "H expected sessions complete".
-    calendar_known = expected_sessions is not None
-    if expected_sessions is None:
+    # Negative labels require BOTH an authoritative expected-session list AND trusted calendar
+    # provenance. A plain list with calendar_provenance=UNKNOWN is not authoritative.
+    calendar_known = (expected_sessions is not None) and (calendar_provenance in _CALENDAR_TRUSTED)
+    if not calendar_known:
         ordered_sessions = [b.trading_date for b in outcome_bars]
         mature = False
         missing: list[str] = []
@@ -455,7 +465,7 @@ def build_daily_barrier_labels(
     res.expected_outcome_sessions = list(expected_sessions) if expected_sessions is not None else []
     res.observed_outcome_sessions = [b.trading_date for b in outcome_bars]
     res.missing_outcome_sessions = missing
-    res.calendar_provenance = "PROVIDED" if calendar_known else "UNKNOWN"
+    res.calendar_provenance = calendar_provenance
     res.outcome_window_start = outcome_bars[0].trading_date
     res.outcome_window_end = outcome_bars[-1].trading_date
 

@@ -49,6 +49,8 @@ def _up_barrier(level=105.0, **kw):
 
 
 def _run(request, barrier, bars, **kw):
+    if "expected_sessions" in kw and "calendar_provenance" not in kw:
+        kw["calendar_provenance"] = "VERIFIED_INPUT"  # synthetic trusted fixture
     return L.build_daily_barrier_labels(request, barrier, bars, _policy(), **kw)
 
 
@@ -461,3 +463,88 @@ def test_legacy_input_not_promoted_to_asof_verified():
              expected_sessions=["2026-09-21"])
     assert r.asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
     assert r.asof_status != "ASOF_VERIFIED"
+
+
+# ── Final closure: session-boundary truth on POSITIVE labels ──
+def test_positive_touch_blocks_when_outcome_session_not_proven_after_origin():
+    # no session_open_timestamp → cannot prove bar is after forecast_origin → touch NOT True
+    bar = _bar("2026-09-21", 102, 106, 101, 104, day=21, session_open_timestamp=None)
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar],
+             expected_sessions=["2026-09-21"])
+    assert r.touch.value is None
+    assert r.touch.status == L.BLOCKED_TEMPORAL_SESSION_BOUNDARY
+    assert r.series_block == L.BLOCKED_TEMPORAL_SESSION_BOUNDARY
+
+
+def test_positive_break_blocks_when_outcome_session_not_proven_after_origin():
+    bar = _bar("2026-09-21", 102, 107, 101, 106, day=21, session_open_timestamp=None)
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar],
+             expected_sessions=["2026-09-21"])
+    assert r.break_.value is None
+    assert r.break_.status == L.BLOCKED_TEMPORAL_SESSION_BOUNDARY
+
+
+def test_current_session_full_daily_bar_cannot_label_mid_session_forecast():
+    # forecast_origin 09:00; bar opened 08:30 same day → full daily bar must NOT be labeled
+    req = _request(forecast_origin=_dt(21, 9, 0), origin_session_date="2026-09-21", horizon_sessions=1)
+    bar = _bar("2026-09-21", 102, 106, 101, 104, day=21, session_open_timestamp=_dt(21, 8, 30))
+    r = _run(req, _up_barrier(105.0), [bar], expected_sessions=["2026-09-21"])
+    assert r.touch.value is None
+    assert r.break_.value is None
+    assert r.series_block == L.BLOCKED_TEMPORAL_SESSION_BOUNDARY
+
+
+# ── Final closure: calendar provenance trust ──
+def test_expected_sessions_without_trusted_calendar_provenance_still_blocks_negative():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 104, 101, 103, day=21)],
+             expected_sessions=["2026-09-21"], calendar_provenance="UNKNOWN")
+    assert r.calendar_provenance == "UNKNOWN"
+    assert r.break_.value is None
+    assert r.break_.status == "BLOCKED_CALENDAR_PROVENANCE"
+
+
+def test_trusted_expected_sessions_can_resolve_negative_maturity():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 104, 101, 103, day=21)],
+             expected_sessions=["2026-09-21"], calendar_provenance="VERIFIED_INPUT")
+    assert r.break_.value is False
+    assert r.break_.status == "OBSERVED_FALSE"
+
+
+# ── Final closure: roll H=1 acceptance ──
+def test_osaka_unknown_roll_blocks_h1_acceptance():
+    bar = _bar("2026-09-21", 102, 107, 101, 106, day=21, roll_status="UNKNOWN")
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar])
+    assert r.series_block == L.BLOCKED_ROLL_PROVENANCE
+    assert r.acceptance.value is None
+    assert r.acceptance.status == L.BLOCKED_ROLL_PROVENANCE
+
+
+# ── Final closure: acceptance consecutive integrity ──
+def test_acceptance_does_not_bridge_missing_expected_session():
+    # D1 beyond, D2 MISSING, D3 beyond → must NOT count as 2 consecutive
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
+            _bar("2026-09-23", 106, 108, 105, 107, day=23)]
+    r = _run(_request(horizon_sessions=3), _up_barrier(105.0), bars,
+             expected_sessions=["2026-09-21", "2026-09-22", "2026-09-23"],
+             calendar_provenance="VERIFIED_INPUT")
+    assert r.acceptance.value is None
+    assert r.acceptance.status == "UNOBSERVABLE_MISSING_DATA"
+
+
+def test_acceptance_blocks_duplicate_session():
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
+            _bar("2026-09-21", 103, 108, 102, 107, day=21)]
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_TEMPORAL_CONTRACT
+
+
+# ── Final closure: successful label does not promote legacy asof ──
+def test_successful_label_does_not_promote_legacy_asof_status():
+    bar = _bar("2026-09-21", 102, 107, 101, 106, day=21,
+               asof_status="LEGACY_TEMPORAL_UNVERIFIED")
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar],
+             expected_sessions=["2026-09-21"])
+    assert r.break_.value is True  # label computed
+    assert r.asof_status == "LEGACY_TEMPORAL_UNVERIFIED"  # not promoted
