@@ -1,0 +1,53 @@
+# V2-A Data Staleness Policy (§15)
+# Config-driven expected update cadence + soft/hard stale thresholds per source/frequency.
+# These are METADATA for the V2-A as-of layer; providers keep their own behavior.
+schema_version: "2A.1"
+policy_default:
+  cadence_seconds: 86400       # daily default
+  soft_stale_seconds: 90000    # 25h
+  hard_stale_seconds: 604800   # 7d
+sources:
+  TWSE:
+    frequency: DAILY
+    cadence_seconds: 86400
+    soft_stale_seconds: 90000
+    hard_stale_seconds: 604800
+  FINMIND:
+    frequency: DAILY
+    cadence_seconds: 86400
+    soft_stale_seconds: 90000
+    hard_stale_seconds: 604800
+  FRED:
+    frequency: IRREGULAR
+    cadence_seconds: 86400
+    soft_stale_seconds: 172800    # 2d
+    hard_stale_seconds: 2592000   # 30d
+    revision_safe: false          # no ALFRED/vintage in scope → REVISION_RISK_PRESENT
+  YFINANCE:
+    frequency: DAILY
+    cadence_seconds: 86400
+    soft_stale_seconds: 90000
+    hard_stale_seconds: 604800
+  USTREASURY:
+    frequency: DAILY
+    cadence_seconds: 86400
+    soft_stale_seconds: 90000
+    hard_stale_seconds: 604800
+  JPX_OSE:
+    frequency: DAILY
+    cadence_seconds: 86400
+    soft_stale_seconds: 90000
+    hard_stale_seconds: 604800
+  TAIFEX:
+    frequency: DAILY
+    cadence_seconds: 86400
+    soft_stale_seconds: 90000
+    hard_stale_seconds: 604800
+# External factors — schema supported, dataset currently NOT_AVAILABLE (§35)
+# (no invented intraday/L1/L2 capability)
+context_roles:
+  market_open_fresh: LIVE
+  market_closed: PREVIOUS_SESSION_REFERENCE
+  macro: STATIC_MACRO_CONTEXT
+  delayed: DELAYED_REFERENCE
+  unavailable: UNAVAILABLE
