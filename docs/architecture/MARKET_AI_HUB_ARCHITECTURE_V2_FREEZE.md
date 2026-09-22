@@ -3,7 +3,7 @@
 - **Status**: FORMAL FREEZE (was `MARKET_AI_HUB_ARCHITECTURE_V2_FREEZE_DRAFT` under `research/phase3/v2_audit/`)
 - **Date**: 2026-09-22
 - **V2-A gate**: `PHASEV2A_ASOF_DATA_TRUTH_PASS`
-- **Baseline**: main `1ba46e9fa23478ec622395274c50d9d283a30141`; V2 as-of schema `2A.1`; build_id `65abb3af1b561afc`
+- **Baseline**: main `1ba46e9fa23478ec622395274c50d9d283a30141`; V2 as-of schema `2A.1`; build_id `94b5c1a8a55becfb`
 
 The audit (Phase 3-V2) is complete. This document freezes the V2 architecture into
 **CORE_V2 / RESEARCH_CHALLENGER / DATA_DEPENDENT / DEFERRED** categories. The as-of/timestamp/
