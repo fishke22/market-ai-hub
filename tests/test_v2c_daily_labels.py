@@ -1,0 +1,398 @@
+"""Phase V2-C — daily multi-target label engine tests."""
+from __future__ import annotations
+
+import sys
+from datetime import datetime, timezone
+
+import pytest
+
+sys.path.insert(0, "src")
+
+from market_ai_hub.research.v2 import labels as L
+
+
+def _dt(d, h=0, m=0):
+    return datetime(2026, 9, d, h, m, tzinfo=timezone.utc)
+
+
+def _policy(**kw):
+    base = dict(acceptance_consecutive_closes=2)
+    base.update(kw)
+    return L.DailyLabelPolicy(**base)
+
+
+def _request(**kw):
+    base = dict(
+        instrument="JNU", target_family="OSAKA_MICRO", instrument_role="DIRECT",
+        calendar_id="OSE_DERIVATIVES", feature_cutoff_timestamp=_dt(18, 8, 0),
+        forecast_origin=_dt(18, 8, 0), origin_session_date="2026-09-18",
+        horizon_sessions=3, previous_close=100.0)
+    base.update(kw)
+    return L.DailyLabelRequest(**base)
+
+
+def _bar(trading_date, open_, high, low, close, day=18, **kw):
+    base = dict(
+        instrument="JNU", target_family="OSAKA_MICRO", instrument_role="DIRECT",
+        calendar_id="OSE_DERIVATIVES", trading_date=trading_date,
+        session_open_timestamp=_dt(day, 0, 30), open=open_, high=high, low=low, close=close,
+        roll_status="NONE", series_semantics="CONTRACT")
+    base.update(kw)
+    return L.DailyOutcomeBar(**base)
+
+
+def _up_barrier(level=105.0, **kw):
+    base = dict(barrier_id="B1", level=level, direction="UP",
+                barrier_source="research", barrier_available_at=_dt(18, 7, 0))
+    base.update(kw)
+    return L.BarrierSpec(**base)
+
+
+def _run(request, barrier, bars, **kw):
+    return L.build_daily_barrier_labels(request, barrier, bars, _policy(), **kw)
+
+
+# ── normal cases ──
+def test_up_touch_true():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 106, 101, 104, day=21)])
+    assert r.touch.value is True
+    assert r.touch.status == "OBSERVED_TRUE"
+    assert r.touch.first_session_date == "2026-09-21"
+
+
+def test_down_touch_true():
+    r = _run(_request(horizon_sessions=1),
+             L.BarrierSpec(barrier_id="B1", level=95.0, direction="DOWN",
+                           barrier_source="s", barrier_available_at=_dt(18, 7, 0)),
+             [_bar("2026-09-21", 98, 99, 94, 97, day=21)])
+    assert r.touch.value is True
+
+
+def test_up_break_true():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 107, 101, 106, day=21)])
+    assert r.break_.value is True
+    assert r.break_.first_session_date == "2026-09-21"
+
+
+def test_down_break_true():
+    r = _run(_request(horizon_sessions=1),
+             L.BarrierSpec(barrier_id="B1", level=95.0, direction="DOWN",
+                           barrier_source="s", barrier_available_at=_dt(18, 7, 0)),
+             [_bar("2026-09-21", 98, 99, 96, 94, day=21)])
+    assert r.break_.value is True
+
+
+def test_close_equal_barrier_not_break():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 106, 101, 105.0, day=21)])
+    assert r.break_.value is False
+    assert r.break_.status == "OBSERVED_FALSE"
+
+
+def test_acceptance_two_consecutive_true():
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
+            _bar("2026-09-22", 106, 108, 105, 107, day=22)]
+    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars)
+    assert r.acceptance.value is True
+    assert r.acceptance.first_session_date == "2026-09-22"
+
+
+def test_acceptance_one_close_only_false():
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
+            _bar("2026-09-22", 106, 107, 104, 104, day=22)]
+    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars)
+    assert r.acceptance.value is False
+    assert r.acceptance.status == "OBSERVED_FALSE"
+
+
+def test_acceptance_break_then_revert_false():
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
+            _bar("2026-09-22", 106, 107, 104, 104, day=22)]
+    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars)
+    assert r.break_.value is True
+    assert r.acceptance.value is False
+
+
+# ── maturity ──
+def test_unmature_no_positive():
+    r = _run(_request(horizon_sessions=3), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 104, 101, 103, day=21)])
+    assert r.touch.value is None
+    assert r.touch.status == "UNMATURED"
+
+
+def test_touch_early_true_despite_unmature():
+    r = _run(_request(horizon_sessions=3), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 106, 101, 103, day=21)])
+    assert r.touch.value is True
+
+
+def test_acceptance_early_true_despite_longer_horizon():
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
+            _bar("2026-09-22", 106, 108, 105, 107, day=22)]
+    r = _run(_request(horizon_sessions=5), _up_barrier(105.0), bars)
+    assert r.acceptance.value is True
+
+
+# ── gap ambiguity ──
+def test_gap_cross_touch_ambiguous_break_true():
+    # prev close 100 < L 105, next open 106 > L, low 105.5 > L → gap over
+    bars = [_bar("2026-09-21", 106, 108, 105.5, 107, day=21)]
+    r = _run(_request(horizon_sessions=1, previous_close=100.0), _up_barrier(105.0), bars)
+    assert r.touch.value is None
+    assert r.touch.status == "AMBIGUOUS_GAP_CROSS"
+    assert r.break_.value is True
+
+
+def test_gap_over_then_later_touch_true():
+    bars = [_bar("2026-09-21", 106, 108, 105.5, 107, day=21),
+            _bar("2026-09-22", 107, 109, 104.0, 108, day=22)]
+    r = _run(_request(horizon_sessions=2, previous_close=100.0), _up_barrier(105.0), bars)
+    assert r.touch.value is True
+    assert r.touch.first_session_date == "2026-09-22"
+
+
+# ── no path fabrication ──
+def test_same_bar_touch_break_no_first_passage():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 106, 101, 106, day=21)])
+    assert r.touch.value is True and r.break_.value is True
+    assert r.path_order_status == "UNKNOWN_WITHIN_DAILY_BAR"
+    assert not hasattr(r.touch, "first_passage_timestamp")
+
+
+def test_multi_barrier_same_bar_order_unknown():
+    r = _run(_request(horizon_sessions=1), _up_barrier(103.0),
+             [_bar("2026-09-21", 102, 106, 100, 106, day=21)])
+    assert r.touch.value is True
+    assert r.path_order_status == "UNKNOWN_WITHIN_DAILY_BAR"
+
+
+# ── leakage ──
+def test_barrier_available_after_cutoff_fail():
+    req = _request(feature_cutoff_timestamp=_dt(18, 8, 0))
+    barrier = _up_barrier(105.0, barrier_available_at=_dt(18, 9, 0))
+    r = _run(req, barrier, [_bar("2026-09-21", 102, 106, 101, 104, day=21)])
+    assert r.touch.status == "INVALID_BARRIER"
+    assert r.series_block == L.BLOCKED_TEMPORAL_CONTRACT
+
+
+def test_feature_cutoff_after_origin_fail():
+    req = _request(feature_cutoff_timestamp=_dt(18, 9, 0), forecast_origin=_dt(18, 8, 0))
+    r = _run(req, _up_barrier(105.0), [_bar("2026-09-21", 102, 106, 101, 104, day=21)])
+    assert r.series_block == L.BLOCKED_TEMPORAL_CONTRACT
+
+
+def test_mid_session_bar_excluded():
+    # forecast_origin 09:00; bar opened 08:30 (before origin) → mid-session, excluded
+    req = _request(forecast_origin=_dt(21, 9, 0), origin_session_date="2026-09-21", horizon_sessions=1)
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, session_open_timestamp=_dt(21, 8, 30))]
+    r = _run(req, _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_TEMPORAL_SESSION_BOUNDARY
+
+
+def test_naive_timestamp_reject():
+    with pytest.raises(ValueError):
+        L.DailyLabelRequest(instrument="JNU", feature_cutoff_timestamp=datetime(2026, 9, 18, 8, 0),
+                            forecast_origin=_dt(18, 8, 0))
+
+
+# ── data quality ──
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf"), 0.0, -5.0])
+def test_invalid_price_rejected(bad):
+    bar = _bar("2026-09-21", 102, 106, bad, 104, day=21)
+    reasons = L.validate_daily_bar(bar)
+    assert any("INVALID_LOW" in r for r in reasons)
+
+
+def test_low_gt_high_invalid():
+    bar = _bar("2026-09-21", 102, 101, 103, 102, day=21)
+    assert "LOW_GT_HIGH" in L.validate_daily_bar(bar)
+
+
+def test_open_outside_range_invalid():
+    bar = _bar("2026-09-21", 110, 106, 101, 104, day=21)
+    assert "OPEN_OUTSIDE_RANGE" in L.validate_daily_bar(bar)
+
+
+def test_close_outside_range_invalid():
+    bar = _bar("2026-09-21", 102, 106, 101, 108, day=21)
+    assert "CLOSE_OUTSIDE_RANGE" in L.validate_daily_bar(bar)
+
+
+def test_missing_high_low_touch_unavailable():
+    bar = _bar("2026-09-21", 102, None, None, 104, day=21)
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar])
+    assert r.touch.value is None
+    assert r.touch.status in ("INVALID_OHLC",)
+
+
+def test_missing_close_break_unavailable():
+    bar = _bar("2026-09-21", 102, 106, 101, None, day=21)
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar])
+    assert r.break_.value is None
+
+
+# ── identity isolation ──
+def test_osaka_direct_proxy_mixed_reject():
+    req = _request(instrument="JNU", target_family="OSAKA_MICRO", instrument_role="DIRECT")
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, instrument="^N225", instrument_role="PROXY")]
+    r = _run(req, _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_IDENTITY_MISMATCH
+
+
+def test_osaka_taiwan_mixed_reject():
+    req = _request(instrument="JNU", target_family="OSAKA_MICRO")
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, target_family="TAIWAN_STOCK",
+                 instrument="3706.TW", calendar_id="XTAI")]
+    r = _run(req, _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_IDENTITY_MISMATCH
+
+
+def test_different_tw_symbols_mixed_reject():
+    req = _request(instrument="2330.TW", target_family="TAIWAN_STOCK", calendar_id="XTAI",
+                   instrument_role="DIRECT")
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, instrument="3706.TW",
+                 target_family="TAIWAN_STOCK", calendar_id="XTAI", roll_status="NOT_APPLICABLE",
+                 series_semantics="CASH")]
+    r = _run(req, _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_IDENTITY_MISMATCH
+
+
+def test_calendar_mismatch_reject():
+    req = _request(calendar_id="OSE_DERIVATIVES")
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, calendar_id="XTKS")]
+    r = _run(req, _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_IDENTITY_MISMATCH
+
+
+def test_instrument_role_mismatch_reject():
+    req = _request(instrument_role="DIRECT")
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, instrument_role="PROXY")]
+    r = _run(req, _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_IDENTITY_MISMATCH
+
+
+# ── roll ──
+def test_roll_boundary_blocked():
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, roll_status="ROLL_BOUNDARY")]
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_ROLL_PROVENANCE
+
+
+def test_roll_unknown_blocked_not_none():
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21, roll_status="UNKNOWN")]
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_ROLL_PROVENANCE
+
+
+def test_roll_unknown_not_silently_none():
+    # dataclass default roll_status is UNKNOWN (not NONE) — P5: don't default futures roll to NONE
+    bar = L.DailyOutcomeBar()
+    assert bar.roll_status == "UNKNOWN"
+    assert bar.roll_status != "NONE"
+
+
+# ── expected sessions / calendar ──
+def test_weekend_not_counted():
+    # horizon 3 trading sessions, but bars skip a weekend via trading_date ordering handled by caller
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21),
+            _bar("2026-09-22", 103, 105, 102, 104, day=22),
+            _bar("2026-09-24", 104, 106, 103, 105, day=24)]
+    r = _run(_request(horizon_sessions=3), _up_barrier(105.0), bars)
+    assert r.break_.value is False  # no close beyond 105
+
+
+def test_missing_expected_session_negative_unavailable():
+    bars = [_bar("2026-09-21", 102, 104, 101, 103, day=21)]
+    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars,
+             expected_sessions=["2026-09-21", "2026-09-22"])
+    assert r.touch.value is None
+    assert r.touch.status == "UNOBSERVABLE_MISSING_DATA"
+
+
+def test_acceptance_cannot_cross_missing_session():
+    bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21)]  # 1 close beyond, then missing 09-22
+    r = _run(_request(horizon_sessions=3), _up_barrier(105.0), bars,
+             expected_sessions=["2026-09-21", "2026-09-22", "2026-09-23"])
+    # missing 09-22 breaks consecutive; acceptance cannot be True
+    assert r.acceptance.value is None
+    assert r.acceptance.status == "UNOBSERVABLE_MISSING_DATA"
+
+
+# ── legacy / asof ──
+def test_legacy_not_asof_verified():
+    bar = _bar("2026-09-21", 102, 106, 101, 104, day=21, asof_status="LEGACY_TEMPORAL_UNVERIFIED")
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar])
+    assert r.asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
+    assert r.asof_status != "ASOF_VERIFIED"
+
+
+# ── public probability / trade signal ──
+def test_no_public_probability():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 106, 101, 104, day=21)])
+    assert r.public_probability_status == "NOT_PUBLIC_PROBABILITY"
+    assert r.calibration_status == "NOT_CALIBRATED"
+    assert r.validation_status == "HYPOTHESIS_ONLY"
+
+
+def test_no_trade_signal():
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 106, 101, 104, day=21)])
+    assert not hasattr(r, "trade_signal")
+    assert not hasattr(r, "long")
+    assert not hasattr(r, "short")
+    assert not hasattr(r, "order")
+
+
+# ── versions ──
+def test_versions():
+    from market_ai_hub.research.v2.asof import V2_ASOF_SCHEMA_VERSION
+    from market_ai_hub.research.v2.gap_session import V2_GAP_SESSION_SCHEMA_VERSION
+    from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
+    assert L.V2_DAILY_LABEL_SCHEMA_VERSION == "2C.1"
+    assert V2_ASOF_SCHEMA_VERSION == "2A.1"
+    assert V2_GAP_SESSION_SCHEMA_VERSION == "2B.1"
+    assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.3"
+
+
+def test_duplicate_trading_session_reject():
+    bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21),
+            _bar("2026-09-21", 103, 107, 102, 105, day=21)]
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), bars)
+    assert r.series_block == L.BLOCKED_TEMPORAL_CONTRACT
+
+
+# ── dataset adapter (read-only, truthful field readiness) ──
+def test_field_readiness_caret225_close_only():
+    from market_ai_hub.research.v2.daily_adapter import local_field_readiness
+    r = local_field_readiness("^N225")
+    assert r["close"] is True
+    assert r["open"] is False
+    assert r["high"] is False
+    assert r["low"] is False
+
+
+def test_field_readiness_taiwan_index_no_ohlc():
+    from market_ai_hub.research.v2.daily_adapter import local_field_readiness
+    r = local_field_readiness("TAIWAN_INDEX")
+    assert r["close"] is False
+    assert r["open"] is False
+
+
+def test_field_readiness_osaka_ohlc_but_no_roll():
+    from market_ai_hub.research.v2.daily_adapter import local_field_readiness
+    r = local_field_readiness("OSAKA_MICRO")
+    assert r["open"] is True and r["high"] is True and r["low"] is True and r["close"] is True
+    assert r["roll_provenance"] is False
+
+
+def test_adapter_osaka_no_dataset_in_test_env():
+    # conftest redirects data root to temp → no parquet → blocker DATASET_NOT_FOUND (honest)
+    from market_ai_hub.research.v2.daily_adapter import osaka_micro_bars
+    bars, rd = osaka_micro_bars()
+    assert rd.blocker == "DATASET_NOT_FOUND"
+    assert bars == []
