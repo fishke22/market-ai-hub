@@ -296,7 +296,6 @@ def point_in_time_join(
     rows: list[JoinRow] = []
     sorted_obs = sorted(right, key=lambda o: ensure_utc_aware(o.observed_at) if o.observed_at else datetime.min.replace(tzinfo=timezone.utc))
     last_valid: AsOfObservation | None = None
-    last_cutoff: datetime | None = None
     for cutoff in sorted(left_cutoffs, key=lambda d: ensure_utc_aware(d)):
         cutoff = ensure_utc_aware(cutoff)
         # qualify observations observed at/before cutoff for this field+instrument
@@ -311,11 +310,14 @@ def point_in_time_join(
         if session_id:
             window = [o for o in window if not o.session_id or o.session_id == session_id]
         best = latest_observation(window, "observed_at") if window else None
+        matched = best is not None
         # max-age cap
         if best is not None and max_age_seconds is not None:
             age = (cutoff - ensure_utc_aware(best.observed_at)).total_seconds()
             if age > max_age_seconds:
                 best = None
+                matched = False
+        filled = False
         if best is None and allow_forward_fill and last_valid is not None:
             # forward fill — preserve original metadata; block illegal boundaries
             boundary_ok = True
@@ -324,6 +326,7 @@ def point_in_time_join(
                 boundary_ok = False
             if boundary_ok:
                 best = last_valid
+                filled = True
         if best is not None:
             age = (cutoff - ensure_utc_aware(best.observed_at)).total_seconds() if best.observed_at else None
             stale = staleness_for(best.observed_at, now=cutoff) if best.observed_at else "NOT_AVAILABLE"
@@ -332,14 +335,13 @@ def point_in_time_join(
                 value=best.value, source_observed_at=best.observed_at,
                 source_event_timestamp=best.event_timestamp, age_seconds=age,
                 staleness_status=stale, snapshot_id=best.snapshot_id,
-                forward_filled=(best is not last_valid and best is not None and best not in window),
+                forward_filled=filled,
             ))
-            if best in window:
+            if matched:
                 last_valid = best
         else:
             rows.append(JoinRow(forecast_origin=cutoff, feature_cutoff_timestamp=cutoff, field=field,
                                 staleness_status="NOT_AVAILABLE"))
-        last_cutoff = cutoff
     return rows
 
 
@@ -431,11 +433,14 @@ def market_context_quality(obs_by_source: dict[str, list[AsOfObservation]],
             fresh += 1
         else:
             stale += 1
-    missing = expected.count("MISSING") + expected.count("NOT_AVAILABLE")
+    # missing = sources whose coverage resolved to MISSING / NOT_AVAILABLE (NOT string search on names)
+    missing = sum(1 for v in coverage.values() if v in ("MISSING", "NOT_AVAILABLE"))
     aligned = fresh >= 1 and stale == 0
     if missing and not fresh:
         overall = "CRITICAL"
     elif stale:
+        overall = "DEGRADED"
+    elif missing:
         overall = "DEGRADED"
     else:
         overall = "GOOD"

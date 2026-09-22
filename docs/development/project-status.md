@@ -1,9 +1,9 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-A（As-Of / Timestamp / Data Truth Foundation + Point-in-Time Data Contract + Staleness/Latency Semantics + V2 Architecture Freeze）**
-- Gate: **PHASEV2A_ASOF_DATA_TRUTH_PASS**（最近；前置 PHASE3A23_CALIBRATION_EVIDENCE_PASS + PHASE 3-V2 AUDIT）
-- build_id：**94b5c1a8a55becfb**（fingerprint 全部 runtime source + config）
-- Price/Probability Map schema version：**3A.2.3**；V2 as-of schema：**2A.1**
+- Current phase: **Phase V2-B（Daily Gap / Overnight Decomposition + Session Truth + V2-A Contract Fixes）**
+- Gate: **PHASEV2B_DAILY_GAP_SESSION_PASS**（最近；前置 PHASEV2A_ASOF_DATA_TRUTH_PASS）
+- build_id：**fdeb51bad6a639b9**（fingerprint 全部 runtime source + config）
+- Price/Probability Map schema version：**3A.2.3**；V2 as-of schema：**2A.1**；V2 gap/session schema：**2B.1**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
