@@ -26,11 +26,12 @@ value). The Nth consecutive close beyond sets `acceptance_value=True` at that se
 spanning `forecast_origin` (mid-session) is excluded. H is **trading sessions**, never `date +
 timedelta(days=H)`.
 
-**Calendar provenance is required for negative labels.** `expected_sessions` (the authoritative
-ordered list of the H outcome trading dates) MUST be provided for the engine to conclude a
-negative `OBSERVED_FALSE`. Without it, `calendar_provenance = UNKNOWN` and negative labels are
-`BLOCKED_CALENDAR_PROVENANCE` — "H rows observed" is NOT proof of "H expected sessions complete".
-Positive events may still be established from observed data regardless of calendar provenance.
+**Calendar provenance is required for negative labels.** Negative `OBSERVED_FALSE` requires BOTH
+an authoritative `expected_sessions` list AND trusted `calendar_provenance`
+(`AUTHORITATIVE` / `VERIFIED_INPUT`). A plain list with `calendar_provenance=UNKNOWN` is not
+authoritative → `BLOCKED_CALENDAR_PROVENANCE`. Positive events may still be established from
+observed data, but they NEVER bypass the session-boundary contract (an outcome bar must prove
+`session_open_timestamp > forecast_origin`; a bar spanning forecast_origin is excluded).
 
 ## Forecast-time vs outcome separation
 
