@@ -193,6 +193,7 @@ class DailyBarrierLabelResult:
     asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     roll_status: str = "UNKNOWN"
     series_semantics: str = "UNKNOWN"
+    calendar_provenance: str = "UNKNOWN"
     series_block: str = ""
     touch: EventResult = dfield(default_factory=EventResult)
     break_: EventResult = dfield(default_factory=EventResult)
@@ -436,17 +437,25 @@ def build_daily_barrier_labels(
     outcome_bars = sorted_bars
 
     # 8. maturity + expected sessions
+    # Negative labels require authoritative calendar provenance: `expected_sessions` MUST be
+    # provided. Without it, "H rows observed" is NOT proof of "H expected sessions complete".
+    calendar_known = expected_sessions is not None
     if expected_sessions is None:
-        expected_sessions = [b.trading_date for b in outcome_bars]
-    observed = {b.trading_date for b in outcome_bars}
-    missing = [s for s in expected_sessions if s not in observed]
-    horizon_elapsed = len(expected_sessions) >= request.horizon_sessions or \
-        (expected_sessions is None and len(outcome_bars) >= request.horizon_sessions)
-    mature = horizon_elapsed and not missing
+        ordered_sessions = [b.trading_date for b in outcome_bars]
+        mature = False
+        missing: list[str] = []
+        horizon_elapsed = False
+    else:
+        observed = {b.trading_date for b in outcome_bars}
+        missing = [s for s in expected_sessions if s not in observed]
+        horizon_elapsed = len(expected_sessions) >= request.horizon_sessions
+        mature = horizon_elapsed and not missing
+        ordered_sessions = expected_sessions
 
-    res.expected_outcome_sessions = list(expected_sessions)
+    res.expected_outcome_sessions = list(expected_sessions) if expected_sessions is not None else []
     res.observed_outcome_sessions = [b.trading_date for b in outcome_bars]
     res.missing_outcome_sessions = missing
+    res.calendar_provenance = "PROVIDED" if calendar_known else "UNKNOWN"
     res.outcome_window_start = outcome_bars[0].trading_date
     res.outcome_window_end = outcome_bars[-1].trading_date
 
@@ -461,33 +470,32 @@ def build_daily_barrier_labels(
     touch = _eval_touch(barrier, outcome_bars, request.previous_close)
     break_ = _eval_break(barrier, outcome_bars)
     bar_by_date = {b.trading_date: b for b in outcome_bars}
-    ordered_sessions = expected_sessions  # preserves calendar order incl. missing
     acceptance = _eval_acceptance(barrier, ordered_sessions, bar_by_date, policy.acceptance_consecutive_closes)
 
-    res.touch = _finalize(touch, mature, missing, horizon_elapsed, any_invalid, is_touch=True)
-    res.break_ = _finalize(break_, mature, missing, horizon_elapsed, any_invalid, is_touch=False)
-    res.acceptance = _finalize(acceptance, mature, missing, horizon_elapsed, any_invalid, is_touch=False)
+    res.touch = _finalize(touch, mature, missing, horizon_elapsed, any_invalid, calendar_known)
+    res.break_ = _finalize(break_, mature, missing, horizon_elapsed, any_invalid, calendar_known)
+    res.acceptance = _finalize(acceptance, mature, missing, horizon_elapsed, any_invalid, calendar_known)
 
     return res
 
 
 def _finalize(ev: EventResult, mature: bool, missing: list[str], horizon_elapsed: bool,
-              any_invalid: bool, is_touch: bool) -> EventResult:
-    """Positive events stand; negative only after full horizon, no missing, no ambiguity."""
+              any_invalid: bool, calendar_known: bool) -> EventResult:
+    """Positive events stand; negative only after full horizon + calendar provenance + no missing."""
     if ev.value is True:
         return ev
-    # unresolved positive checks
+    # observed issues independent of calendar (missing data / gap ambiguity)
     if ev.status in ("UNOBSERVABLE_MISSING_DATA", "AMBIGUOUS_GAP_CROSS", "INVALID_OHLC"):
         return ev
     # no positive found:
     if any_invalid:
         return EventResult(None, "INVALID_OHLC", ev.first_session_date)
+    if not calendar_known:
+        return EventResult(None, "BLOCKED_CALENDAR_PROVENANCE", "")
     if not horizon_elapsed:
         return EventResult(None, "UNMATURED", "")
     if missing:
         return EventResult(None, "UNOBSERVABLE_MISSING_DATA", "")
-    if is_touch and ev.status == "AMBIGUOUS_GAP_CROSS":
-        return ev
     return EventResult(False, "OBSERVED_FALSE", "")
 
 

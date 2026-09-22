@@ -26,6 +26,12 @@ value). The Nth consecutive close beyond sets `acceptance_value=True` at that se
 spanning `forecast_origin` (mid-session) is excluded. H is **trading sessions**, never `date +
 timedelta(days=H)`.
 
+**Calendar provenance is required for negative labels.** `expected_sessions` (the authoritative
+ordered list of the H outcome trading dates) MUST be provided for the engine to conclude a
+negative `OBSERVED_FALSE`. Without it, `calendar_provenance = UNKNOWN` and negative labels are
+`BLOCKED_CALENDAR_PROVENANCE` — "H rows observed" is NOT proof of "H expected sessions complete".
+Positive events may still be established from observed data regardless of calendar provenance.
+
 ## Forecast-time vs outcome separation
 
 `feature_cutoff_timestamp <= forecast_origin` is enforced. Outcome data must be observed strictly
@@ -54,7 +60,8 @@ UNKNOWN_WITHIN_DAILY_BAR`.
 ## Roll handling
 
 Futures (OSAKA_MICRO DIRECT): `roll_status` must be `NONE` (proven) — `ROLL_BOUNDARY` or `UNKNOWN`
-→ `BLOCKED_ROLL_PROVENANCE`. Non-futures: `NOT_APPLICABLE`. `UNKNOWN != NONE`.
+→ `BLOCKED_ROLL_PROVENANCE`, **regardless of horizon_sessions** (H=1 does NOT bypass the roll
+check). Non-futures: `NOT_APPLICABLE`. `UNKNOWN != NONE`.
 
 ## Identity / target isolation (machine-enforced)
 

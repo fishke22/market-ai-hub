@@ -86,7 +86,8 @@ def test_down_break_true():
 
 def test_close_equal_barrier_not_break():
     r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
-             [_bar("2026-09-21", 102, 106, 101, 105.0, day=21)])
+             [_bar("2026-09-21", 102, 106, 101, 105.0, day=21)],
+             expected_sessions=["2026-09-21"])
     assert r.break_.value is False
     assert r.break_.status == "OBSERVED_FALSE"
 
@@ -102,7 +103,8 @@ def test_acceptance_two_consecutive_true():
 def test_acceptance_one_close_only_false():
     bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
             _bar("2026-09-22", 106, 107, 104, 104, day=22)]
-    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars)
+    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars,
+             expected_sessions=["2026-09-21", "2026-09-22"])
     assert r.acceptance.value is False
     assert r.acceptance.status == "OBSERVED_FALSE"
 
@@ -110,7 +112,8 @@ def test_acceptance_one_close_only_false():
 def test_acceptance_break_then_revert_false():
     bars = [_bar("2026-09-21", 102, 107, 101, 106, day=21),
             _bar("2026-09-22", 106, 107, 104, 104, day=22)]
-    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars)
+    r = _run(_request(horizon_sessions=2), _up_barrier(105.0), bars,
+             expected_sessions=["2026-09-21", "2026-09-22"])
     assert r.break_.value is True
     assert r.acceptance.value is False
 
@@ -118,7 +121,8 @@ def test_acceptance_break_then_revert_false():
 # ── maturity ──
 def test_unmature_no_positive():
     r = _run(_request(horizon_sessions=3), _up_barrier(105.0),
-             [_bar("2026-09-21", 102, 104, 101, 103, day=21)])
+             [_bar("2026-09-21", 102, 104, 101, 103, day=21)],
+             expected_sessions=["2026-09-21"])
     assert r.touch.value is None
     assert r.touch.status == "UNMATURED"
 
@@ -301,7 +305,8 @@ def test_weekend_not_counted():
     bars = [_bar("2026-09-21", 102, 106, 101, 104, day=21),
             _bar("2026-09-22", 103, 105, 102, 104, day=22),
             _bar("2026-09-24", 104, 106, 103, 105, day=24)]
-    r = _run(_request(horizon_sessions=3), _up_barrier(105.0), bars)
+    r = _run(_request(horizon_sessions=3), _up_barrier(105.0), bars,
+             expected_sessions=["2026-09-21", "2026-09-22", "2026-09-24"])
     assert r.break_.value is False  # no close beyond 105
 
 
@@ -396,3 +401,63 @@ def test_adapter_osaka_no_dataset_in_test_env():
     bars, rd = osaka_micro_bars()
     assert rd.blocker == "DATASET_NOT_FOUND"
     assert bars == []
+
+
+# ── self-validation correction: roll + calendar + local readiness adversarial ──
+def test_osaka_unknown_roll_blocks_single_session_touch():
+    bar = _bar("2026-09-21", 102, 106, 101, 104, day=21, roll_status="UNKNOWN")
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar])
+    assert r.series_block == L.BLOCKED_ROLL_PROVENANCE
+    assert r.touch.value is None
+    assert r.touch.status == L.BLOCKED_ROLL_PROVENANCE
+
+
+def test_osaka_unknown_roll_blocks_single_session_break():
+    bar = _bar("2026-09-21", 102, 107, 101, 106, day=21, roll_status="UNKNOWN")
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar])
+    assert r.series_block == L.BLOCKED_ROLL_PROVENANCE
+    assert r.break_.value is None
+    assert r.break_.status == L.BLOCKED_ROLL_PROVENANCE
+
+
+def test_negative_label_not_false_when_calendar_provenance_unknown():
+    # no expected_sessions provided → negative cannot be OBSERVED_FALSE
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 104, 101, 103, day=21)])
+    assert r.calendar_provenance == "UNKNOWN"
+    assert r.break_.value is None
+    assert r.break_.status == "BLOCKED_CALENDAR_PROVENANCE"
+
+
+def test_positive_label_ok_without_calendar_provenance():
+    # positive events do not require calendar provenance (established by observed data)
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0),
+             [_bar("2026-09-21", 102, 107, 101, 106, day=21)])
+    assert r.break_.value is True
+    assert r.break_.status == "OBSERVED_TRUE"
+
+
+def test_n225_close_only_blocks_touch_even_if_coarse_registry_says_daily_ohlcv():
+    from market_ai_hub.research.v2 import asof
+    from market_ai_hub.research.v2.daily_adapter import local_field_readiness
+    # coarse registry may say daily/OHLCV, but local field readiness says close-only
+    ok, _ = asof.supports_capability("^N225", "DAILY")
+    r = local_field_readiness("^N225")
+    assert r["close"] is True and r["open"] is False and r["high"] is False and r["low"] is False
+    # Touch requires open+high+low → NOT ready
+    assert not (r["open"] and r["high"] and r["low"])
+
+
+def test_taiwan_index_without_local_dataset_not_touch_ready():
+    from market_ai_hub.research.v2.daily_adapter import local_field_readiness
+    r = local_field_readiness("TAIWAN_INDEX")
+    assert r["open"] is False and r["close"] is False
+    assert not (r["open"] and r["high"] and r["low"])
+
+
+def test_legacy_input_not_promoted_to_asof_verified():
+    bar = _bar("2026-09-21", 102, 106, 101, 104, day=21, asof_status="LEGACY_TEMPORAL_UNVERIFIED")
+    r = _run(_request(horizon_sessions=1), _up_barrier(105.0), [bar],
+             expected_sessions=["2026-09-21"])
+    assert r.asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
+    assert r.asof_status != "ASOF_VERIFIED"

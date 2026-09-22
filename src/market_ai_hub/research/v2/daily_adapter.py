@@ -37,7 +37,10 @@ class DatasetReadiness:
     break_ready: bool = False
     acceptance_ready: bool = False
     roll_provenance: str = "UNKNOWN"
+    calendar_provenance: str = "UNKNOWN"
+    session_provenance: str = "UNKNOWN"
     asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    blockers: list[str] = dfield(default_factory=list)
     blocker: str = ""
 
     def model_dump(self) -> dict:
@@ -58,8 +61,10 @@ def _is_futures(target_family: str, instrument_role: str) -> bool:
 def osaka_micro_bars(path: str | None = None) -> tuple[list[DailyOutcomeBar], DatasetReadiness]:
     """Read-only: load OSE micro daily bars as DailyOutcomeBar.
 
-    roll_status is set to UNKNOWN (the parquet has no contract id / roll column) → the V2-C engine
-    will fail closed with BLOCKED_ROLL_PROVENANCE on multi-session futures labels. Honest.
+    Truthful readiness: the parquet has full OHLC but NO contract id / roll mapping, NO
+    authoritative OSE derivatives calendar resolver, and NO session open/close timestamps.
+    Therefore the V2-C engine blocks ANY futures label (H=1 or H>1) with one of:
+    BLOCKED_ROLL_PROVENANCE / BLOCKED_CALENDAR_PROVENANCE / BLOCKED_TEMPORAL_SESSION_BOUNDARY.
     """
     import pandas as pd
     from market_ai_hub.config.runtime_paths import data_root
@@ -67,7 +72,7 @@ def osaka_micro_bars(path: str | None = None) -> tuple[list[DailyOutcomeBar], Da
     import os
     if not os.path.exists(p):
         return [], DatasetReadiness(target_family="OSAKA_MICRO", dataset_path=p,
-                                    blocker="DATASET_NOT_FOUND")
+                                    blockers=["DATASET_NOT_FOUND"], blocker="DATASET_NOT_FOUND")
     df = pd.read_parquet(p)
     bars: list[DailyOutcomeBar] = []
     for _, row in df.iterrows():
@@ -86,9 +91,22 @@ def osaka_micro_bars(path: str | None = None) -> tuple[list[DailyOutcomeBar], Da
         target_family="OSAKA_MICRO", dataset_path=p, rows_inspected=len(bars),
         date_range_start=bars[0].trading_date if bars else "",
         date_range_end=bars[-1].trading_date if bars else "",
-        fields=list(df.columns), ohlc_ready=True, touch_ready=True, break_ready=True,
-        acceptance_ready=True, roll_provenance="UNKNOWN",
+        fields=list(df.columns), ohlc_ready=True,
+        # field readiness = full OHLC; but engine-level readiness is blocked by provenance gaps:
+        touch_ready=False, break_ready=False, acceptance_ready=False,
+        roll_provenance="UNKNOWN",           # no contract id / roll mapping
+        calendar_provenance="UNKNOWN",       # no authoritative OSE derivatives session resolver
+        session_provenance="UNKNOWN",        # no session open/close timestamps in parquet
         asof_status="LEGACY_TEMPORAL_UNVERIFIED",
-        blocker="NO_ROLL_PROVENANCE (multi-session futures labels will block)",
+        blockers=[
+            "BLOCKED_ROLL_PROVENANCE (no contract id / roll mapping)",
+            "BLOCKED_CALENDAR_PROVENANCE (no authoritative OSE derivatives calendar resolver)",
+            "BLOCKED_TEMPORAL_SESSION_BOUNDARY (no session open/close timestamps)",
+        ],
+        blocker="; ".join([
+            "BLOCKED_ROLL_PROVENANCE (no contract id / roll mapping)",
+            "BLOCKED_CALENDAR_PROVENANCE (no authoritative OSE derivatives calendar resolver)",
+            "BLOCKED_TEMPORAL_SESSION_BOUNDARY (no session open/close timestamps)",
+        ]),
     )
     return bars, rd
