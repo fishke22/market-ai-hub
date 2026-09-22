@@ -2,7 +2,7 @@
 
 - **Schema**: `V2_ASOF_SCHEMA_VERSION = "2A.1"` (module `src/market_ai_hub/research/v2/asof.py`)
 - **Baseline main**: `1ba46e9fa23478ec622395274c50d9d283a30141`
-- **Runtime build_id (new)**: `65abb3af1b561afc` (was `c7417f7c4cbfb388`)
+- **Runtime build_id (new)**: `94b5c1a8a55becfb` (was `c7417f7c4cbfb388`)
 - **Tests**: `989 passed, 20 deselected` (was `961`; +28 V2-A)
 - **Focused V2-A**: 28 passed
 
