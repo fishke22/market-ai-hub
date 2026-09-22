@@ -1,9 +1,9 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-C（Daily Multi-Target Label Engine — Touch / Break / Acceptance）**
-- Gate: **PHASEV2C_DAILY_MULTI_TARGET_LABEL_PASS**（最近；前置 PHASEV2B_DAILY_GAP_SESSION_PASS）
-- build_id：**53d5b83595d8a639**（fingerprint 全部 runtime source + config）
-- Price/Probability Map schema：**3A.2.3**；V2 as-of：**2A.1**；V2 gap/session：**2B.1**；V2 daily label：**2C.1**
+- Current phase: **Phase V2-C（Daily Multi-Target Label Engine — Touch / Break / Acceptance + Horizon/Provenance Hardening）**
+- Gate: **PHASEV2C_DAILY_MULTI_TARGET_LABEL_PASS**（最新 correction：PHASEV2C_HORIZON_PROVENANCE_CORRECTION_REPORT）
+- build_id：**d8584c5c14eabb78**（fingerprint 全部 runtime source + config）
+- Price/Probability Map schema：**3A.2.3**；V2 as-of：**2A.1**；V2 gap/session：**2B.1**；V2 daily label：**2C.2**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）

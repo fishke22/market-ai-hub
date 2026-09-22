@@ -11,25 +11,26 @@ Daily OHLC resolution does NOT reconstruct the intraday event chain. No first-pa
 no intraday ordering, no probability, no calibration, no trade signal.
 DAILY_OBSERVATION_CHAIN_NOT_ASSUMED.
 
-Schema: V2_DAILY_LABEL_SCHEMA_VERSION = "2C.1"  (independent from 2A.1 / 2B.1 / 3A.2.3)
+Schema: V2_DAILY_LABEL_SCHEMA_VERSION = "2C.2"  (independent from 2A.1 / 2B.1 / 3A.2.3)
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field as dfield, asdict
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from market_ai_hub.research.v2.asof import normalize_instrument, normalize_family, ensure_utc_aware
 
-V2_DAILY_LABEL_SCHEMA_VERSION = "2C.1"
+V2_DAILY_LABEL_SCHEMA_VERSION = "2C.2"
 
 # ── enums ──
 BARRIER_DIRECTIONS = ("UP", "DOWN")
 ROLL_STATUSES = ("NONE", "ROLL_BOUNDARY", "UNKNOWN", "NOT_APPLICABLE")
 SERIES_SEMANTICS = ("CONTINUOUS", "CONTRACT", "CASH", "INDEX", "UNKNOWN")
-# calendar provenance trust (§C): a plain expected_sessions list is NOT authoritative by itself
-CALENDAR_PROVENANCE_STATUS = ("AUTHORITATIVE", "VERIFIED_INPUT", "UNKNOWN")
-_CALENDAR_TRUSTED = ("AUTHORITATIVE", "VERIFIED_INPUT")
+# provenance trust: a plain list / naked float is NOT authoritative by itself
+PROVENANCE_STATUS = ("AUTHORITATIVE", "VERIFIED_INPUT", "UNKNOWN")
+CALENDAR_PROVENANCE_STATUS = PROVENANCE_STATUS
+_PROVENANCE_TRUSTED = ("AUTHORITATIVE", "VERIFIED_INPUT")
 
 # event-level statuses (§12)
 EVENT_STATUSES = (
@@ -37,7 +38,8 @@ EVENT_STATUSES = (
     "AMBIGUOUS_GAP_CROSS", "INVALID_OHLC", "INVALID_BARRIER",
     "BLOCKED_IDENTITY_MISMATCH", "BLOCKED_ROLL_PROVENANCE",
     "BLOCKED_CALENDAR_PROVENANCE", "BLOCKED_TEMPORAL_CONTRACT",
-    "BLOCKED_TEMPORAL_SESSION_BOUNDARY",
+    "BLOCKED_TEMPORAL_SESSION_BOUNDARY", "BLOCKED_BARRIER_PROVENANCE",
+    "BLOCKED_PREWINDOW_REFERENCE_PROVENANCE", "BLOCKED_SERIES_SEMANTICS_MISMATCH",
 )
 
 BLOCKED_IDENTITY_MISMATCH = "BLOCKED_IDENTITY_MISMATCH"
@@ -45,15 +47,22 @@ BLOCKED_ROLL_PROVENANCE = "BLOCKED_ROLL_PROVENANCE"
 BLOCKED_CALENDAR_PROVENANCE = "BLOCKED_CALENDAR_PROVENANCE"
 BLOCKED_TEMPORAL_CONTRACT = "BLOCKED_TEMPORAL_CONTRACT"
 BLOCKED_TEMPORAL_SESSION_BOUNDARY = "BLOCKED_TEMPORAL_SESSION_BOUNDARY"
+BLOCKED_BARRIER_PROVENANCE = "BLOCKED_BARRIER_PROVENANCE"
+BLOCKED_PREWINDOW_REFERENCE_PROVENANCE = "BLOCKED_PREWINDOW_REFERENCE_PROVENANCE"
+BLOCKED_SERIES_SEMANTICS_MISMATCH = "BLOCKED_SERIES_SEMANTICS_MISMATCH"
 
 SERIES_BLOCKS = (BLOCKED_IDENTITY_MISMATCH, BLOCKED_ROLL_PROVENANCE,
                  BLOCKED_CALENDAR_PROVENANCE, BLOCKED_TEMPORAL_CONTRACT,
-                 BLOCKED_TEMPORAL_SESSION_BOUNDARY)
+                 BLOCKED_TEMPORAL_SESSION_BOUNDARY, BLOCKED_BARRIER_PROVENANCE,
+                 BLOCKED_SERIES_SEMANTICS_MISMATCH)
+
+# ASOF conservativeness rank (higher = more verified); the summary takes the least-verified
+_ASOF_RANK = {"ASOF_VERIFIED": 2, "TEMPORAL_UNVERIFIED": 1, "LEGACY_TEMPORAL_UNVERIFIED": 0}
 
 # ── policy (§20) ──
 @dataclass
 class DailyLabelPolicy:
-    version: str = "2C.1"
+    version: str = "2C.2"
     scope: str = "DAILY"
     validation_status: str = "HYPOTHESIS_ONLY"
     acceptance_definition: str = "N_CONSECUTIVE_DAILY_CLOSES_BEYOND_BARRIER"
@@ -104,13 +113,17 @@ class DailyLabelRequest:
     horizon_sessions: int = 1
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
-    label_policy_version: str = "2C.1"
+    label_policy_version: str = "2C.2"
+    # previous-window reference (required for Touch-negative gap ruling) — NOT a naked float
     previous_close: float | None = None
+    previous_close_available_at: datetime | None = None
+    previous_close_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    previous_close_provenance: str = "UNKNOWN"
 
     def __post_init__(self):
         if self.horizon_sessions < 1:
             raise ValueError("horizon_sessions must be >= 1")
-        for name in ("feature_cutoff_timestamp", "forecast_origin"):
+        for name in ("feature_cutoff_timestamp", "forecast_origin", "previous_close_available_at"):
             v = getattr(self, name)
             if v is not None and v.tzinfo is None:
                 raise ValueError(f"{name} must be tz-aware")
@@ -185,15 +198,24 @@ class DailyBarrierLabelResult:
     outcome_window_end: str = ""
     horizon_sessions: int = 1
     expected_outcome_sessions: list[str] = dfield(default_factory=list)
+    eligible_elapsed_sessions: list[str] = dfield(default_factory=list)
+    window_sessions: list[str] = dfield(default_factory=list)
     observed_outcome_sessions: list[str] = dfield(default_factory=list)
     missing_outcome_sessions: list[str] = dfield(default_factory=list)
+    ignored_out_of_window_sessions: list[str] = dfield(default_factory=list)
     barrier_id: str = ""
     barrier_level: float | None = None
     barrier_direction: str = "UP"
     barrier_available_at: datetime | None = None
     barrier_source: str = ""
     source_snapshot_ids: list[str] = dfield(default_factory=list)
+    forecast_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    barrier_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    outcome_source_snapshot_ids: list[str] = dfield(default_factory=list)
     asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    forecast_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    barrier_provenance_status: str = "UNKNOWN"
+    outcome_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     roll_status: str = "UNKNOWN"
     series_semantics: str = "UNKNOWN"
     calendar_provenance: str = "UNKNOWN"
@@ -202,7 +224,7 @@ class DailyBarrierLabelResult:
     break_: EventResult = dfield(default_factory=EventResult)
     acceptance: EventResult = dfield(default_factory=EventResult)
     label_schema_version: str = V2_DAILY_LABEL_SCHEMA_VERSION
-    label_policy_version: str = "2C.1"
+    label_policy_version: str = "2C.2"
     scope: str = "DAILY"
     validation_status: str = "HYPOTHESIS_ONLY"
     calibration_status: str = "NOT_CALIBRATED"
@@ -277,6 +299,40 @@ def validate_identity_scope(bars: list[DailyOutcomeBar], request: DailyLabelRequ
 
 def _is_futures(target_family: str, instrument_role: str) -> bool:
     return normalize_family(target_family) == "OSAKA_MICRO" and instrument_role == "DIRECT"
+
+
+def _trusted_previous_close(request: DailyLabelRequest) -> float | None:
+    """Trusted pre-window reference requires value + availability + provenance. Naked float ≠ trusted."""
+    pc = request.previous_close
+    if pc is None or not _finite_positive(pc):
+        return None
+    if request.previous_close_available_at is None:
+        return None
+    if request.feature_cutoff_timestamp is not None and \
+            ensure_utc_aware(request.previous_close_available_at) > ensure_utc_aware(request.feature_cutoff_timestamp):
+        return None
+    if request.previous_close_provenance not in _PROVENANCE_TRUSTED:
+        return None
+    return pc
+
+
+def _valid_session_list(sessions: list[str]) -> bool:
+    """Trusted session list must be unique, strict-chronological ISO dates. No silent sort."""
+    import re
+    prev = ""
+    for s in sessions:
+        if not isinstance(s, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+            return False
+        if s <= prev:  # duplicate or out-of-order
+            return False
+        prev = s
+    return True
+
+
+def _least_verified_asof(statuses: list[str]) -> str:
+    if not statuses:
+        return "LEGACY_TEMPORAL_UNVERIFIED"
+    return min(statuses, key=lambda s: _ASOF_RANK.get(s, 0))
 
 
 # ── evaluation ──
@@ -356,152 +412,176 @@ def build_daily_barrier_labels(
 ) -> DailyBarrierLabelResult:
     """Core V2-C engine. Fail closed on any series-level blocker.
 
-    `expected_sessions` alone is NOT authoritative calendar provenance; the caller must also
-    declare `calendar_provenance` (AUTHORITATIVE / VERIFIED_INPUT) for negative labels to resolve.
+    Processing order (§20): request timestamps → barrier provenance → trusted session-window →
+    expected_sessions validity → H-scoped window → scope bars → empty-elapsed → in-window
+    duplicates/identity/series → in-window roll → in-window session boundary → data → evaluate →
+    finalize → provenance summaries → snapshot lineage.
     """
     if calendar_provenance not in CALENDAR_PROVENANCE_STATUS:
         raise ValueError(f"unknown calendar_provenance: {calendar_provenance!r}")
     policy = policy or DailyLabelPolicy()
+    H = request.horizon_sessions
     res = DailyBarrierLabelResult(
         instrument=request.instrument, target_family=request.target_family,
         instrument_role=request.instrument_role, calendar_id=request.calendar_id,
         feature_cutoff_timestamp=request.feature_cutoff_timestamp,
         forecast_origin=request.forecast_origin, origin_session_date=request.origin_session_date,
-        horizon_sessions=request.horizon_sessions, asof_status=request.asof_status,
-        source_snapshot_ids=list(request.source_snapshot_ids),
+        horizon_sessions=H,
         barrier_id=barrier.barrier_id, barrier_level=barrier.level,
         barrier_direction=barrier.direction, barrier_available_at=barrier.barrier_available_at,
         barrier_source=barrier.barrier_source, label_policy_version=policy.version,
+        label_schema_version=V2_DAILY_LABEL_SCHEMA_VERSION,
     )
 
     # 1. temporal contract
-    if request.validate_ordering():
-        res.series_block = BLOCKED_TEMPORAL_CONTRACT
-        return _blocked(res)
-    if request.feature_cutoff_timestamp is None or request.forecast_origin is None:
+    if request.validate_ordering() or request.feature_cutoff_timestamp is None or request.forecast_origin is None:
         res.series_block = BLOCKED_TEMPORAL_CONTRACT
         return _blocked(res)
 
-    # 2. barrier frozen as-of (§7B / §16)
+    # 2. barrier numeric + frozen provenance (§11/§15). barrier_available_at is MANDATORY.
     if barrier.level is None or not _valid_price(barrier.level):
-        res.series_block = BLOCKED_TEMPORAL_CONTRACT  # invalid barrier
+        res.series_block = BLOCKED_BARRIER_PROVENANCE
         res.touch = res.break_ = res.acceptance = EventResult(None, "INVALID_BARRIER", "")
         return res
-    if barrier.barrier_available_at is not None and \
-            ensure_utc_aware(barrier.barrier_available_at) > ensure_utc_aware(request.feature_cutoff_timestamp):
-        res.series_block = BLOCKED_TEMPORAL_CONTRACT
-        res.touch = res.break_ = res.acceptance = EventResult(None, "INVALID_BARRIER", "")
+    if barrier.barrier_available_at is None:
+        res.series_block = BLOCKED_BARRIER_PROVENANCE
+        return _blocked(res)
+    if ensure_utc_aware(barrier.barrier_available_at) > ensure_utc_aware(request.feature_cutoff_timestamp):
+        res.series_block = BLOCKED_BARRIER_PROVENANCE
+        return _blocked(res)
+
+    # 3. trusted calendar/session-window provenance (REQUIRED for ALL labels incl. positive)
+    if calendar_provenance not in _PROVENANCE_TRUSTED or expected_sessions is None:
+        res.series_block = BLOCKED_CALENDAR_PROVENANCE
+        return _blocked(res)
+
+    # 4. expected_sessions validity (unique, strict-chronological ISO)
+    if not _valid_session_list(expected_sessions):
+        res.series_block = BLOCKED_CALENDAR_PROVENANCE
+        return _blocked(res)
+
+    # 5. canonical window = first H eligible elapsed sessions
+    window_sessions = list(expected_sessions)[:H]
+    window_set = set(window_sessions)
+
+    # 6. scope input bars to window; everything else is out-of-window (ignored)
+    in_window_bars = [b for b in bars if b.trading_date in window_set]
+    out_of_window_bars = [b for b in bars if b.trading_date not in window_set]
+
+    res.eligible_elapsed_sessions = list(expected_sessions)
+    res.window_sessions = list(window_sessions)
+    res.ignored_out_of_window_sessions = [b.trading_date for b in out_of_window_bars]
+
+    # 7. empty elapsed sessions → UNMATURED (NOT session-boundary block)
+    if not window_sessions:
+        res.touch = res.break_ = res.acceptance = EventResult(None, "UNMATURED", "")
         return res
 
-    # 3. duplicate trading sessions (§14)
-    dates = [b.trading_date for b in bars]
-    if len(dates) != len(set(dates)):
+    # 8. in-window duplicates / identity / series semantics
+    in_dates = [b.trading_date for b in in_window_bars]
+    if len(in_dates) != len(set(in_dates)):
         res.series_block = BLOCKED_TEMPORAL_CONTRACT
         return _blocked(res, "DUPLICATE_TRADING_SESSION")
-
-    # 4. identity scope (§P4 / §17)
-    ident_reasons = validate_identity_scope(bars, request)
+    ident_reasons = validate_identity_scope(in_window_bars, request)
     if ident_reasons:
         res.series_block = BLOCKED_IDENTITY_MISMATCH
         return _blocked(res)
+    sems = {b.series_semantics for b in in_window_bars}
+    if len(sems) > 1:
+        res.series_block = BLOCKED_SERIES_SEMANTICS_MISMATCH
+        return _blocked(res)
+    res.series_semantics = next(iter(sems)) if sems else "UNKNOWN"
 
-    # 5. roll provenance (§P5 / §21)
+    # 9. in-window roll provenance
     is_fut = _is_futures(request.target_family, request.instrument_role)
-    for bar in bars:
+    for bar in in_window_bars:
         if is_fut:
-            if bar.roll_status == "ROLL_BOUNDARY" or bar.roll_status == "UNKNOWN":
+            if bar.roll_status in ("ROLL_BOUNDARY", "UNKNOWN"):
                 res.roll_status = bar.roll_status
                 res.series_block = BLOCKED_ROLL_PROVENANCE
                 return _blocked(res)
-        # non-futures: NOT_APPLICABLE or NONE acceptable; UNKNOWN on non-futures also blocks (no silent NONE)
         else:
             if bar.roll_status == "UNKNOWN":
                 res.roll_status = bar.roll_status
                 res.series_block = BLOCKED_ROLL_PROVENANCE
                 return _blocked(res)
+    rolls = {b.roll_status for b in in_window_bars}
+    res.roll_status = next(iter(rolls)) if len(rolls) == 1 else "UNKNOWN"
 
-    # 6. session boundary (§8): exclude mid-session bars; block if boundary unprovable
-    cutoff_ts = ensure_utc_aware(request.feature_cutoff_timestamp)
+    # 10. in-window session boundary (exclude mid-session bars; block if unprovable)
     origin_ts = ensure_utc_aware(request.forecast_origin)
-    outcome_bars: list[DailyOutcomeBar] = []
-    for bar in bars:
-        if bar.session_open_timestamp is not None:
-            so = ensure_utc_aware(bar.session_open_timestamp)
-            if so <= origin_ts:
-                continue  # mid-session bar, exclude
-            outcome_bars.append(bar)
-        else:
-            # cannot prove session open is after forecast_origin
+    valid_in_window: list[DailyOutcomeBar] = []
+    for bar in in_window_bars:
+        if bar.session_open_timestamp is None:
             res.series_block = BLOCKED_TEMPORAL_SESSION_BOUNDARY
             return _blocked(res)
-    if not outcome_bars:
-        res.series_block = BLOCKED_TEMPORAL_SESSION_BOUNDARY
-        return _blocked(res)
-
-    # 7. order validation (§14)
-    sorted_bars = sorted(outcome_bars, key=lambda b: b.session_open_timestamp or datetime.min.replace(tzinfo=timezone.utc))
-    if [b.trading_date for b in sorted_bars] != [b.trading_date for b in outcome_bars]:
-        # caller provided out-of-order; fail closed (no silent sort)
+        if ensure_utc_aware(bar.session_open_timestamp) <= origin_ts:
+            continue  # mid-session full bar → excluded (never labels a mid-session forecast)
+        valid_in_window.append(bar)
+    # order validation (in-window, by session open)
+    sorted_valid = sorted(valid_in_window, key=lambda b: ensure_utc_aware(b.session_open_timestamp))
+    if [b.trading_date for b in sorted_valid] != [b.trading_date for b in valid_in_window]:
         res.series_block = BLOCKED_TEMPORAL_CONTRACT
         return _blocked(res, "INPUT_OUT_OF_ORDER")
-    outcome_bars = sorted_bars
+    in_window_bars = sorted_valid
 
-    # 8. maturity + expected sessions
-    # Negative labels require BOTH an authoritative expected-session list AND trusted calendar
-    # provenance. A plain list with calendar_provenance=UNKNOWN is not authoritative.
-    calendar_known = (expected_sessions is not None) and (calendar_provenance in _CALENDAR_TRUSTED)
-    if not calendar_known:
-        ordered_sessions = [b.trading_date for b in outcome_bars]
-        mature = False
-        missing: list[str] = []
-        horizon_elapsed = False
-    else:
-        observed = {b.trading_date for b in outcome_bars}
-        missing = [s for s in expected_sessions if s not in observed]
-        horizon_elapsed = len(expected_sessions) >= request.horizon_sessions
-        mature = horizon_elapsed and not missing
-        ordered_sessions = expected_sessions
+    # 11. data quality (in-window)
+    any_invalid = any(validate_daily_bar(b) for b in in_window_bars)
 
-    res.expected_outcome_sessions = list(expected_sessions) if expected_sessions is not None else []
-    res.observed_outcome_sessions = [b.trading_date for b in outcome_bars]
+    # maturity: H sessions elapsed + no missing in-window session
+    observed = {b.trading_date for b in in_window_bars}
+    missing = [s for s in window_sessions if s not in observed]
+    horizon_elapsed = len(expected_sessions) >= H
+    mature = horizon_elapsed and not missing
+
+    res.observed_outcome_sessions = [b.trading_date for b in in_window_bars]
     res.missing_outcome_sessions = missing
+    res.outcome_window_start = window_sessions[0]
+    res.outcome_window_end = window_sessions[-1]
+
+    # 12. evaluate independently (no event chain assumed)
+    trusted_pc = _trusted_previous_close(request)
+    touch = _eval_touch(barrier, in_window_bars, trusted_pc)
+    break_ = _eval_break(barrier, in_window_bars)
+    bar_by_date = {b.trading_date: b for b in in_window_bars}
+    acceptance = _eval_acceptance(barrier, window_sessions, bar_by_date, policy.acceptance_consecutive_closes)
+
+    # 13. finalize (touch needs trusted pre-window reference for negative)
+    res.touch = _finalize_touch(touch, mature, missing, horizon_elapsed, any_invalid, trusted_pc is not None)
+    res.break_ = _finalize(break_, mature, missing, horizon_elapsed, any_invalid)
+    res.acceptance = _finalize(acceptance, mature, missing, horizon_elapsed, any_invalid)
+
+    # 14. conservative provenance summaries (§12/§13/§14)
     res.calendar_provenance = calendar_provenance
-    res.outcome_window_start = outcome_bars[0].trading_date
-    res.outcome_window_end = outcome_bars[-1].trading_date
-
-    # 9. per-barrier OHLC validation → invalid bars block negative conclusions
-    any_invalid = False
-    for bar in outcome_bars:
-        if validate_daily_bar(bar):
-            any_invalid = True
-            break
-
-    # 10. evaluate each label independently (no event chain assumed)
-    touch = _eval_touch(barrier, outcome_bars, request.previous_close)
-    break_ = _eval_break(barrier, outcome_bars)
-    bar_by_date = {b.trading_date: b for b in outcome_bars}
-    acceptance = _eval_acceptance(barrier, ordered_sessions, bar_by_date, policy.acceptance_consecutive_closes)
-
-    res.touch = _finalize(touch, mature, missing, horizon_elapsed, any_invalid, calendar_known)
-    res.break_ = _finalize(break_, mature, missing, horizon_elapsed, any_invalid, calendar_known)
-    res.acceptance = _finalize(acceptance, mature, missing, horizon_elapsed, any_invalid, calendar_known)
+    res.forecast_asof_status = request.asof_status
+    res.barrier_provenance_status = "VERIFIED" if (barrier.barrier_source and barrier.barrier_available_at is not None) else "UNKNOWN"
+    res.outcome_asof_status = _least_verified_asof([b.asof_status for b in in_window_bars])
+    res.asof_status = _least_verified_asof([res.forecast_asof_status, res.outcome_asof_status])
+    res.forecast_source_snapshot_ids = list(request.source_snapshot_ids)
+    res.barrier_source_snapshot_ids = list(barrier.source_snapshot_ids)
+    res.outcome_source_snapshot_ids = sorted({sid for b in in_window_bars for sid in b.source_snapshot_ids})
+    res.source_snapshot_ids = sorted(set(res.forecast_source_snapshot_ids)
+                                     | set(res.barrier_source_snapshot_ids)
+                                     | set(res.outcome_source_snapshot_ids))
 
     return res
 
 
+def _blocked(res: DailyBarrierLabelResult, extra: str = "") -> DailyBarrierLabelResult:
+    status = res.series_block or BLOCKED_TEMPORAL_CONTRACT
+    res.touch = res.break_ = res.acceptance = EventResult(None, status, "")
+    return res
+
+
 def _finalize(ev: EventResult, mature: bool, missing: list[str], horizon_elapsed: bool,
-              any_invalid: bool, calendar_known: bool) -> EventResult:
-    """Positive events stand; negative only after full horizon + calendar provenance + no missing."""
+              any_invalid: bool) -> EventResult:
+    """Positive stands; negative only after full horizon + no missing + no invalid (break/acceptance)."""
     if ev.value is True:
         return ev
-    # observed issues independent of calendar (missing data / gap ambiguity)
-    if ev.status in ("UNOBSERVABLE_MISSING_DATA", "AMBIGUOUS_GAP_CROSS", "INVALID_OHLC"):
+    if ev.status == "UNOBSERVABLE_MISSING_DATA":
         return ev
-    # no positive found:
     if any_invalid:
         return EventResult(None, "INVALID_OHLC", ev.first_session_date)
-    if not calendar_known:
-        return EventResult(None, "BLOCKED_CALENDAR_PROVENANCE", "")
     if not horizon_elapsed:
         return EventResult(None, "UNMATURED", "")
     if missing:
@@ -509,7 +589,19 @@ def _finalize(ev: EventResult, mature: bool, missing: list[str], horizon_elapsed
     return EventResult(False, "OBSERVED_FALSE", "")
 
 
-def _blocked(res: DailyBarrierLabelResult, extra: str = "") -> DailyBarrierLabelResult:
-    status = res.series_block or BLOCKED_TEMPORAL_CONTRACT
-    res.touch = res.break_ = res.acceptance = EventResult(None, status, "")
-    return res
+def _finalize_touch(ev: EventResult, mature: bool, missing: list[str], horizon_elapsed: bool,
+                    any_invalid: bool, trusted_prev_close: bool) -> EventResult:
+    """Touch negative additionally requires a trusted pre-window reference (to rule out gap cross)."""
+    if ev.value is True:
+        return ev
+    if ev.status in ("UNOBSERVABLE_MISSING_DATA", "AMBIGUOUS_GAP_CROSS"):
+        return ev
+    if any_invalid:
+        return EventResult(None, "INVALID_OHLC", ev.first_session_date)
+    if not trusted_prev_close:
+        return EventResult(None, "BLOCKED_PREWINDOW_REFERENCE_PROVENANCE", "")
+    if not horizon_elapsed:
+        return EventResult(None, "UNMATURED", "")
+    if missing:
+        return EventResult(None, "UNOBSERVABLE_MISSING_DATA", "")
+    return EventResult(False, "OBSERVED_FALSE", "")
