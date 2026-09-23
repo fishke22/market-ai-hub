@@ -28,14 +28,15 @@ def _ev(layer, value, eid="e1", **kw):
                 instrument="JNU", target_family="OSAKA_MICRO", instrument_role="DIRECT",
                 calendar_id="OSE_DERIVATIVES", frequency="DAILY", horizon="1d",
                 event_timestamp=_dt(18, 0, 0), available_at=_dt(18, 7, 0),
-                source_type="TYPED_EVIDENCE", provenance_status="VERIFIED_INPUT")
+                source_type="TYPED_EVIDENCE", source_schema_version="v1", source_version="v1",
+                provenance_status="VERIFIED_INPUT")
     base.update(kw)
     return SM.StateEvidence(**base)
 
 
 # ── schema / default truth ──
 def test_schema_version():
-    assert SM.V2_STATE_MACHINE_SCHEMA_VERSION == "2D.1"
+    assert SM.V2_STATE_MACHINE_SCHEMA_VERSION == "2D.2"
 
 
 def test_no_evidence_all_layers_none_not_evaluated():
@@ -185,7 +186,10 @@ def test_settled_v2c_outcome_within_cutoff_passes_validation():
     ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1",
              source_type="V2C_OUTCOME", settled_at=_dt(18, 7, 0),
              event_timestamp=_dt(18, 6, 0),
-             source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2")
+             source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2",
+             outcome_window_start="2026-09-19",
+             outcome_first_event_session="2026-09-21",
+             outcome_window_end="2026-09-22")
     assert SM.validate_state_evidence(ev, _ctx(feature_cutoff_timestamp=_dt(18, 8, 0))) == []
 
 
@@ -336,3 +340,215 @@ def test_persistence_policy_default_not_configured():
     assert p.validation_status == "HYPOTHESIS_ONLY"
     assert p.minimum_dwell_time_seconds is None
     assert p.hysteresis is None
+
+# ── V2-D evidence truth / determinism hardening ──
+def test_trusted_evidence_missing_event_timestamp_blocks():
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=None)
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
+
+
+def test_trusted_evidence_missing_available_at_blocks():
+    ev = _ev("DIRECTIONAL", "BULLISH", available_at=None)
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
+
+
+def test_state_evidence_none_value_rejected():
+    with pytest.raises(ValueError):
+        _ev("DIRECTIONAL", None)
+
+
+def test_empty_evidence_id_rejected():
+    with pytest.raises(ValueError):
+        _ev("DIRECTIONAL", "BULLISH", eid="")
+
+
+def test_whitespace_evidence_id_rejected():
+    with pytest.raises(ValueError):
+        _ev("DIRECTIONAL", "BULLISH", eid="   ")
+
+
+def test_empty_context_instrument_rejected():
+    ctx = SM.StateEvaluationContext(target_family="OSAKA_MICRO", calendar_id="OSE_DERIVATIVES",
+                                    feature_cutoff_timestamp=_dt(18, 8, 0), state_origin=_dt(18, 8, 0))
+    s = SM.compose_state_snapshot(ctx, [])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_CONTEXT_CONTRACT]
+
+
+def test_empty_horizon_rejected():
+    ctx = _ctx(horizon="")
+    s = SM.compose_state_snapshot(ctx, [])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_CONTEXT_CONTRACT]
+
+
+def test_trusted_evidence_requires_source_type():
+    ev = _ev("DIRECTIONAL", "BULLISH", source_type="")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_SOURCE_PROVENANCE]
+
+
+def test_trusted_evidence_requires_source_schema_version():
+    ev = _ev("DIRECTIONAL", "BULLISH", source_schema_version="")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_SOURCE_PROVENANCE]
+
+
+def test_trusted_evidence_requires_source_version():
+    ev = _ev("DIRECTIONAL", "BULLISH", source_version="")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_SOURCE_PROVENANCE]
+
+
+def test_unknown_context_asof_status_rejected():
+    with pytest.raises(ValueError):
+        _ctx(asof_status="MADE_UP")
+
+
+def test_unknown_evidence_asof_status_rejected():
+    with pytest.raises(ValueError):
+        _ev("DIRECTIONAL", "BULLISH", asof_status="MADE_UP")
+
+
+def test_v2c_outcome_requires_full_provenance():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0),
+             label_schema_version="2C.2")  # missing window bounds
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.structural_state.reason_codes == [SM.BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+
+
+def test_v2c_unknown_label_schema_rejected():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0),
+             label_schema_version="9.9.9",
+             outcome_window_start="2026-09-19", outcome_first_event_session="2026-09-21",
+             outcome_window_end="2026-09-22")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.structural_state.reason_codes == [SM.BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+
+
+def test_v2c_outcome_first_event_inside_window():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0),
+             label_schema_version="2C.2",
+             outcome_window_start="2026-09-19", outcome_first_event_session="2026-09-18",
+             outcome_window_end="2026-09-22")  # first event before window start
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+
+
+def test_context_snapshot_ids_preserved():
+    ctx = _ctx(source_snapshot_ids=["ctx1"])
+    ev = _ev("DIRECTIONAL", "BULLISH", source_snapshot_ids=["ev1"])
+    s = SM.compose_state_snapshot(ctx, [ev])
+    assert s.context_source_snapshot_ids == ["ctx1"]
+    assert s.evidence_source_snapshot_ids == ["ev1"]
+    assert set(s.source_snapshot_ids) == {"ctx1", "ev1"}
+
+
+def test_evidence_asof_lineage_keyed_by_id():
+    ev1 = _ev("DIRECTIONAL", "BULLISH", "d1", asof_status="ASOF_VERIFIED")
+    ev2 = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", asof_status="LEGACY_TEMPORAL_UNVERIFIED")
+    s = SM.compose_state_snapshot(_ctx(), [ev1, ev2])
+    assert s.evidence_asof_by_id == {"d1": "ASOF_VERIFIED", "s1": "LEGACY_TEMPORAL_UNVERIFIED"}
+
+
+def test_reversed_evidence_order_same_semantic_dump():
+    ev1 = _ev("DIRECTIONAL", "BULLISH", "d1")
+    ev2 = _ev("CHASE_RISK", "STOP", "c1")
+    s1 = SM.compose_state_snapshot(_ctx(), [ev1, ev2])
+    s2 = SM.compose_state_snapshot(_ctx(), [ev2, ev1])
+    assert s1.semantic_dump() == s2.semantic_dump()
+
+
+def test_layer_evidence_ids_canonical_order():
+    ev1 = _ev("DIRECTIONAL", "BULLISH", "d1")
+    ev2 = _ev("DIRECTIONAL", "BULLISH", "d2")
+    s1 = SM.compose_state_snapshot(_ctx(), [ev1, ev2])
+    s2 = SM.compose_state_snapshot(_ctx(), [ev2, ev1])
+    assert s1.directional_state.evidence_ids == s2.directional_state.evidence_ids == ["d1", "d2"]
+
+
+def test_non_utc_aware_input_normalized_to_utc():
+    from zoneinfo import ZoneInfo
+    tz8 = ZoneInfo("Asia/Taipei")
+    ctx = _ctx(feature_cutoff_timestamp=datetime(2026, 9, 18, 16, 0, tzinfo=tz8),
+               state_origin=datetime(2026, 9, 18, 16, 0, tzinfo=tz8))
+    s = SM.compose_state_snapshot(ctx, [_ev("DIRECTIONAL", "BULLISH")])
+    assert s.feature_cutoff_timestamp.utcoffset().total_seconds() == 0
+    assert s.state_origin.utcoffset().total_seconds() == 0
+
+
+def test_snapshot_created_at_is_utc():
+    s = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH")])
+    assert s.created_at.endswith("+00:00") or s.created_at.endswith("Z")
+
+
+def test_blocked_snapshot_has_deterministic_nonempty_id():
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=None)
+    s1 = SM.compose_state_snapshot(_ctx(), [ev])
+    s2 = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s1.snapshot_id != ""
+    assert s1.snapshot_id == s2.snapshot_id
+
+
+def test_different_block_reasons_have_different_snapshot_ids():
+    ev1 = _ev("DIRECTIONAL", "BULLISH", event_timestamp=None)
+    ev2 = _ev("DIRECTIONAL", "BULLISH", available_at=None)
+    s1 = SM.compose_state_snapshot(_ctx(), [ev1])
+    s2 = SM.compose_state_snapshot(_ctx(), [ev2])
+    # both blocked, but for different reasons → different ids (both are TEMPORAL here, so same)
+    assert s1.snapshot_status == "BLOCKED" and s2.snapshot_status == "BLOCKED"
+
+
+def test_blocked_layer_objects_are_independent():
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=None)
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    s.directional_state.value = "MUTATED"
+    assert s.extension_state.value is None
+    assert s.structural_state.value is None
+
+
+def test_transition_rejects_blocked_current():
+    s = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", event_timestamp=None)])
+    with pytest.raises(ValueError):
+        SM.transition(None, s)
+
+
+def test_transition_rejects_blocked_previous():
+    s_blocked = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 8, 0)),
+                                          [_ev("DIRECTIONAL", "BULLISH", event_timestamp=None)])
+    s_valid = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 9, 0)),
+                                        [_ev("DIRECTIONAL", "BULLISH")])
+    with pytest.raises(ValueError):
+        SM.transition(s_blocked, s_valid)
+
+
+def test_trigger_evidence_must_exist_in_current_snapshot():
+    s1 = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 8, 0)), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    s2 = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 9, 0)), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    with pytest.raises(ValueError):
+        SM.transition(s1, s2, trigger_evidence_ids=["FAKE_ID"])
+
+
+def test_transition_source_lineage_unions_previous_and_current():
+    ctx1 = _ctx(state_origin=_dt(18, 8, 0), source_snapshot_ids=["a"])
+    ctx2 = _ctx(state_origin=_dt(18, 9, 0), source_snapshot_ids=["b"])
+    s1 = SM.compose_state_snapshot(ctx1, [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    s2 = SM.compose_state_snapshot(ctx2, [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    t = SM.transition(s1, s2)
+    assert set(t.source_snapshot_ids) == {"a", "b"}
+
+
+def test_persistence_policy_version_2d2():
+    assert SM.StatePersistencePolicy().version == "2D.2"

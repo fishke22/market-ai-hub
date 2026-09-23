@@ -11,22 +11,27 @@ Five domains (layer value vs evaluation status are SEPARATE):
 - RISK:        NORMAL / EXHAUSTION_WARNING / REVERSAL_RISK / MODEL_FAILURE
 - CHASE_RISK:  ALLOW / CAUTION / STOP   (independent of Direction; STOP != SHORT)
 
-No evidence → value=None + status=NOT_EVALUATED (never default NEUTRAL/NORMAL/ALLOW).
-V2-C Touch/Break/Acceptance are FORECAST-OUTCOME labels and MUST NOT leak into a forecast-time state.
+Evidence truth contract (2D.2):
+- StateEvidence must carry non-empty evidence_id, legal non-null value, non-empty target identity,
+  non-empty source identity, mandatory event_timestamp + available_at, and a known asof_status.
+- Point-in-time: event_timestamp <= available_at <= feature_cutoff_timestamp <= state_origin.
+- V2-C Touch/Break/Acceptance are forecast-outcome labels and MUST NOT leak into forecast state.
+- Canonical stored timestamps are tz-aware UTC; set-like outputs are canonical sorted.
 No extension/exhaustion evaluator, no probability, no trading semantics, no persistence DB.
 
-Schema: V2_STATE_MACHINE_SCHEMA_VERSION = "2D.1"  (independent from 2A.1 / 2B.1 / 2C.2 / 3A.2.3)
+Schema: V2_STATE_MACHINE_SCHEMA_VERSION = "2D.2"  (independent from 2A.1 / 2B.1 / 2C.2 / 3A.2.3)
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field as dfield, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import sha256
 from typing import Any
 
 from market_ai_hub.research.v2.asof import normalize_instrument, normalize_family, ensure_utc_aware
+from market_ai_hub.research.v2.labels import V2_DAILY_LABEL_SCHEMA_VERSION
 
-V2_STATE_MACHINE_SCHEMA_VERSION = "2D.1"
+V2_STATE_MACHINE_SCHEMA_VERSION = "2D.2"
 
 # ── enums ──
 LAYERS = ("DIRECTIONAL", "EXTENSION", "STRUCTURAL", "RISK", "CHASE_RISK")
@@ -51,6 +56,8 @@ SNAPSHOT_STATUSES = ("NO_EVIDENCE", "COMPOSED_PARTIAL", "COMPOSED_COMPLETE", "BL
 PROVENANCE_STATUS = ("AUTHORITATIVE", "VERIFIED_INPUT", "UNKNOWN")
 _TRUSTED = ("AUTHORITATIVE", "VERIFIED_INPUT")
 SUPPORTED_FREQUENCIES = ("DAILY",)
+SUPPORTED_EVALUATION_MODES = ("RESEARCH",)
+ASOF_STATUSES = ("ASOF_VERIFIED", "TEMPORAL_UNVERIFIED", "LEGACY_TEMPORAL_UNVERIFIED")
 
 # evidence source types
 SOURCE_V2C_OUTCOME = "V2C_OUTCOME"
@@ -63,15 +70,28 @@ BLOCKED_FUTURE_OUTCOME_EVIDENCE = "BLOCKED_FUTURE_OUTCOME_EVIDENCE"
 BLOCKED_EVIDENCE_ID_COLLISION = "BLOCKED_EVIDENCE_ID_COLLISION"
 BLOCKED_UNSUPPORTED_FREQUENCY = "BLOCKED_UNSUPPORTED_FREQUENCY"
 BLOCKED_TEMPORAL_TRANSITION = "BLOCKED_TEMPORAL_TRANSITION"
+BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE = "BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE"
+BLOCKED_CONTEXT_CONTRACT = "BLOCKED_CONTEXT_CONTRACT"
+BLOCKED_SOURCE_PROVENANCE = "BLOCKED_SOURCE_PROVENANCE"
+BLOCKED_INVALID_SNAPSHOT_TRANSITION = "BLOCKED_INVALID_SNAPSHOT_TRANSITION"
 
-# ASOF conservativeness rank
+# ASOF conservativeness rank (higher = more verified); summary takes least-verified
 _ASOF_RANK = {"ASOF_VERIFIED": 2, "TEMPORAL_UNVERIFIED": 1, "LEGACY_TEMPORAL_UNVERIFIED": 0}
 
 
 def _least_verified_asof(statuses: list[str]) -> str:
     if not statuses:
         return "LEGACY_TEMPORAL_UNVERIFIED"
-    return min(statuses, key=lambda s: _ASOF_RANK.get(s, 0))
+    return min(statuses, key=lambda s: _ASOF_RANK[s])
+
+
+def _require_nonempty(name: str, value: Any) -> None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise ValueError(f"{name} must be non-empty")
+
+
+def _canonical(xs: list[str]) -> list[str]:
+    return sorted({x for x in xs if x})
 
 
 # ── LayerState ──
@@ -91,7 +111,7 @@ class LayerState:
         return asdict(self)
 
 
-# ── StateEvaluationContext (§8) ──
+# ── StateEvaluationContext (§8/§20) ──
 @dataclass
 class StateEvaluationContext:
     instrument: str = ""
@@ -109,13 +129,23 @@ class StateEvaluationContext:
     def __post_init__(self):
         if self.frequency not in SUPPORTED_FREQUENCIES:
             raise ValueError(f"unsupported frequency: {self.frequency!r} (V2-D supports DAILY only)")
+        if self.evaluation_mode not in SUPPORTED_EVALUATION_MODES:
+            raise ValueError(f"unsupported evaluation_mode: {self.evaluation_mode!r}")
+        if self.asof_status not in ASOF_STATUSES:
+            raise ValueError(f"unknown asof_status: {self.asof_status!r}")
         for name in ("feature_cutoff_timestamp", "state_origin"):
             v = getattr(self, name)
-            if v is not None and v.tzinfo is None:
-                raise ValueError(f"{name} must be tz-aware")
+            if v is None or v.tzinfo is None:
+                raise ValueError(f"{name} must be tz-aware and non-null")
+        # canonical UTC
+        self.feature_cutoff_timestamp = ensure_utc_aware(self.feature_cutoff_timestamp)
+        self.state_origin = ensure_utc_aware(self.state_origin)
 
-    def validate_ordering(self) -> list[str]:
+    def validate_contract(self) -> list[str]:
         reasons = []
+        for name in ("instrument", "target_family", "instrument_role", "calendar_id", "horizon"):
+            if not getattr(self, name) or not str(getattr(self, name)).strip():
+                reasons.append(f"EMPTY_{name.upper()}")
         if self.feature_cutoff_timestamp and self.state_origin \
                 and self.feature_cutoff_timestamp > self.state_origin:
             reasons.append("CUTOFF_AFTER_ORIGIN")
@@ -125,7 +155,7 @@ class StateEvaluationContext:
         return asdict(self)
 
 
-# ── StateEvidence (§9/§12) ──
+# ── StateEvidence (§9/§12/§21/§28) ──
 @dataclass
 class StateEvidence:
     evidence_id: str = ""
@@ -146,7 +176,6 @@ class StateEvidence:
     asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     validation_status: str = "HYPOTHESIS_ONLY"
     provenance_status: str = "UNKNOWN"
-    # V2C_OUTCOME-only provenance (§12)
     source_forecast_origin: datetime | None = None
     outcome_window_start: str = ""
     outcome_window_end: str = ""
@@ -156,18 +185,26 @@ class StateEvidence:
     notes: str = ""
 
     def __post_init__(self):
+        _require_nonempty("evidence_id", self.evidence_id)
         if self.layer not in LAYERS:
             raise ValueError(f"unknown layer: {self.layer!r}")
-        if self.value is not None and self.value not in _LAYER_VALUES[self.layer]:
+        if self.value is None:
+            raise ValueError(f"StateEvidence.value must be a legal non-null domain value (got None)")
+        if self.value not in _LAYER_VALUES[self.layer]:
             raise ValueError(f"value {self.value!r} invalid for layer {self.layer!r}")
         if self.frequency not in SUPPORTED_FREQUENCIES:
             raise ValueError(f"unsupported frequency: {self.frequency!r}")
         if self.provenance_status not in PROVENANCE_STATUS:
             raise ValueError(f"unknown provenance_status: {self.provenance_status!r}")
+        if self.asof_status not in ASOF_STATUSES:
+            raise ValueError(f"unknown asof_status: {self.asof_status!r}")
+        # canonical UTC for any provided timestamp
         for name in ("event_timestamp", "available_at", "source_forecast_origin", "settled_at"):
             v = getattr(self, name)
-            if v is not None and v.tzinfo is None:
-                raise ValueError(f"{name} must be tz-aware")
+            if v is not None:
+                if v.tzinfo is None:
+                    raise ValueError(f"{name} must be tz-aware")
+                setattr(self, name, ensure_utc_aware(v))
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -192,9 +229,12 @@ class StateSnapshot:
     chase_risk_state: LayerState = dfield(default_factory=LayerState)
     snapshot_status: str = "NO_EVIDENCE"
     evidence_ids: list[str] = dfield(default_factory=list)
+    context_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    evidence_source_snapshot_ids: list[str] = dfield(default_factory=list)
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     context_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     evidence_asof_statuses: list[str] = dfield(default_factory=list)
+    evidence_asof_by_id: dict[str, str] = dfield(default_factory=dict)
     derived_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     state_schema_version: str = V2_STATE_MACHINE_SCHEMA_VERSION
     created_at: str = ""
@@ -211,6 +251,12 @@ class StateSnapshot:
             "RISK": self.risk_state,
             "CHASE_RISK": self.chase_risk_state,
         }
+
+    def semantic_dump(self) -> dict:
+        """Deterministic dump excluding runtime metadata (created_at)."""
+        d = asdict(self)
+        d.pop("created_at", None)
+        return d
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -255,7 +301,7 @@ class StateTransitionRecord:
 # ── StatePersistencePolicy (§30) — no hidden defaults ──
 @dataclass
 class StatePersistencePolicy:
-    version: str = "2D.1"
+    version: str = "2D.2"
     status: str = "NOT_CONFIGURED"
     validation_status: str = "HYPOTHESIS_ONLY"
     minimum_dwell_time_seconds: float | None = None
@@ -288,36 +334,70 @@ def _identity_match(ev: StateEvidence, ctx: StateEvaluationContext) -> list[str]
 
 def validate_state_evidence(ev: StateEvidence, ctx: StateEvaluationContext) -> list[str]:
     """Return blocker reason codes (empty = valid+eligible to compose)."""
-    reasons = list(_identity_match(ev, ctx))
-    if reasons:
+    # identity must be non-empty AND match
+    for name in ("instrument", "target_family", "instrument_role", "calendar_id", "horizon"):
+        if not getattr(ev, name) or not str(getattr(ev, name)).strip():
+            return [BLOCKED_IDENTITY_MISMATCH]
+    if _identity_match(ev, ctx):
         return [BLOCKED_IDENTITY_MISMATCH]
+    # source identity mandatory
+    for name in ("source_type", "source_schema_version", "source_version"):
+        if not getattr(ev, name) or not str(getattr(ev, name)).strip():
+            return [BLOCKED_SOURCE_PROVENANCE]
+    # temporal completeness mandatory
+    if ev.event_timestamp is None or ev.available_at is None:
+        return [BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
     cutoff = ctx.feature_cutoff_timestamp
     if cutoff is not None:
-        if ev.available_at is not None and ensure_utc_aware(ev.available_at) > ensure_utc_aware(cutoff):
+        if ensure_utc_aware(ev.available_at) > ensure_utc_aware(cutoff):
             return [BLOCKED_FUTURE_EVIDENCE]
-        if ev.event_timestamp is not None and ensure_utc_aware(ev.event_timestamp) > ensure_utc_aware(cutoff):
+        if ensure_utc_aware(ev.event_timestamp) > ensure_utc_aware(cutoff):
             return [BLOCKED_FUTURE_EVIDENCE]
+    # V2-C outcome provenance
     if ev.source_type == SOURCE_V2C_OUTCOME:
         if ev.settled_at is None or (cutoff is not None and ensure_utc_aware(ev.settled_at) > ensure_utc_aware(cutoff)):
             return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
-        if not (ev.source_forecast_origin and ev.label_schema_version):
+        if not (ev.source_forecast_origin and ev.outcome_window_start and ev.outcome_window_end
+                and ev.outcome_first_event_session and ev.label_schema_version):
+            return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+        if ev.label_schema_version != V2_DAILY_LABEL_SCHEMA_VERSION:
+            return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+        if ensure_utc_aware(ev.source_forecast_origin) > ensure_utc_aware(ev.event_timestamp):
+            return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+        if ensure_utc_aware(ev.event_timestamp) > ensure_utc_aware(ev.settled_at):
+            return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+        if not (ev.outcome_window_start <= ev.outcome_first_event_session <= ev.outcome_window_end):
             return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
     return []
 
 
 def snapshot_identity(ctx: StateEvaluationContext, layers: dict[str, LayerState],
-                      evidence_ids: list[str]) -> str:
+                      evidence_ids: list[str], context_snaps: list[str],
+                      evidence_snaps: list[str], derived_asof: str) -> str:
     parts = [
         normalize_instrument(ctx.instrument), normalize_family(ctx.target_family),
         ctx.instrument_role, ctx.calendar_id, ctx.frequency, ctx.horizon,
-        ensure_utc_aware(ctx.feature_cutoff_timestamp).isoformat() if ctx.feature_cutoff_timestamp else "",
-        ensure_utc_aware(ctx.state_origin).isoformat() if ctx.state_origin else "",
+        ctx.feature_cutoff_timestamp.isoformat(), ctx.state_origin.isoformat(),
         V2_STATE_MACHINE_SCHEMA_VERSION,
-        "|".join(sorted(evidence_ids)),
+        "|".join(_canonical(evidence_ids)),
+        "|".join(_canonical(context_snaps)),
+        "|".join(_canonical(evidence_snaps)),
+        derived_asof,
     ]
     for layer in LAYERS:
         s = layers[layer]
         parts.append(f"{layer}:{s.value}:{s.status}")
+    return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def blocked_snapshot_identity(ctx: StateEvaluationContext, reason: str) -> str:
+    parts = [
+        normalize_instrument(ctx.instrument), normalize_family(ctx.target_family),
+        ctx.instrument_role, ctx.calendar_id, ctx.frequency, ctx.horizon,
+        ctx.feature_cutoff_timestamp.isoformat() if ctx.feature_cutoff_timestamp else "",
+        ctx.state_origin.isoformat() if ctx.state_origin else "",
+        V2_STATE_MACHINE_SCHEMA_VERSION, "BLOCKED", reason,
+    ]
     return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
@@ -329,36 +409,31 @@ def transition_identity(prev_id: str, new_id: str) -> str:
 def compose_state_snapshot(ctx: StateEvaluationContext,
                            evidence: list[StateEvidence]) -> StateSnapshot:
     """Deterministic evidence composition. No model / ATR / probability / LLM / future query."""
-    # context time contract
-    if ctx.validate_ordering() or ctx.feature_cutoff_timestamp is None or ctx.state_origin is None:
-        return _blocked_snapshot(ctx, BLOCKED_TEMPORAL_CONTRACT)
+    # context contract
+    if ctx.validate_contract():
+        return _blocked_snapshot(ctx, BLOCKED_CONTEXT_CONTRACT)
 
     layers: dict[str, LayerState] = {l: LayerState(status="NOT_EVALUATED") for l in LAYERS}
 
-    # validate + dedupe evidence
     seen: dict[str, StateEvidence] = {}
     for ev in evidence:
         if ev.evidence_id in seen:
             if asdict(seen[ev.evidence_id]) != asdict(ev):
                 return _blocked_snapshot(ctx, BLOCKED_EVIDENCE_ID_COLLISION)
-            continue  # exact duplicate → deterministic de-duplicate
+            continue
         seen[ev.evidence_id] = ev
         reasons = validate_state_evidence(ev, ctx)
         if reasons:
             return _blocked_snapshot(ctx, reasons[0])
     eligible = list(seen.values())
 
-    # group by layer
     by_layer: dict[str, list[StateEvidence]] = {l: [] for l in LAYERS}
     for ev in eligible:
         by_layer[ev.layer].append(ev)
 
-    # per-layer composition
     for layer in LAYERS:
-        evs = by_layer[layer]
-        layers[layer] = _compose_layer(layer, evs)
+        layers[layer] = _compose_layer(layer, by_layer[layer])
 
-    # snapshot status
     statuses = [layers[l].status for l in LAYERS]
     if all(s == "NOT_EVALUATED" for s in statuses):
         snap_status = "NO_EVIDENCE"
@@ -367,12 +442,15 @@ def compose_state_snapshot(ctx: StateEvaluationContext,
     else:
         snap_status = "COMPOSED_PARTIAL"
 
-    evidence_ids = sorted([ev.evidence_id for ev in eligible])
-    source_snapshot_ids = sorted({sid for ev in eligible for sid in ev.source_snapshot_ids})
+    evidence_ids = _canonical([ev.evidence_id for ev in eligible])
+    context_snaps = _canonical(ctx.source_snapshot_ids)
+    evidence_snaps = _canonical([sid for ev in eligible for sid in ev.source_snapshot_ids])
+    union_snaps = _canonical(context_snaps + evidence_snaps)
     derived_asof = _least_verified_asof([ctx.asof_status] + [ev.asof_status for ev in eligible])
+    evidence_asof_by_id = {ev.evidence_id: ev.asof_status for ev in sorted(eligible, key=lambda e: e.evidence_id)}
 
     snap = StateSnapshot(
-        snapshot_id=snapshot_identity(ctx, layers, evidence_ids),
+        snapshot_id=snapshot_identity(ctx, layers, evidence_ids, context_snaps, evidence_snaps, derived_asof),
         instrument=ctx.instrument, target_family=ctx.target_family,
         instrument_role=ctx.instrument_role, calendar_id=ctx.calendar_id,
         frequency=ctx.frequency, horizon=ctx.horizon,
@@ -380,11 +458,13 @@ def compose_state_snapshot(ctx: StateEvaluationContext,
         directional_state=layers["DIRECTIONAL"], extension_state=layers["EXTENSION"],
         structural_state=layers["STRUCTURAL"], risk_state=layers["RISK"],
         chase_risk_state=layers["CHASE_RISK"], snapshot_status=snap_status,
-        evidence_ids=evidence_ids, source_snapshot_ids=source_snapshot_ids,
+        evidence_ids=evidence_ids, context_source_snapshot_ids=context_snaps,
+        evidence_source_snapshot_ids=evidence_snaps, source_snapshot_ids=union_snaps,
         context_asof_status=ctx.asof_status,
-        evidence_asof_statuses=[ev.asof_status for ev in eligible],
+        evidence_asof_statuses=[evidence_asof_by_id[k] for k in sorted(evidence_asof_by_id)],
+        evidence_asof_by_id=evidence_asof_by_id,
         derived_asof_status=derived_asof,
-        created_at=datetime.now().astimezone().isoformat(),
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
     return snap
 
@@ -394,14 +474,13 @@ def _compose_layer(layer: str, evs: list[StateEvidence]) -> LayerState:
         return LayerState(status="NOT_EVALUATED")
     trusted = [ev for ev in evs if ev.provenance_status in _TRUSTED]
     if not trusted:
-        # only UNKNOWN provenance → UNVERIFIED, no published value
-        return LayerState(value=None, status="UNVERIFIED",
-                          evidence_ids=[ev.evidence_id for ev in evs],
-                          source_snapshot_ids=sorted({sid for ev in evs for sid in ev.source_snapshot_ids}),
-                          reason_codes=["UNVERIFIED_PROVENANCE"])
+        ids = _canonical([ev.evidence_id for ev in evs])
+        snaps = _canonical([sid for ev in evs for sid in ev.source_snapshot_ids])
+        return LayerState(value=None, status="UNVERIFIED", evidence_ids=ids,
+                          source_snapshot_ids=snaps, reason_codes=["UNVERIFIED_PROVENANCE"])
     values = {ev.value for ev in trusted}
-    ids = [ev.evidence_id for ev in trusted]
-    snaps = sorted({sid for ev in trusted for sid in ev.source_snapshot_ids})
+    ids = _canonical([ev.evidence_id for ev in trusted])
+    snaps = _canonical([sid for ev in trusted for sid in ev.source_snapshot_ids])
     if len(values) == 1:
         return LayerState(value=next(iter(values)), status="EVALUATED", evidence_ids=ids,
                           source_snapshot_ids=snaps)
@@ -410,26 +489,31 @@ def _compose_layer(layer: str, evs: list[StateEvidence]) -> LayerState:
 
 
 def _blocked_snapshot(ctx: StateEvaluationContext, reason: str) -> StateSnapshot:
-    blocked = LayerState(value=None, status="BLOCKED", reason_codes=[reason])
+    def blocked_layer() -> LayerState:
+        return LayerState(value=None, status="BLOCKED", reason_codes=[reason])
     return StateSnapshot(
+        snapshot_id=blocked_snapshot_identity(ctx, reason),
         instrument=ctx.instrument, target_family=ctx.target_family,
         instrument_role=ctx.instrument_role, calendar_id=ctx.calendar_id,
         frequency=ctx.frequency, horizon=ctx.horizon,
         feature_cutoff_timestamp=ctx.feature_cutoff_timestamp, state_origin=ctx.state_origin,
-        directional_state=blocked, extension_state=blocked, structural_state=blocked,
-        risk_state=blocked, chase_risk_state=blocked, snapshot_status="BLOCKED",
+        directional_state=blocked_layer(), extension_state=blocked_layer(),
+        structural_state=blocked_layer(), risk_state=blocked_layer(),
+        chase_risk_state=blocked_layer(), snapshot_status="BLOCKED",
         context_asof_status=ctx.asof_status,
         derived_asof_status=_least_verified_asof([ctx.asof_status]),
     )
 
 
-# ── transition (§24/§26/§27) ──
+# ── transition (§24/§26/§27/§17/§18/§19) ──
 def transition(previous: StateSnapshot | None,
                current: StateSnapshot,
                trigger_evidence_ids: list[str] | None = None) -> StateTransitionRecord:
-    """Deterministic transition. No probability. Monotonic time. Cross-identity/time rejected."""
+    """Deterministic transition. No probability. Monotonic time. Blocked snapshots rejected."""
+    if current.snapshot_status == "BLOCKED" or (previous is not None and previous.snapshot_status == "BLOCKED"):
+        raise ValueError(BLOCKED_INVALID_SNAPSHOT_TRANSITION)
+
     if previous is not None:
-        # identity must match
         if (normalize_instrument(previous.instrument) != normalize_instrument(current.instrument)
                 or normalize_family(previous.target_family) != normalize_family(current.target_family)
                 or previous.instrument_role != current.instrument_role
@@ -437,10 +521,16 @@ def transition(previous: StateSnapshot | None,
                 or previous.frequency != current.frequency
                 or previous.horizon != current.horizon):
             raise ValueError("cross-identity transition rejected")
-        # monotonic time
         if current.state_origin is None or previous.state_origin is None or \
                 ensure_utc_aware(current.state_origin) <= ensure_utc_aware(previous.state_origin):
             raise ValueError("backward/equal-time transition rejected")
+
+    # trigger lineage validation (§18): provided triggers ⊆ current evidence
+    triggers = _canonical(list(trigger_evidence_ids or []))
+    if triggers:
+        current_ids = set(current.evidence_ids)
+        if not set(triggers).issubset(current_ids):
+            raise ValueError("trigger_evidence_ids must be a subset of current.evidence_ids")
 
     prev_layers = previous.layers() if previous is not None else {l: LayerState() for l in LAYERS}
     curr_layers = current.layers()
@@ -451,6 +541,9 @@ def transition(previous: StateSnapshot | None,
         cv, cs = curr_layers[layer].value, curr_layers[layer].status
         if (pv, ps) != (cv, cs):
             changed.append(layer)
+
+    src_union = _canonical(
+        (previous.source_snapshot_ids if previous else []) + current.source_snapshot_ids)
 
     return StateTransitionRecord(
         transition_id=transition_identity(previous.snapshot_id if previous else "", current.snapshot_id),
@@ -471,8 +564,8 @@ def transition(previous: StateSnapshot | None,
         new_risk_state=curr_layers["RISK"],
         previous_chase_risk_state=prev_layers["CHASE_RISK"],
         new_chase_risk_state=curr_layers["CHASE_RISK"],
-        trigger_evidence_ids=list(trigger_evidence_ids or []),
-        source_snapshot_ids=current.source_snapshot_ids,
+        trigger_evidence_ids=triggers,
+        source_snapshot_ids=src_union,
         probability_before=None, probability_after=None, probability_status="NOT_AVAILABLE",
         invalidation_status="NONE",
     )
