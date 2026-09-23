@@ -1,6 +1,6 @@
 # V2 Catalyst Response Contract
 
-- **Schema**: `V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.2"` (module
+- **Schema**: `V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.3"` (module
   `src/market_ai_hub/research/v2/catalyst_response.py`)
 - Independent from `2A.1` / `2B.1` / `2C.2` / `2D.3` / `2E.3` / `3A.2.3`.
 
@@ -24,14 +24,18 @@ risk is preserved (`revision_status`), never masqueraded as vintage-safe.
 
 2F.2 structural hardening: `frequency` is constrained to `DAILY/IRREGULAR` (else ValueError);
 `factor_name` non-empty; numeric measurements (`RETURN/LEVEL_CHANGE/BPS_CHANGE/SURPRISE`) require a
-finite magnitude + unit, `EVENT_ONLY` forces `magnitude=None`. `MACRO_RELEASE` additionally requires
-`release_timestamp` with `release_timestamp <= available_at`, else
-`BLOCKED_RELEASE_TIME_PROVENANCE` (release-time truth is machine-enforced). `SCHEDULE_ONLY` blocks
-regardless of `observation_semantics`.
+finite magnitude + unit, `EVENT_ONLY` forces `magnitude=None`. `SCHEDULE_ONLY` blocks regardless of
+`observation_semantics`.
+
+2F.3 release-time temporal ordering: any supplied `release_timestamp` must obey
+`event_timestamp <= release_timestamp <= available_at <= feature_cutoff_timestamp`, else
+`BLOCKED_RELEASE_TIME_PROVENANCE`. `MACRO_RELEASE` additionally requires a non-null
+`release_timestamp`; a non-macro catalyst with no release concept may keep `release_timestamp=None`.
+Release timestamps are canonicalized to UTC (`+00:00`).
 
 ## Response window
 
-`TargetResponseEndpoint` carries full target identity + price + point-in-time + series/roll. 2F.2 is
+`TargetResponseEndpoint` carries full target identity + price + point-in-time + series/roll. 2F.3 is
 `POST_CATALYST` only: `catalyst.available_at <= start.event_timestamp < end.event_timestamp`; a
 pre-catalyst window → `BLOCKED_PRE_CATALYST_WINDOW`. Return = `(end/start) - 1`.
 `response_available_at = max(catalyst, start, end availability)`. `response_delay_seconds =
@@ -63,12 +67,22 @@ expected=0). Residual is never labeled alpha/edge. No baseline fitting in V2-F.
 `block_reason_codes` / `assessment_ids` / deterministic `path_id`. It requires same catalyst
 (id + fingerprint), same target identity + state stream, same response anchor, eligible
 (`DESCRIPTIVE_AVAILABLE`/`REFERENCE_CONTEXT_ONLY`) assessments, and strictly increasing window end
-times. Violations → `BLOCKED_INELIGIBLE_RESPONSE_ASSESSMENT` / `BLOCKED_CATALYST_ID_COLLISION` /
+times. All checks are set-based (never relative to `assessments[0]`). Violations →
+`BLOCKED_INELIGIBLE_RESPONSE_ASSESSMENT` / `BLOCKED_CATALYST_ID_COLLISION` /
 `BLOCKED_IDENTITY_MISMATCH` / `BLOCKED_STATE_STREAM_MISMATCH` / `BLOCKED_RESPONSE_ANCHOR_MISMATCH` /
-`BLOCKED_RESPONSE_ID_COLLISION` / `BLOCKED_PATH_HORIZON_ORDER`. Computes
+`BLOCKED_RESPONSE_ID_COLLISION` / `BLOCKED_PATH_HORIZON_ORDER`, in that fixed precedence. Computes
 `response_returns_by_horizon`, `absolute_response_by_horizon`, `peak_absolute_response`,
 `terminal_to_peak_abs_ratio` (None if peak=0), `time_to_peak_seconds`. No decay-curve fitting, no
-arbitrary decay classification threshold. Blocked paths keep a deterministic non-empty `path_id`.
+arbitrary decay classification threshold.
+
+2F.3 blocked-path determinism: a blocked path's `path_id` is derived from the canonical complete
+input assessment set (via the semantic fingerprint `_assessment_semantic_fp`, which excludes
+presentation metadata such as `response_label`) + block reason + schema — never from `assessments[0]`.
+Reversing input order yields the same blocked `path_id`. Blocked paths preserve audit lineage:
+`assessment_ids`, `source_snapshot_ids`, `derived_asof_status`, plus `candidate_catalyst_ids`,
+`candidate_catalyst_fingerprints`, `candidate_target_identities`, `candidate_state_stream_ids`,
+`candidate_response_anchor_fingerprints`. `response_label` never participates in collision
+detection or semantic identity.
 
 ## No state mapping
 

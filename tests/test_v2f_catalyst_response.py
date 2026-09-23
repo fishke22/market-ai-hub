@@ -54,7 +54,7 @@ def _eval(cat=None, start=None, end=None, baseline=None, response_label="r1", ct
 
 # ── schema ──
 def test_schema():
-    assert C.V2_CATALYST_RESPONSE_SCHEMA_VERSION == "2F.2"
+    assert C.V2_CATALYST_RESPONSE_SCHEMA_VERSION == "2F.3"
 
 
 # ── catalyst truth ──
@@ -522,3 +522,155 @@ def test_path_blocked_has_deterministic_nonempty_id():
     assert p1.path_status == "BLOCKED"
     assert p1.path_id != ""
     assert p1.path_id == p2.path_id
+
+
+# ── 2F.3 release-time temporal ordering ──
+def test_macro_release_before_event_blocks():
+    a = _eval(cat=_cat(catalyst_kind="MACRO_RELEASE", release_timestamp=_dt(17, 19, 0)))
+    assert a.association_status == "BLOCKED"
+    assert C.BLOCKED_RELEASE_TIME_PROVENANCE in a.block_reason_codes
+
+
+def test_macro_release_equal_event_allowed():
+    a = _eval(cat=_cat(catalyst_kind="MACRO_RELEASE", release_timestamp=_dt(17, 20, 0)))
+    assert a.association_status == "DESCRIPTIVE_AVAILABLE"
+
+
+def test_macro_release_between_event_and_available_allowed():
+    a = _eval(cat=_cat(catalyst_kind="MACRO_RELEASE", release_timestamp=_dt(17, 20, 15)))
+    assert a.association_status == "DESCRIPTIVE_AVAILABLE"
+
+
+def test_nonmacro_provided_release_before_event_blocks():
+    a = _eval(cat=_cat(catalyst_kind="POLICY_EVENT", release_timestamp=_dt(17, 19, 0)))
+    assert a.association_status == "BLOCKED"
+    assert C.BLOCKED_RELEASE_TIME_PROVENANCE in a.block_reason_codes
+
+
+def test_nonmacro_provided_release_after_available_blocks():
+    a = _eval(cat=_cat(catalyst_kind="POLICY_EVENT", release_timestamp=_dt(19, 8, 0)))
+    assert a.association_status == "BLOCKED"
+    assert C.BLOCKED_RELEASE_TIME_PROVENANCE in a.block_reason_codes
+
+
+def test_nonmacro_release_none_allowed():
+    a = _eval(cat=_cat(catalyst_kind="POLICY_EVENT", release_timestamp=None))
+    assert a.association_status == "DESCRIPTIVE_AVAILABLE"
+
+
+def test_release_timestamp_after_cutoff_blocks():
+    a = _eval(cat=_cat(catalyst_kind="MACRO_RELEASE", release_timestamp=_dt(18, 9, 0)))
+    assert a.association_status == "BLOCKED"
+    assert C.BLOCKED_RELEASE_TIME_PROVENANCE in a.block_reason_codes
+
+
+def test_release_timestamp_normalized_to_utc():
+    from datetime import timedelta
+    rel = datetime(2026, 9, 18, 4, 0, tzinfo=timezone(timedelta(hours=8)))
+    c = _cat(catalyst_kind="MACRO_RELEASE", release_timestamp=rel)
+    assert c.release_timestamp == _dt(17, 20, 0)
+
+
+# ── 2F.3 blocked-path order independence ──
+def test_catalyst_collision_blocked_path_id_order_independent():
+    a1 = _forge_assessment("r1", 0.02, _dt(18, 7, 30), fingerprint="b939")
+    a2 = _forge_assessment("r2", -0.05, _dt(19, 7, 30), fingerprint="c42d")
+    p = C.summarize_response_path([a1, a2])
+    q = C.summarize_response_path([a2, a1])
+    assert p.path_status == "BLOCKED"
+    assert C.BLOCKED_CATALYST_ID_COLLISION in p.block_reason_codes
+    assert p.path_id == q.path_id
+
+
+def test_target_mismatch_blocked_path_id_order_independent():
+    a1 = _forge_assessment("r1", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("r2", 0.01, _dt(19, 7, 30), fingerprint="fp")
+    a2.target_family = "TAIWAN_STOCK"
+    a2.instrument = "2330"
+    p = C.summarize_response_path([a1, a2])
+    q = C.summarize_response_path([a2, a1])
+    assert p.path_status == "BLOCKED"
+    assert C.BLOCKED_IDENTITY_MISMATCH in p.block_reason_codes
+    assert p.path_id == q.path_id
+
+
+def test_state_stream_mismatch_blocked_path_id_order_independent():
+    a1 = _forge_assessment("r1", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("r2", 0.01, _dt(19, 7, 30), fingerprint="fp")
+    a2.state_origin = _dt(22, 8, 0)
+    p = C.summarize_response_path([a1, a2])
+    q = C.summarize_response_path([a2, a1])
+    assert p.path_status == "BLOCKED"
+    assert C.BLOCKED_STATE_STREAM_MISMATCH in p.block_reason_codes
+    assert p.path_id == q.path_id
+
+
+def test_response_anchor_mismatch_blocked_path_id_order_independent():
+    a1 = _forge_assessment("r1", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("r2", 0.01, _dt(19, 7, 30), fingerprint="fp")
+    a2.response_start_fingerprint = "anchor2"
+    p = C.summarize_response_path([a1, a2])
+    q = C.summarize_response_path([a2, a1])
+    assert p.path_status == "BLOCKED"
+    assert C.BLOCKED_RESPONSE_ANCHOR_MISMATCH in p.block_reason_codes
+    assert p.path_id == q.path_id
+
+
+def test_response_id_collision_blocked_path_id_order_independent():
+    a1 = _forge_assessment("same", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("same", -0.05, _dt(19, 7, 30), fingerprint="fp")
+    p = C.summarize_response_path([a1, a2])
+    q = C.summarize_response_path([a2, a1])
+    assert p.path_status == "BLOCKED"
+    assert C.BLOCKED_RESPONSE_ID_COLLISION in p.block_reason_codes
+    assert p.path_id == q.path_id
+
+
+def test_ineligible_assessment_blocked_path_id_order_independent():
+    a1 = _forge_assessment("r1", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("r2", 0.01, _dt(19, 7, 30), fingerprint="fp")
+    a2.association_status = "BLOCKED"
+    p = C.summarize_response_path([a1, a2])
+    q = C.summarize_response_path([a2, a1])
+    assert p.path_status == "BLOCKED"
+    assert C.BLOCKED_INELIGIBLE_RESPONSE_ASSESSMENT in p.block_reason_codes
+    assert p.path_id == q.path_id
+
+
+# ── 2F.3 semantic duplicate / presentation label ──
+def test_exact_semantic_duplicate_dedupes():
+    a1 = _forge_assessment("same", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("same", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    p = C.summarize_response_path([a1, a2])
+    assert p.path_status == "DESCRIPTIVE_AVAILABLE"
+    assert list(p.response_returns_by_horizon.keys()) == ["same"]
+
+
+def test_response_label_difference_is_semantic_duplicate():
+    a1 = _eval(response_label="1D")
+    a2 = _eval(response_label="DAY_ONE")
+    assert a1.response_id == a2.response_id
+    assert a1.assessment_id == a2.assessment_id
+
+
+def test_response_label_difference_does_not_create_path_collision():
+    a1 = _forge_assessment("same", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("same", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a1.response_label = "1D"
+    a2.response_label = "DAY_ONE"
+    p = C.summarize_response_path([a1, a2])
+    assert p.path_status == "DESCRIPTIVE_AVAILABLE"
+    assert C.BLOCKED_RESPONSE_ID_COLLISION not in p.block_reason_codes
+
+
+def test_response_label_difference_does_not_change_valid_path_id():
+    a1 = _forge_assessment("r1", 0.02, _dt(18, 7, 30), fingerprint="fp")
+    a2 = _forge_assessment("r2", 0.01, _dt(19, 7, 30), fingerprint="fp")
+    a1.response_label = "1D"
+    a2.response_label = "DAY_ONE"
+    p = C.summarize_response_path([a1, a2])
+    a1.response_label = "X"
+    a2.response_label = "Y"
+    q = C.summarize_response_path([a1, a2])
+    assert p.path_status == "DESCRIPTIVE_AVAILABLE"
+    assert p.path_id == q.path_id

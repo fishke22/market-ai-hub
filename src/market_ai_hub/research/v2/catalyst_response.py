@@ -12,11 +12,18 @@ residual + descriptive response-path metrics.
 - deterministic response_id (caller label cannot change semantic identity); full catalyst semantic fingerprint
 - response-path collision/eligibility/state-stream/anchor rules with deterministic blocked-path identity
 
+2F.3 hardening:
+- release-time temporal ordering: any supplied release_timestamp must obey
+  event_timestamp <= release_timestamp <= available_at <= feature_cutoff_timestamp; MACRO_RELEASE
+  additionally requires a release_timestamp. Non-macro catalysts may keep release_timestamp=None.
+- blocked response-path identity is order-independent: derived from the canonical complete input
+  assessment set + block reason + schema, never from assessments[0].
+
 Invariants preserved: CATALYST ASSOCIATION != CAUSATION; RESPONSE != PREDICTION; RESIDUAL != ALPHA;
 causal_status fixed NOT_ESTABLISHED; no beta/Granger/lag; POST_CATALYST only; DAILY target only;
 prior-US close != LIVE; no Direction/Risk/CHASE/Extension mapping.
 
-Schema: V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.2".
+Schema: V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.3".
 """
 from __future__ import annotations
 
@@ -32,7 +39,7 @@ from market_ai_hub.research.v2.asof import (
 )
 from market_ai_hub.research.v2.state_machine import StateEvaluationContext
 
-V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.2"
+V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.3"
 
 CATALYST_KINDS = ("MARKET_MOVE", "MACRO_RELEASE", "POLICY_EVENT", "OBSERVED_EVENT", "SCHEDULE_ONLY")
 MEASUREMENT_KINDS = ("RETURN", "LEVEL_CHANGE", "BPS_CHANGE", "SURPRISE", "EVENT_ONLY")
@@ -203,7 +210,7 @@ class TargetResponseEndpoint:
 
     def __post_init__(self):
         if self.frequency != "DAILY":
-            raise ValueError("2F.2 target response frequency must be DAILY")
+            raise ValueError("2F.3 target response frequency must be DAILY")
         if self.value is None or not _positive(self.value):
             raise ValueError("endpoint value must be finite > 0")
         if self.provenance_status not in PROVENANCE_STATUS:
@@ -315,7 +322,7 @@ class CatalystResponseAssessment:
     response_end_fingerprint: str = ""
     baseline_fingerprint: str = ""
     schema_version: str = V2_CATALYST_RESPONSE_SCHEMA_VERSION
-    policy_version: str = "2F.2"
+    policy_version: str = "2F.3"
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -345,6 +352,11 @@ class CatalystResponsePath:
     time_to_peak_seconds: float | None = None
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     derived_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    candidate_catalyst_ids: list[str] = dfield(default_factory=list)
+    candidate_catalyst_fingerprints: list[str] = dfield(default_factory=list)
+    candidate_target_identities: list[str] = dfield(default_factory=list)
+    candidate_state_stream_ids: list[str] = dfield(default_factory=list)
+    candidate_response_anchor_fingerprints: list[str] = dfield(default_factory=list)
     schema_version: str = V2_CATALYST_RESPONSE_SCHEMA_VERSION
 
     def model_dump(self) -> dict:
@@ -368,12 +380,20 @@ def _validate_catalyst(catalyst: CatalystObservation, ctx: StateEvaluationContex
     cutoff = ctx.feature_cutoff_timestamp
     if cutoff is not None and ensure_utc_aware(catalyst.available_at) > ensure_utc_aware(cutoff):
         return [BLOCKED_FUTURE_EVIDENCE]
-    # macro release time truth (§10/§11/§12)
-    if catalyst.catalyst_kind == "MACRO_RELEASE":
-        if catalyst.release_timestamp is None:
+    # release-time temporal provenance (§5–§8): any supplied release_timestamp must obey
+    # event_timestamp <= release_timestamp <= available_at <= cutoff. (event<=available already
+    # holds here; available<=cutoff also holds.) A MACRO_RELEASE additionally requires a
+    # release_timestamp; non-macro catalysts may keep it None.
+    if catalyst.release_timestamp is not None:
+        rel = ensure_utc_aware(catalyst.release_timestamp)
+        if ensure_utc_aware(catalyst.event_timestamp) > rel:
             return [BLOCKED_RELEASE_TIME_PROVENANCE]
-        if ensure_utc_aware(catalyst.release_timestamp) > ensure_utc_aware(catalyst.available_at):
+        if rel > ensure_utc_aware(catalyst.available_at):
             return [BLOCKED_RELEASE_TIME_PROVENANCE]
+        if cutoff is not None and rel > ensure_utc_aware(cutoff):
+            return [BLOCKED_RELEASE_TIME_PROVENANCE]
+    elif catalyst.catalyst_kind == "MACRO_RELEASE":
+        return [BLOCKED_RELEASE_TIME_PROVENANCE]
     for name in ("source_type", "source_schema_version", "source_version", "provider"):
         if not getattr(catalyst, name) or not str(getattr(catalyst, name)).strip():
             return [BLOCKED_SOURCE_PROVENANCE]
@@ -511,6 +531,12 @@ def _assessment_identity(a: CatalystResponseAssessment) -> str:
     return _id_fp(parts)
 
 
+def _assessment_semantic_fp(a: CatalystResponseAssessment) -> str:
+    # Semantic fingerprint for collision/dedupe/blocked-seed. Excludes presentation metadata
+    # (response_label) and any timestamp/notes fields. Same computation as assessment identity.
+    return _assessment_identity(a)
+
+
 # ── evaluation ──
 def evaluate_catalyst_response(
     context: StateEvaluationContext,
@@ -618,62 +644,75 @@ def evaluate_catalyst_response(
 
 
 # ── response path ──
-def _path_blocked(path: CatalystResponsePath, reason: str, assessment_ids: list[str]) -> CatalystResponsePath:
-    path.path_status = "BLOCKED"
-    path.block_reason_codes = [reason]
-    path.assessment_ids = _canonical(assessment_ids)
-    path.path_id = _path_identity(path)
+def _target_identity_key(a: CatalystResponseAssessment) -> str:
+    return "|".join([
+        normalize_instrument(a.instrument), normalize_family(a.target_family),
+        a.instrument_role, a.calendar_id, a.frequency, a.horizon,
+    ])
+
+
+def _state_stream_key(a: CatalystResponseAssessment) -> str:
+    return "|".join([
+        ensure_utc_aware(a.feature_cutoff_timestamp).isoformat() if a.feature_cutoff_timestamp else "",
+        ensure_utc_aware(a.state_origin).isoformat() if a.state_origin else "",
+    ])
+
+
+def _blocked_path_identity(assessments: list[CatalystResponseAssessment], reason: str) -> str:
+    # Order-independent blocked-path id: canonical complete input set + reason + schema (§14/§15).
+    semantic_keys = _canonical([_assessment_semantic_fp(a) for a in assessments])
+    return _id_fp(["BLOCKED", reason, "|".join(semantic_keys), V2_CATALYST_RESPONSE_SCHEMA_VERSION])
+
+
+def _blocked_path(assessments: list[CatalystResponseAssessment], reason: str) -> CatalystResponsePath:
+    path = CatalystResponsePath(path_status="BLOCKED", block_reason_codes=[reason])
+    path.assessment_ids = _canonical([a.assessment_id for a in assessments])
+    path.source_snapshot_ids = _canonical([sid for a in assessments for sid in a.source_snapshot_ids])
+    path.derived_asof_status = _least_verified([a.derived_asof_status for a in assessments])
+    path.candidate_catalyst_ids = _canonical([a.catalyst_id for a in assessments])
+    path.candidate_catalyst_fingerprints = _canonical([a.catalyst_fingerprint for a in assessments])
+    path.candidate_target_identities = _canonical([_target_identity_key(a) for a in assessments])
+    path.candidate_state_stream_ids = _canonical([_state_stream_key(a) for a in assessments])
+    path.candidate_response_anchor_fingerprints = _canonical([a.response_start_fingerprint for a in assessments])
+    path.path_id = _blocked_path_identity(assessments, reason)
     return path
 
 
 def summarize_response_path(assessments: list[CatalystResponseAssessment]) -> CatalystResponsePath:
     if not assessments:
         return CatalystResponsePath()
-    first = assessments[0]
-    path = CatalystResponsePath(
-        catalyst_id=first.catalyst_id, catalyst_fingerprint=first.catalyst_fingerprint,
-        instrument=first.instrument, target_family=first.target_family,
-        instrument_role=first.instrument_role, calendar_id=first.calendar_id,
-        frequency=first.frequency, horizon=first.horizon,
-    )
-    ids = _canonical([a.assessment_id for a in assessments])
 
-    # eligibility (§31)
+    # eligibility (§31) — set-based
     for a in assessments:
         if a.association_status not in ("DESCRIPTIVE_AVAILABLE", "REFERENCE_CONTEXT_ONLY"):
-            return _path_blocked(path, BLOCKED_INELIGIBLE_RESPONSE_ASSESSMENT, ids)
+            return _blocked_path(assessments, BLOCKED_INELIGIBLE_RESPONSE_ASSESSMENT)
 
-    # same catalyst (id + fingerprint) (§29)
-    for a in assessments:
-        if a.catalyst_id != first.catalyst_id or a.catalyst_fingerprint != first.catalyst_fingerprint:
-            return _path_blocked(path, BLOCKED_CATALYST_ID_COLLISION, ids)
+    # same catalyst (§21) — unique id set and unique fingerprint set
+    if len({a.catalyst_id for a in assessments}) != 1:
+        return _blocked_path(assessments, BLOCKED_CATALYST_ID_COLLISION)
+    if len({a.catalyst_fingerprint for a in assessments}) != 1:
+        return _blocked_path(assessments, BLOCKED_CATALYST_ID_COLLISION)
 
-    # same target identity + state stream (§35)
-    for a in assessments:
-        if (normalize_instrument(a.instrument) != normalize_instrument(first.instrument)
-                or normalize_family(a.target_family) != normalize_family(first.target_family)
-                or a.instrument_role != first.instrument_role
-                or a.calendar_id != first.calendar_id
-                or a.frequency != first.frequency
-                or a.horizon != first.horizon):
-            return _path_blocked(path, BLOCKED_IDENTITY_MISMATCH, ids)
-        if (a.feature_cutoff_timestamp is None or first.feature_cutoff_timestamp is None
-                or ensure_utc_aware(a.feature_cutoff_timestamp) != ensure_utc_aware(first.feature_cutoff_timestamp)
-                or a.state_origin is None or first.state_origin is None
-                or ensure_utc_aware(a.state_origin) != ensure_utc_aware(first.state_origin)):
-            return _path_blocked(path, BLOCKED_STATE_STREAM_MISMATCH, ids)
+    # same target identity (§22) — set-based canonical tuple
+    if len({_target_identity_key(a) for a in assessments}) != 1:
+        return _blocked_path(assessments, BLOCKED_IDENTITY_MISMATCH)
 
-    # same response anchor (§37)
-    for a in assessments:
-        if a.response_start_fingerprint != first.response_start_fingerprint:
-            return _path_blocked(path, BLOCKED_RESPONSE_ANCHOR_MISMATCH, ids)
+    # same state stream (§23) — None is a provenance gap; otherwise unique canonical stream
+    if any(a.feature_cutoff_timestamp is None or a.state_origin is None for a in assessments):
+        return _blocked_path(assessments, BLOCKED_STATE_STREAM_MISMATCH)
+    if len({_state_stream_key(a) for a in assessments}) != 1:
+        return _blocked_path(assessments, BLOCKED_STATE_STREAM_MISMATCH)
 
-    # response_id collision (§28) — same id + different payload
+    # same response anchor (§24) — set-based
+    if len({a.response_start_fingerprint for a in assessments}) != 1:
+        return _blocked_path(assessments, BLOCKED_RESPONSE_ANCHOR_MISMATCH)
+
+    # response_id collision (§25/§26) — group by id, compare semantic fingerprint (label excluded)
     seen: dict[str, CatalystResponseAssessment] = {}
     for a in assessments:
         if a.response_id in seen:
-            if asdict(seen[a.response_id]) != asdict(a):
-                return _path_blocked(path, BLOCKED_RESPONSE_ID_COLLISION, ids)
+            if _assessment_semantic_fp(seen[a.response_id]) != _assessment_semantic_fp(a):
+                return _blocked_path(assessments, BLOCKED_RESPONSE_ID_COLLISION)
             continue
         seen[a.response_id] = a
 
@@ -684,9 +723,17 @@ def summarize_response_path(assessments: list[CatalystResponseAssessment]) -> Ca
     for a in sorted_assessments:
         cur_end = ensure_utc_aware(a.response_window_end)
         if prev_end is not None and cur_end <= prev_end:
-            return _path_blocked(path, BLOCKED_PATH_HORIZON_ORDER, ids)
+            return _blocked_path(assessments, BLOCKED_PATH_HORIZON_ORDER)
         prev_end = cur_end
 
+    # valid path — canonical common identity is safe only after all checks (§17)
+    first = sorted_assessments[0]
+    path = CatalystResponsePath(
+        catalyst_id=first.catalyst_id, catalyst_fingerprint=first.catalyst_fingerprint,
+        instrument=first.instrument, target_family=first.target_family,
+        instrument_role=first.instrument_role, calendar_id=first.calendar_id,
+        frequency=first.frequency, horizon=first.horizon,
+    )
     for a in sorted_assessments:
         path.response_returns_by_horizon[a.response_id] = a.response_return
         path.absolute_response_by_horizon[a.response_id] = abs(a.response_return)
