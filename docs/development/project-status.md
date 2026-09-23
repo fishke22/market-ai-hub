@@ -1,9 +1,9 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-E（Daily Extension / Exhaustion Research Engine + Derived-Time/Audit-Lineage Closure）**
-- Gate: **PHASEV2E_EXTENSION_EXHAUSTION_PASS**（最新 correction：PHASEV2E_DERIVED_TIME_AUDIT_LINEAGE_CLOSURE_REPORT）
-- build_id：**a7f04f35e9a15d9c**（fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.3**；extension/exhaustion **2E.3**
+- Current phase: **Phase V2-F（Catalyst Response Scaffold）**
+- Gate: **PHASEV2F_CATALYST_RESPONSE_SCAFFOLD_PASS**（前置 PHASEV2E_EXTENSION_EXHAUSTION_PASS）
+- build_id：**7a99b1225cb829f2**（fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.3**；extension/exhaustion **2E.3**；catalyst response **2F.1**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
