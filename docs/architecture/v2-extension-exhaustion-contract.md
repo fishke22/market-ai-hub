@@ -1,6 +1,6 @@
 # V2 Extension / Exhaustion Contract
 
-- **Schema**: `V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.2"` (module
+- **Schema**: `V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.3"` (module
   `src/market_ai_hub/research/v2/extension_exhaustion.py`)
 - Independent from `2A.1` / `2B.1` / `2C.2` / `2D.3` / `3A.2.3`.
 
@@ -68,23 +68,42 @@ The extension assessment must match the exhaustion context identity/time-stream 
 Warning timestamps are derived from the extension + required positive evidence
 (`warning_available_at` = latest required availability), never caller-supplied.
 
+## Derived time & state-stream binding (2E.3)
+
+`extension_event_timestamp = current_close.event_timestamp`; `extension_available_at =
+max(current/previous/ATR availability)` (all three inputs must be available — a late ATR cannot
+backdate the extension). Extension/Exhaustion assessments and adapters must share the SAME state
+stream (identity + `feature_cutoff_timestamp` + `state_origin`); mismatch →
+`BLOCKED_STATE_STREAM_MISMATCH` / adapter `ValueError` (no retarget, no cross-time carry-forward).
+
+## Warning earliest establishment
+
+Warning is established at the earliest moment that K=2 distinct trusted positive families are
+available: per-family establishment time is the earliest `present=True` evidence (a late same-family
+duplicate does NOT delay it), and `warning_available_at = max(extension_available_at, the K-th
+earliest family availability)`. A late 3rd/4th family does not delay the warning. The required
+confirmation set (`required_confirmation_families` / `required_component_ids`) is deterministic and
+order-independent.
+
+## All-status audit lineage
+
+Extension and Exhaustion assessments preserve full role lineage (context/scalar/component source
+snapshots + role ASOF) and derived ASOF (least-verified of context + all inputs) on EVERY status —
+EVALUATED, UNVERIFIED, BLOCKED, CONFLICT, INSUFFICIENT_CONFIRMATION. Trusted-negative
+(`negative_component_ids`) and conflict (`conflicting_component_ids`) evidence are preserved;
+`component_asof_by_id` is keyed. Component timestamps are canonical UTC. Semantic IDs fingerprint
+derived time + full evidence lineage, so different offending/negative evidence yields different
+assessment IDs.
+
 ## State-machine integration (V2-D 2D.3)
 
-- `extension_to_state_evidence` → `layer=EXTENSION`, only when `EVALUATED` and the assessment
-  identity matches the context (no cross-market retarget).
-- `exhaustion_to_state_evidence` → `layer=RISK`, `value=EXHAUSTION_WARNING`, only when
-  `WARNING_ESTABLISHED`; otherwise `None` (never emits `RISK=NORMAL`). Timestamps read from the
-  assessment (no caller backdating).
+- `extension_to_state_evidence` → `layer=EXTENSION` using `extension_event_timestamp`/
+  `extension_available_at` (derived), only when `EVALUATED` and same state stream.
+- `exhaustion_to_state_evidence` → `layer=RISK`/`EXHAUSTION_WARNING` using `warning_event_timestamp`/
+  `warning_available_at`, only when `WARNING_ESTABLISHED` and same state stream; else `None`.
 - Generated evidence: `provenance_status=VERIFIED_INPUT`, `validation_status=HYPOTHESIS_ONLY`,
-  `source_schema_version=2E.2`, deterministic `evidence_id`, passes `validate_state_evidence`.
-- Exhaustion Warning does NOT alter Direction, does NOT set CHASE_RISK, is NOT REVERSAL_RISK.
-
-## Lineage & determinism
-
-Role-preserved lineage (`context_source_snapshot_ids` / scalar-role / component-role + union)
-on EVALUATED, UNVERIFIED, CONFLICT and BLOCKED paths. Assessment IDs fingerprint target identity,
-time, schema/policy, scalar/component semantic fingerprints, lineage, ASOF, status and blockers —
-same semantic inputs → same id; different evidence lineage → different id; caller order → same id.
+  `source_schema_version=2E.3`, deterministic `evidence_id`, passes `validate_state_evidence`.
+- Exhaustion Warning does NOT alter Direction / CHASE_RISK; is NOT REVERSAL_RISK.
 
 ## Capability matrix
 

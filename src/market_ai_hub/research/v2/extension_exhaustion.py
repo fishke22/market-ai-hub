@@ -1,20 +1,18 @@
-"""V2-E — Daily Extension / Exhaustion Research Engine (hardened 2E.2).
+"""V2-E — Daily Extension / Exhaustion Research Engine (hardened 2E.3).
 
 RESEARCH ONLY. Point-in-time DAILY extension evaluator (ATR-normalized move from previous close),
 typed Exhaustion component evidence, and a multi-component Exhaustion Warning research evaluator.
 
-2E.2 hardening (vs 2E.1):
-- scalar target identity + series/roll provenance machine-bound to the evaluation context
-- ATR baseline carries atr_period/atr_method and must be 14 / EXISTING_MARKET_AI_HUB_ATR_EWM
-- canonical policy FROZEN (HYPOTHESIS_ONLY / NOT_OPTIMIZED / 1 & 2 ATR); caller mutation rejected
-- V2-D context contract validated; context ASOF enters derived lineage
-- component source identity mandatory; present must be bool; component-id collision fail-closed
-- extension/exhaustion identity + time-stream bound; adapters cannot retarget or backdate
-- warning timestamps derived from required evidence (not caller-supplied)
-- role-preserved lineage; semantic IDs include evidence lineage
+2E.3 hardening:
+- derived extension availability = max(current/previous/ATR availability); late ATR cannot backdate
+- extension/exhaustion must share the SAME state stream (identity + cutoff + origin)
+- warning earliest-establishment from the earliest K distinct families (late 3rd family / same-family
+  duplicate do NOT delay the warning); required confirmation set is auditable + deterministic
+- component timestamps canonical UTC; full role-preserved lineage + ASOF on ALL statuses
+- trusted-negative and conflict component IDs preserved; semantic IDs include full evidence lineage
 
 Invariants preserved: EXTENSION != EXHAUSTION; EXHAUSTION_WARNING != REVERSAL/BEARISH/CHASE_STOP.
-Schema: V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.2".
+Schema: V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.3".
 """
 from __future__ import annotations
 
@@ -27,7 +25,7 @@ from typing import Any
 from market_ai_hub.research.v2.asof import normalize_instrument, normalize_family, ensure_utc_aware
 from market_ai_hub.research.v2.state_machine import StateEvaluationContext, StateEvidence
 
-V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.2"
+V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.3"
 
 # ── enums ──
 EXTENSION_STATES = ("NORMAL", "EXTENDED", "EXTREME")
@@ -50,7 +48,6 @@ SERIES_SEMANTICS = ("CONTINUOUS", "CONTRACT", "CASH", "INDEX", "UNKNOWN")
 
 _ASOF_RANK = {"ASOF_VERIFIED": 2, "TEMPORAL_UNVERIFIED": 1, "LEGACY_TEMPORAL_UNVERIFIED": 0}
 
-# blockers
 BLOCKED_ROLL_PROVENANCE = "BLOCKED_ROLL_PROVENANCE"
 BLOCKED_SERIES_SEMANTICS_MISMATCH = "BLOCKED_SERIES_SEMANTICS_MISMATCH"
 BLOCKED_ATR_POLICY_MISMATCH = "BLOCKED_ATR_POLICY_MISMATCH"
@@ -61,6 +58,7 @@ BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE = "BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE"
 BLOCKED_FUTURE_EVIDENCE = "BLOCKED_FUTURE_EVIDENCE"
 BLOCKED_COMPONENT_ID_COLLISION = "BLOCKED_COMPONENT_ID_COLLISION"
 BLOCKED_DIRECT_FUTURE_OUTCOME_SOURCE = "BLOCKED_DIRECT_FUTURE_OUTCOME_SOURCE"
+BLOCKED_STATE_STREAM_MISMATCH = "BLOCKED_STATE_STREAM_MISMATCH"
 INVALID_INPUT = "INVALID_INPUT"
 
 
@@ -88,21 +86,21 @@ def _id_fp(parts: list[str]) -> str:
     return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def _scalar_fp(sc: "PointInTimeScalar") -> str:
+def _component_fp(c: "ExhaustionComponentEvidence") -> str:
     d = {
-        "name": sc.name, "value": str(sc.value),
-        "event": sc.event_timestamp.isoformat() if sc.event_timestamp else "",
-        "available": sc.available_at.isoformat() if sc.available_at else "",
-        "src": sc.source_type, "schema": sc.source_schema_version, "ver": sc.source_version,
-        "snaps": "|".join(_canonical(sc.source_snapshot_ids)),
-        "asof": sc.asof_status, "prov": sc.provenance_status,
-        "series": sc.series_semantics, "roll": sc.roll_status,
-        "atr_period": str(sc.atr_period), "atr_method": sc.atr_method,
+        "id": c.component_id, "family": c.family, "present": str(c.present),
+        "inst": normalize_instrument(c.instrument), "fam": normalize_family(c.target_family),
+        "role": c.instrument_role, "cal": c.calendar_id, "freq": c.frequency, "hor": c.horizon,
+        "event": c.event_timestamp.isoformat() if c.event_timestamp else "",
+        "avail": c.available_at.isoformat() if c.available_at else "",
+        "src": c.source_type, "schema": c.source_schema_version, "ver": c.source_version,
+        "snaps": "|".join(_canonical(c.source_snapshot_ids)),
+        "asof": c.asof_status, "prov": c.provenance_status, "val": c.validation_status,
     }
     return _id_fp([f"{k}={v}" for k, v in sorted(d.items())])
 
 
-# ── PointInTimeScalar (§5/§6/§7/§12) ──
+# ── PointInTimeScalar ──
 @dataclass
 class PointInTimeScalar:
     name: str = ""
@@ -153,8 +151,8 @@ class PointInTimeScalar:
         return asdict(self)
 
 
-# ── DailyExtensionPolicy (§8/§9 frozen) ──
-_FROZEN_EXT = dict(version="2E.2", scope="DAILY_RESEARCH_PROXY", reference_kind="PREVIOUS_CLOSE",
+# ── DailyExtensionPolicy (frozen) ──
+_FROZEN_EXT = dict(version="2E.3", scope="DAILY_RESEARCH_PROXY", reference_kind="PREVIOUS_CLOSE",
                    atr_period=14, atr_method=ATR_METHOD, extended_threshold_atr=1.0,
                    extreme_threshold_atr=2.0, validation_status="HYPOTHESIS_ONLY",
                    optimization_status="NOT_OPTIMIZED")
@@ -162,7 +160,7 @@ _FROZEN_EXT = dict(version="2E.2", scope="DAILY_RESEARCH_PROXY", reference_kind=
 
 @dataclass
 class DailyExtensionPolicy:
-    version: str = "2E.2"
+    version: str = "2E.3"
     scope: str = "DAILY_RESEARCH_PROXY"
     reference_kind: str = "PREVIOUS_CLOSE"
     atr_period: int = 14
@@ -181,7 +179,7 @@ class DailyExtensionPolicy:
         return asdict(self)
 
 
-# ── DailyExtensionAssessment (§17/§49) ──
+# ── DailyExtensionAssessment ──
 @dataclass
 class DailyExtensionAssessment:
     assessment_id: str = ""
@@ -196,6 +194,8 @@ class DailyExtensionAssessment:
     current_price: float | None = None
     current_price_event_timestamp: datetime | None = None
     current_price_available_at: datetime | None = None
+    extension_event_timestamp: datetime | None = None
+    extension_available_at: datetime | None = None
     reference_price: float | None = None
     reference_kind: str = "PREVIOUS_CLOSE"
     atr_baseline: float | None = None
@@ -214,16 +214,20 @@ class DailyExtensionAssessment:
     atr_source_snapshot_ids: list[str] = dfield(default_factory=list)
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     context_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    current_price_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    reference_price_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
+    atr_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     derived_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     block_reason_codes: list[str] = dfield(default_factory=list)
+    blocked_input_roles: list[str] = dfield(default_factory=list)
     schema_version: str = V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION
-    policy_version: str = "2E.2"
+    policy_version: str = "2E.3"
 
     def model_dump(self) -> dict:
         return asdict(self)
 
 
-# ── ExhaustionComponentEvidence (§17/§22/§23) ──
+# ── ExhaustionComponentEvidence ──
 @dataclass
 class ExhaustionComponentEvidence:
     component_id: str = ""
@@ -260,8 +264,10 @@ class ExhaustionComponentEvidence:
             raise ValueError("component validation_status must be HYPOTHESIS_ONLY")
         for name in ("event_timestamp", "available_at"):
             v = getattr(self, name)
-            if v is not None and v.tzinfo is None:
-                raise ValueError(f"{name} must be tz-aware")
+            if v is not None:
+                if v.tzinfo is None:
+                    raise ValueError(f"{name} must be tz-aware")
+                setattr(self, name, ensure_utc_aware(v))
         self.instrument = normalize_instrument(self.instrument)
         self.target_family = normalize_family(self.target_family)
 
@@ -269,15 +275,15 @@ class ExhaustionComponentEvidence:
         return asdict(self)
 
 
-# ── DailyExhaustionPolicy (§9 frozen) ──
-_FROZEN_EXH = dict(version="2E.2", scope="DAILY_RESEARCH_PROXY", requires_extension="EXTENDED_OR_EXTREME",
+# ── DailyExhaustionPolicy (frozen) ──
+_FROZEN_EXH = dict(version="2E.3", scope="DAILY_RESEARCH_PROXY", requires_extension="EXTENDED_OR_EXTREME",
                    minimum_distinct_confirmation_families=2, validation_status="HYPOTHESIS_ONLY",
                    optimization_status="NOT_OPTIMIZED")
 
 
 @dataclass
 class DailyExhaustionPolicy:
-    version: str = "2E.2"
+    version: str = "2E.3"
     scope: str = "DAILY_RESEARCH_PROXY"
     requires_extension: str = "EXTENDED_OR_EXTREME"
     minimum_distinct_confirmation_families: int = 2
@@ -293,7 +299,7 @@ class DailyExhaustionPolicy:
         return asdict(self)
 
 
-# ── DailyExhaustionAssessment (§21/§30/§48) ──
+# ── DailyExhaustionAssessment ──
 @dataclass
 class DailyExhaustionAssessment:
     assessment_id: str = ""
@@ -311,6 +317,12 @@ class DailyExhaustionAssessment:
     positive_component_ids: list[str] = dfield(default_factory=list)
     unverified_component_ids: list[str] = dfield(default_factory=list)
     conflict_families: list[str] = dfield(default_factory=list)
+    conflicting_component_ids: list[str] = dfield(default_factory=list)
+    negative_component_ids: list[str] = dfield(default_factory=list)
+    component_ids: list[str] = dfield(default_factory=list)
+    component_asof_by_id: dict[str, str] = dfield(default_factory=dict)
+    required_confirmation_families: list[str] = dfield(default_factory=list)
+    required_component_ids: list[str] = dfield(default_factory=list)
     confirmation_family_count: int = 0
     warning_established: bool = False
     warning_event_timestamp: datetime | None = None
@@ -325,29 +337,13 @@ class DailyExhaustionAssessment:
     derived_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     block_reason_codes: list[str] = dfield(default_factory=list)
     schema_version: str = V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION
-    policy_version: str = "2E.2"
+    policy_version: str = "2E.3"
 
     def model_dump(self) -> dict:
         return asdict(self)
 
 
 # ── extension evaluation ──
-def _blocked_ext(ctx, roll, series, reason) -> DailyExtensionAssessment:
-    a = DailyExtensionAssessment(
-        instrument=ctx.instrument, target_family=ctx.target_family,
-        instrument_role=ctx.instrument_role, calendar_id=ctx.calendar_id,
-        frequency=ctx.frequency, horizon=ctx.horizon,
-        feature_cutoff_timestamp=ctx.feature_cutoff_timestamp, state_origin=ctx.state_origin,
-        roll_status=roll, series_semantics=series,
-        context_source_snapshot_ids=_canonical(ctx.source_snapshot_ids),
-        context_asof_status=ctx.asof_status,
-        derived_asof_status=_least_verified([ctx.asof_status]),
-        assessment_status="BLOCKED", block_reason_codes=[reason],
-    )
-    a.assessment_id = _extension_identity(a)
-    return a
-
-
 def evaluate_extension(
     context: StateEvaluationContext,
     current_close: PointInTimeScalar,
@@ -356,83 +352,104 @@ def evaluate_extension(
     policy: DailyExtensionPolicy | None = None,
 ) -> DailyExtensionAssessment:
     policy = policy or DailyExtensionPolicy()
+    scalars = {"CURRENT_PRICE": current_close, "REFERENCE_PRICE": previous_close, "ATR_BASELINE": atr_baseline}
 
-    # V2-D context contract (§11)
+    # build base with FULL lineage first (§28/§32) — preserved on all statuses
+    a = DailyExtensionAssessment(
+        instrument=context.instrument, target_family=context.target_family,
+        instrument_role=context.instrument_role, calendar_id=context.calendar_id,
+        frequency=context.frequency, horizon=context.horizon,
+        feature_cutoff_timestamp=context.feature_cutoff_timestamp, state_origin=context.state_origin,
+        context_source_snapshot_ids=_canonical(context.source_snapshot_ids),
+        current_price_source_snapshot_ids=_canonical(current_close.source_snapshot_ids),
+        reference_price_source_snapshot_ids=_canonical(previous_close.source_snapshot_ids),
+        atr_source_snapshot_ids=_canonical(atr_baseline.source_snapshot_ids),
+        context_asof_status=context.asof_status,
+        current_price_asof_status=current_close.asof_status,
+        reference_price_asof_status=previous_close.asof_status,
+        atr_asof_status=atr_baseline.asof_status,
+    )
+    a.source_snapshot_ids = _canonical(a.context_source_snapshot_ids + a.current_price_source_snapshot_ids
+                                       + a.reference_price_source_snapshot_ids + a.atr_source_snapshot_ids)
+    a.derived_asof_status = _least_verified([context.asof_status, current_close.asof_status,
+                                             previous_close.asof_status, atr_baseline.asof_status])
+
+    def block(reason, roles=()):
+        a.assessment_status = "BLOCKED"
+        a.block_reason_codes = [reason]
+        a.blocked_input_roles = _canonical(list(roles))
+        a.assessment_id = _extension_identity(a)
+        return a
+
+    # context contract
     if context.validate_contract():
-        return _blocked_ext(context, "UNKNOWN", "UNKNOWN", BLOCKED_CONTEXT_CONTRACT)
+        return block(BLOCKED_CONTEXT_CONTRACT, ["CONTEXT"])
 
-    # scalar identity must match context (§5)
-    scalars = (current_close, previous_close, atr_baseline)
-    for sc in scalars:
+    # scalar identity
+    for role, sc in scalars.items():
         for name in ("instrument", "target_family", "instrument_role", "calendar_id", "frequency", "horizon"):
             if not getattr(sc, name) or not str(getattr(sc, name)).strip():
-                return _blocked_ext(context, sc.roll_status, sc.series_semantics, BLOCKED_IDENTITY_MISMATCH)
+                return block(BLOCKED_IDENTITY_MISMATCH, [role])
         if (normalize_instrument(sc.instrument) != normalize_instrument(context.instrument)
                 or normalize_family(sc.target_family) != normalize_family(context.target_family)
                 or sc.instrument_role != context.instrument_role
                 or sc.calendar_id != context.calendar_id
                 or sc.frequency != context.frequency
                 or sc.horizon != context.horizon):
-            return _blocked_ext(context, sc.roll_status, sc.series_semantics, BLOCKED_IDENTITY_MISMATCH)
+            return block(BLOCKED_IDENTITY_MISMATCH, [role])
 
-    # series semantics consistency (§6/§13)
-    series_set = {sc.series_semantics for sc in scalars}
+    # series semantics
+    series_set = {sc.series_semantics for sc in scalars.values()}
     if len(series_set) > 1:
-        return _blocked_ext(context, "UNKNOWN", "UNKNOWN", BLOCKED_SERIES_SEMANTICS_MISMATCH)
-    series_semantics = next(iter(series_set))
+        return block(BLOCKED_SERIES_SEMANTICS_MISMATCH)
+    a.series_semantics = next(iter(series_set))
 
-    # roll (§3/§14): futures require NONE; also validate roll enum (already in __post_init__)
-    roll_set = {sc.roll_status for sc in scalars}
+    # roll
     if _is_futures(context):
-        if roll_set != {"NONE"}:
-            return _blocked_ext(context, "UNKNOWN", series_semantics, BLOCKED_ROLL_PROVENANCE)
-        roll_status = "NONE"
+        bad = [role for role, sc in scalars.items() if sc.roll_status != "NONE"]
+        if bad:
+            return block(BLOCKED_ROLL_PROVENANCE, bad)
+        a.roll_status = "NONE"
     else:
-        roll_status = next(iter(roll_set)) if len(roll_set) == 1 else "UNKNOWN"
+        rolls = {sc.roll_status for sc in scalars.values()}
+        a.roll_status = next(iter(rolls)) if len(rolls) == 1 else "UNKNOWN"
 
-    # ATR provenance (§7)
+    # ATR provenance
     if atr_baseline.atr_period != policy.atr_period or atr_baseline.atr_method != policy.atr_method:
-        return _blocked_ext(context, roll_status, series_semantics, BLOCKED_ATR_POLICY_MISMATCH)
+        return block(BLOCKED_ATR_POLICY_MISMATCH, ["ATR_BASELINE"])
 
-    # scalar source identity + temporal completeness
-    for sc in scalars:
+    # source identity
+    for role, sc in scalars.items():
         for name in ("source_type", "source_schema_version", "source_version"):
             if not getattr(sc, name) or not str(getattr(sc, name)).strip():
-                return _blocked_ext(context, roll_status, series_semantics, BLOCKED_SOURCE_PROVENANCE)
-        if ensure_utc_aware(sc.event_timestamp) > ensure_utc_aware(sc.available_at):
-            return _blocked_ext(context, roll_status, series_semantics, BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE)
+                return block(BLOCKED_SOURCE_PROVENANCE, [role])
 
-    cutoff = context.feature_cutoff_timestamp
+    # temporal completeness + ordering
+    for role, sc in scalars.items():
+        if ensure_utc_aware(sc.event_timestamp) > ensure_utc_aware(sc.available_at):
+            return block(BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE, [role])
     atr_ev = ensure_utc_aware(atr_baseline.event_timestamp)
     prev_ev = ensure_utc_aware(previous_close.event_timestamp)
     curr_ev = ensure_utc_aware(current_close.event_timestamp)
     if not (atr_ev <= prev_ev < curr_ev):
-        return _blocked_ext(context, roll_status, series_semantics, BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE)
-    for sc in scalars:
+        return block(BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE)
+    cutoff = context.feature_cutoff_timestamp
+    for role, sc in scalars.items():
         if cutoff is not None and ensure_utc_aware(sc.available_at) > ensure_utc_aware(cutoff):
-            return _blocked_ext(context, roll_status, series_semantics, BLOCKED_FUTURE_EVIDENCE)
+            return block(BLOCKED_FUTURE_EVIDENCE, [role])
 
-    if not (_positive(previous_close.value) and _positive(current_close.value) and _positive(atr_baseline.value)):
-        return _blocked_ext(context, roll_status, series_semantics, INVALID_INPUT)
+    # numeric quality
+    for role, sc in scalars.items():
+        if not _positive(sc.value):
+            return block(INVALID_INPUT, [role])
 
-    if any(sc.provenance_status == "UNKNOWN" for sc in scalars):
-        a = _blocked_ext(context, roll_status, series_semantics, "")
-        a.assessment_status = "UNVERIFIED"
-        a.extension_state = None
+    # provenance UNKNOWN → UNVERIFIED
+    if any(sc.provenance_status == "UNKNOWN" for sc in scalars.values()):
         a.current_price = current_close.value
         a.reference_price = previous_close.value
         a.atr_baseline = atr_baseline.value
-        a.roll_status = roll_status
-        a.series_semantics = series_semantics
-        a.current_price_source_snapshot_ids = _canonical(current_close.source_snapshot_ids)
-        a.reference_price_source_snapshot_ids = _canonical(previous_close.source_snapshot_ids)
-        a.atr_source_snapshot_ids = _canonical(atr_baseline.source_snapshot_ids)
-        a.source_snapshot_ids = _canonical(a.context_source_snapshot_ids
-                                           + a.current_price_source_snapshot_ids
-                                           + a.reference_price_source_snapshot_ids
-                                           + a.atr_source_snapshot_ids)
-        a.derived_asof_status = _least_verified([context.asof_status, current_close.asof_status,
-                                                 previous_close.asof_status, atr_baseline.asof_status])
+        a.assessment_status = "UNVERIFIED"
+        a.extension_state = None
         a.assessment_id = _extension_identity(a)
         return a
 
@@ -446,28 +463,20 @@ def evaluate_extension(
     else:
         state = "EXTREME"
 
-    a = DailyExtensionAssessment(
-        instrument=context.instrument, target_family=context.target_family,
-        instrument_role=context.instrument_role, calendar_id=context.calendar_id,
-        frequency=context.frequency, horizon=context.horizon,
-        feature_cutoff_timestamp=context.feature_cutoff_timestamp, state_origin=context.state_origin,
-        current_price=current_close.value,
-        current_price_event_timestamp=current_close.event_timestamp,
-        current_price_available_at=current_close.available_at,
-        reference_price=previous_close.value, atr_baseline=atr_baseline.value,
-        signed_extension_units=signed, absolute_extension_units=absu,
-        extension_side=side, extension_state=state, assessment_status="EVALUATED",
-        roll_status=roll_status, series_semantics=series_semantics,
-        context_source_snapshot_ids=_canonical(context.source_snapshot_ids),
-        current_price_source_snapshot_ids=_canonical(current_close.source_snapshot_ids),
-        reference_price_source_snapshot_ids=_canonical(previous_close.source_snapshot_ids),
-        atr_source_snapshot_ids=_canonical(atr_baseline.source_snapshot_ids),
-        context_asof_status=context.asof_status,
-        derived_asof_status=_least_verified([context.asof_status, current_close.asof_status,
-                                             previous_close.asof_status, atr_baseline.asof_status]),
-    )
-    a.source_snapshot_ids = _canonical(a.context_source_snapshot_ids + a.current_price_source_snapshot_ids
-                                       + a.reference_price_source_snapshot_ids + a.atr_source_snapshot_ids)
+    a.current_price = current_close.value
+    a.current_price_event_timestamp = current_close.event_timestamp
+    a.current_price_available_at = current_close.available_at
+    a.extension_event_timestamp = current_close.event_timestamp
+    a.extension_available_at = max(ensure_utc_aware(current_close.available_at),
+                                   ensure_utc_aware(previous_close.available_at),
+                                   ensure_utc_aware(atr_baseline.available_at))
+    a.reference_price = previous_close.value
+    a.atr_baseline = atr_baseline.value
+    a.signed_extension_units = signed
+    a.absolute_extension_units = absu
+    a.extension_side = side
+    a.extension_state = state
+    a.assessment_status = "EVALUATED"
     a.assessment_id = _extension_identity(a)
     return a
 
@@ -483,12 +492,15 @@ def _extension_identity(a: DailyExtensionAssessment) -> str:
         str(a.signed_extension_units), str(a.absolute_extension_units),
         str(a.extension_side), str(a.extension_state), a.assessment_status,
         a.roll_status, a.series_semantics,
+        a.extension_event_timestamp.isoformat() if a.extension_event_timestamp else "",
+        a.extension_available_at.isoformat() if a.extension_available_at else "",
         "|".join(_canonical(a.current_price_source_snapshot_ids)),
         "|".join(_canonical(a.reference_price_source_snapshot_ids)),
         "|".join(_canonical(a.atr_source_snapshot_ids)),
         "|".join(_canonical(a.context_source_snapshot_ids)),
         a.derived_asof_status,
         "|".join(_canonical(a.block_reason_codes)),
+        "|".join(_canonical(a.blocked_input_roles)),
     ]
     return _id_fp(parts)
 
@@ -508,36 +520,40 @@ def evaluate_exhaustion(
         feature_cutoff_timestamp=context.feature_cutoff_timestamp, state_origin=context.state_origin,
         extension_assessment_id=extension.assessment_id, extension_state=extension.extension_state,
         context_source_snapshot_ids=_canonical(context.source_snapshot_ids),
+        extension_source_snapshot_ids=_canonical(extension.source_snapshot_ids),
     )
 
-    # context contract (§11)
-    if context.validate_contract():
+    def block(reason):
         base.assessment_status = "BLOCKED"
-        base.block_reason_codes = [BLOCKED_CONTEXT_CONTRACT]
+        base.block_reason_codes = [reason]
         base.assessment_id = _exhaustion_identity(base)
         return base
 
-    # extension identity bound to context (§20/§21)
+    # context contract
+    if context.validate_contract():
+        return block(BLOCKED_CONTEXT_CONTRACT)
+
+    # same state stream (§7/§8): identity + cutoff/origin
     if (normalize_instrument(extension.instrument) != normalize_instrument(context.instrument)
             or normalize_family(extension.target_family) != normalize_family(context.target_family)
             or extension.instrument_role != context.instrument_role
             or extension.calendar_id != context.calendar_id
             or extension.frequency != context.frequency
             or extension.horizon != context.horizon):
-        base.assessment_status = "BLOCKED"
-        base.block_reason_codes = [BLOCKED_IDENTITY_MISMATCH]
-        base.assessment_id = _exhaustion_identity(base)
-        return base
-
-    base.extension_source_snapshot_ids = _canonical(extension.source_snapshot_ids)
+        return block(BLOCKED_IDENTITY_MISMATCH)
+    if (extension.feature_cutoff_timestamp is None or context.feature_cutoff_timestamp is None
+            or ensure_utc_aware(extension.feature_cutoff_timestamp) != ensure_utc_aware(context.feature_cutoff_timestamp)
+            or extension.state_origin is None or context.state_origin is None
+            or ensure_utc_aware(extension.state_origin) != ensure_utc_aware(context.state_origin)):
+        return block(BLOCKED_STATE_STREAM_MISMATCH)
 
     # extension must be EVALUATED + EXTENDED/EXTREME
     if extension.assessment_status != "EVALUATED":
-        base.assessment_status = "BLOCKED"
-        base.block_reason_codes = ["BLOCKED_EXTENSION_NOT_EVALUATED"]
-        base.assessment_id = _exhaustion_identity(base)
-        return base
+        return block("BLOCKED_EXTENSION_NOT_EVALUATED")
     if extension.extension_state not in ("EXTENDED", "EXTREME"):
+        base.source_snapshot_ids = _canonical(base.context_source_snapshot_ids
+                                              + base.extension_source_snapshot_ids)
+        base.derived_asof_status = _least_verified([context.asof_status, extension.derived_asof_status])
         base.assessment_status = "INSUFFICIENT_CONFIRMATION"
         base.warning_established = False
         base.assessment_id = _exhaustion_identity(base)
@@ -548,80 +564,76 @@ def evaluate_exhaustion(
     for comp in components:
         if comp.component_id in seen:
             if asdict(seen[comp.component_id]) != asdict(comp):
-                base.assessment_status = "BLOCKED"
-                base.block_reason_codes = [BLOCKED_COMPONENT_ID_COLLISION]
-                base.assessment_id = _exhaustion_identity(base)
-                return base
+                return block(BLOCKED_COMPONENT_ID_COLLISION)
             continue
         seen[comp.component_id] = comp
     components = list(seen.values())
+
+    # component lineage collected first (§21/§22/§23/§25)
+    base.component_ids = _canonical([c.component_id for c in components])
+    base.component_asof_by_id = {c.component_id: c.asof_status for c in sorted(components, key=lambda c: c.component_id)}
+    base.component_source_snapshot_ids = _canonical([sid for c in components for sid in c.source_snapshot_ids])
+    base.source_snapshot_ids = _canonical(base.context_source_snapshot_ids
+                                          + base.extension_source_snapshot_ids
+                                          + base.component_source_snapshot_ids)
 
     trusted_by_family: dict[str, list[ExhaustionComponentEvidence]] = {}
     unverified_ids: list[str] = []
     for comp in components:
         if comp.source_type == "V2C_OUTCOME":
-            base.assessment_status = "BLOCKED"
-            base.block_reason_codes = [BLOCKED_DIRECT_FUTURE_OUTCOME_SOURCE]
-            base.assessment_id = _exhaustion_identity(base)
-            return base
+            base.derived_asof_status = _least_verified([context.asof_status, extension.derived_asof_status]
+                                                       + [c.asof_status for c in components])
+            return block(BLOCKED_DIRECT_FUTURE_OUTCOME_SOURCE)
         if comp.event_timestamp is None or comp.available_at is None:
-            base.assessment_status = "BLOCKED"
-            base.block_reason_codes = [BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
-            base.assessment_id = _exhaustion_identity(base)
-            return base
+            return block(BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE)
         if ensure_utc_aware(comp.event_timestamp) > ensure_utc_aware(comp.available_at):
-            base.assessment_status = "BLOCKED"
-            base.block_reason_codes = [BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
-            base.assessment_id = _exhaustion_identity(base)
-            return base
+            return block(BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE)
         if context.feature_cutoff_timestamp is not None and \
                 ensure_utc_aware(comp.available_at) > ensure_utc_aware(context.feature_cutoff_timestamp):
-            base.assessment_status = "BLOCKED"
-            base.block_reason_codes = [BLOCKED_FUTURE_EVIDENCE]
-            base.assessment_id = _exhaustion_identity(base)
-            return base
+            return block(BLOCKED_FUTURE_EVIDENCE)
         for name in ("source_type", "source_schema_version", "source_version"):
             if not getattr(comp, name) or not str(getattr(comp, name)).strip():
-                base.assessment_status = "BLOCKED"
-                base.block_reason_codes = [BLOCKED_SOURCE_PROVENANCE]
-                base.assessment_id = _exhaustion_identity(base)
-                return base
+                return block(BLOCKED_SOURCE_PROVENANCE)
         if (normalize_instrument(comp.instrument) != normalize_instrument(context.instrument)
                 or normalize_family(comp.target_family) != normalize_family(context.target_family)
                 or comp.instrument_role != context.instrument_role
                 or comp.calendar_id != context.calendar_id
                 or comp.frequency != context.frequency
                 or comp.horizon != context.horizon):
-            base.assessment_status = "BLOCKED"
-            base.block_reason_codes = [BLOCKED_IDENTITY_MISMATCH]
-            base.assessment_id = _exhaustion_identity(base)
-            return base
+            return block(BLOCKED_IDENTITY_MISMATCH)
         if comp.provenance_status == "UNKNOWN":
             unverified_ids.append(comp.component_id)
             continue
         trusted_by_family.setdefault(comp.family, []).append(comp)
 
+    base.unverified_component_ids = _canonical(unverified_ids)
+    base.derived_asof_status = _least_verified([context.asof_status, extension.derived_asof_status]
+                                               + [c.asof_status for c in components])
+
+    # conflict + positive + negative classification (§23/§25)
     conflict_families: list[str] = []
-    positive_families: list[str] = []
-    positive_comps: list[ExhaustionComponentEvidence] = []
+    conflicting_ids: list[str] = []
+    positive_by_family: dict[str, ExhaustionComponentEvidence] = {}
+    negative_ids: list[str] = []
     for family, comps in trusted_by_family.items():
         values = {comp.present for comp in comps}
         if len(values) > 1:
             conflict_families.append(family)
+            conflicting_ids.extend(comp.component_id for comp in comps)
             continue
         if values == {True}:
-            positive_families.append(family)
-            positive_comps.extend(comps)
+            # earliest-establishing evidence for this family (§14)
+            earliest = min(comps, key=lambda c: (ensure_utc_aware(c.available_at), c.family, c.component_id))
+            positive_by_family[family] = earliest
+        else:  # {False}
+            negative_ids.extend(comp.component_id for comp in comps)
 
     base.conflict_families = _canonical(conflict_families)
-    base.unverified_component_ids = _canonical(unverified_ids)
-    base.component_source_snapshot_ids = _canonical([sid for c in components for sid in c.source_snapshot_ids])
-    base.source_snapshot_ids = _canonical(base.context_source_snapshot_ids
-                                          + base.extension_source_snapshot_ids
-                                          + base.component_source_snapshot_ids)
-    base.derived_asof_status = _least_verified(
-        [context.asof_status, extension.derived_asof_status]
-        + [c.asof_status for c in components])
+    base.conflicting_component_ids = _canonical(conflicting_ids)
+    base.negative_component_ids = _canonical(negative_ids)
+    base.positive_confirmation_families = _canonical(list(positive_by_family.keys()))
+    base.positive_component_ids = _canonical([c.component_id for c in positive_by_family.values()])
+    base.confirmation_family_count = len(positive_by_family)
 
     if conflict_families:
         base.assessment_status = "CONFLICT"
@@ -629,17 +641,20 @@ def evaluate_exhaustion(
         base.assessment_id = _exhaustion_identity(base)
         return base
 
-    base.positive_confirmation_families = _canonical(positive_families)
-    base.positive_component_ids = _canonical([c.component_id for c in positive_comps])
-    base.confirmation_family_count = len(positive_families)
-
-    if len(positive_families) >= policy.minimum_distinct_confirmation_families:
+    # earliest K distinct families (§15/§16)
+    k = policy.minimum_distinct_confirmation_families
+    ordered = sorted(positive_by_family.values(),
+                     key=lambda c: (ensure_utc_aware(c.available_at), c.family, c.component_id))
+    if len(ordered) >= k:
+        required = ordered[:k]
+        base.required_confirmation_families = _canonical([c.family for c in required])
+        base.required_component_ids = _canonical([c.component_id for c in required])
         base.warning_established = True
         base.assessment_status = "WARNING_ESTABLISHED"
-        base.warning_event_timestamp = max(
-            [extension.current_price_event_timestamp] + [c.event_timestamp for c in positive_comps])
-        base.warning_available_at = max(
-            [extension.current_price_available_at] + [c.available_at for c in positive_comps])
+        base.warning_event_timestamp = max([extension.extension_event_timestamp]
+                                           + [c.event_timestamp for c in required])
+        base.warning_available_at = max([extension.extension_available_at]
+                                        + [c.available_at for c in required])
     else:
         base.warning_established = False
         base.assessment_status = "INSUFFICIENT_CONFIRMATION"
@@ -660,6 +675,11 @@ def _exhaustion_identity(a: DailyExhaustionAssessment) -> str:
         "|".join(_canonical(a.positive_component_ids)),
         "|".join(_canonical(a.unverified_component_ids)),
         "|".join(_canonical(a.conflict_families)),
+        "|".join(_canonical(a.conflicting_component_ids)),
+        "|".join(_canonical(a.negative_component_ids)),
+        "|".join(_canonical(a.component_ids)),
+        "|".join(_canonical(a.required_confirmation_families)),
+        "|".join(_canonical(a.required_component_ids)),
         str(a.confirmation_family_count), str(a.warning_established),
         a.warning_event_timestamp.isoformat() if a.warning_event_timestamp else "",
         a.warning_available_at.isoformat() if a.warning_available_at else "",
@@ -684,33 +704,41 @@ def _evidence_id(ctx: StateEvaluationContext, layer: str, value: str, source_typ
     return "v2e_" + _id_fp(parts)
 
 
-def _identity_matches_assessment(ctx: StateEvaluationContext, instrument: str, target_family: str,
-                                 instrument_role: str, calendar_id: str, frequency: str,
-                                 horizon: str) -> bool:
-    return (normalize_instrument(instrument) == normalize_instrument(ctx.instrument)
+def _same_stream(ctx: StateEvaluationContext, instrument: str, target_family: str, instrument_role: str,
+                 calendar_id: str, frequency: str, horizon: str,
+                 cutoff: datetime | None, origin: datetime | None) -> bool:
+    if not (normalize_instrument(instrument) == normalize_instrument(ctx.instrument)
             and normalize_family(target_family) == normalize_family(ctx.target_family)
             and instrument_role == ctx.instrument_role
             and calendar_id == ctx.calendar_id
             and frequency == ctx.frequency
-            and horizon == ctx.horizon)
+            and horizon == ctx.horizon):
+        return False
+    if (cutoff is None or ctx.feature_cutoff_timestamp is None
+            or ensure_utc_aware(cutoff) != ensure_utc_aware(ctx.feature_cutoff_timestamp)
+            or origin is None or ctx.state_origin is None
+            or ensure_utc_aware(origin) != ensure_utc_aware(ctx.state_origin)):
+        return False
+    return True
 
 
 def extension_to_state_evidence(assessment: DailyExtensionAssessment,
                                 context: StateEvaluationContext) -> StateEvidence | None:
     if assessment.assessment_status != "EVALUATED" or assessment.extension_state is None:
         return None
-    if not _identity_matches_assessment(context, assessment.instrument, assessment.target_family,
-                                        assessment.instrument_role, assessment.calendar_id,
-                                        assessment.frequency, assessment.horizon):
-        raise ValueError("extension assessment identity does not match context (no retarget)")
+    if not _same_stream(context, assessment.instrument, assessment.target_family,
+                        assessment.instrument_role, assessment.calendar_id,
+                        assessment.frequency, assessment.horizon,
+                        assessment.feature_cutoff_timestamp, assessment.state_origin):
+        raise ValueError("extension assessment does not match context state stream (no retarget)")
     return StateEvidence(
         evidence_id=_evidence_id(context, "EXTENSION", assessment.extension_state, "V2E_EXTENSION"),
         layer="EXTENSION", value=assessment.extension_state,
         instrument=context.instrument, target_family=context.target_family,
         instrument_role=context.instrument_role, calendar_id=context.calendar_id,
         frequency=context.frequency, horizon=context.horizon,
-        event_timestamp=assessment.current_price_event_timestamp,
-        available_at=assessment.current_price_available_at,
+        event_timestamp=assessment.extension_event_timestamp,
+        available_at=assessment.extension_available_at,
         source_type="V2E_EXTENSION", source_schema_version=V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION,
         source_version=assessment.policy_version,
         source_snapshot_ids=list(assessment.source_snapshot_ids),
@@ -723,10 +751,11 @@ def exhaustion_to_state_evidence(assessment: DailyExhaustionAssessment,
                                  context: StateEvaluationContext) -> StateEvidence | None:
     if assessment.assessment_status != "WARNING_ESTABLISHED":
         return None
-    if not _identity_matches_assessment(context, assessment.instrument, assessment.target_family,
-                                        assessment.instrument_role, assessment.calendar_id,
-                                        assessment.frequency, assessment.horizon):
-        raise ValueError("exhaustion assessment identity does not match context (no retarget)")
+    if not _same_stream(context, assessment.instrument, assessment.target_family,
+                        assessment.instrument_role, assessment.calendar_id,
+                        assessment.frequency, assessment.horizon,
+                        assessment.feature_cutoff_timestamp, assessment.state_origin):
+        raise ValueError("exhaustion assessment does not match context state stream (no retarget)")
     return StateEvidence(
         evidence_id=_evidence_id(context, "RISK", "EXHAUSTION_WARNING", "V2E_EXHAUSTION"),
         layer="RISK", value="EXHAUSTION_WARNING",
