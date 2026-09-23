@@ -1,9 +1,9 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-F（Catalyst Response — Release-Time / Blocked-Path Determinism Closure）**
-- Gate: **PHASEV2F_CATALYST_RESPONSE_SCAFFOLD_PASS**（REOPENED → 前置 PHASEV2F_BASELINE_RESPONSE_PATH_AUDIT_HARDENING_PASS）
-- build_id：**d12c7a47e221c179**（fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.3**；extension/exhaustion **2E.3**；catalyst response **2F.3**
+- Current phase: **Phase V2-D（Artifact Identity / Transition Isolation Closure — V2-G prerequisite）**
+- Gate: **PHASEV2D_DYNAMIC_STATE_MACHINE_SCAFFOLD_PASS** + **V2G_UPSTREAM_ARTIFACT_INTEGRITY_READY**（前置 PHASEV2F_CATALYST_RESPONSE_SCAFFOLD_PASS）
+- build_id：**8cea090107bc1293**（fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）

@@ -19,10 +19,21 @@ Evidence truth contract (2D.2):
 - Canonical stored timestamps are tz-aware UTC; set-like outputs are canonical sorted.
 No extension/exhaustion evaluator, no probability, no trading semantics, no persistence DB.
 
-Schema: V2_STATE_MACHINE_SCHEMA_VERSION = "2D.2"  (independent from 2A.1 / 2B.1 / 2C.2 / 3A.2.3)
+Schema: V2_STATE_MACHINE_SCHEMA_VERSION = "2D.4"  (independent from 2A.1 / 2B.1 / 2C.2 / 3A.2.3)
+
+2D.4 artifact-identity/transition-isolation hardening (V2-G prerequisite):
+- StateSnapshot identity is content-addressed: same snapshot_id => same canonical semantic payload,
+  including context_asof_status, evidence_asof_by_id/statuses, full LayerState attribution
+  (evidence_ids / source_snapshot_ids / reason_codes), block/blocked lineage, and source lineage.
+- Excluded from identity: snapshot_id itself and created_at (wall-clock runtime metadata).
+- Blocked snapshots use the same content-consistent identity principle (no weaker ad-hoc hash).
+- StateTransitionRecord deep-copies every previous/new LayerState so a later mutation of the source
+  snapshot cannot silently rewrite an already-produced transition artifact.
 """
 from __future__ import annotations
 
+import copy
+import json
 import re
 from dataclasses import dataclass, field as dfield, asdict
 from datetime import datetime, timezone, date as date_cls
@@ -32,7 +43,7 @@ from typing import Any
 from market_ai_hub.research.v2.asof import normalize_instrument, normalize_family, ensure_utc_aware
 from market_ai_hub.research.v2.labels import V2_DAILY_LABEL_SCHEMA_VERSION
 
-V2_STATE_MACHINE_SCHEMA_VERSION = "2D.3"
+V2_STATE_MACHINE_SCHEMA_VERSION = "2D.4"
 
 # ── enums ──
 LAYERS = ("DIRECTIONAL", "EXTENSION", "STRUCTURAL", "RISK", "CHASE_RISK")
@@ -254,6 +265,7 @@ class StateSnapshot:
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     block_reason_codes: list[str] = dfield(default_factory=list)
     blocked_evidence_ids: list[str] = dfield(default_factory=list)
+    offending_evidence_fingerprint: str = ""
     context_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     evidence_asof_statuses: list[str] = dfield(default_factory=list)
     evidence_asof_by_id: dict[str, str] = dfield(default_factory=dict)
@@ -326,7 +338,7 @@ class StateTransitionRecord:
 # ── StatePersistencePolicy (§30) — no hidden defaults ──
 @dataclass
 class StatePersistencePolicy:
-    version: str = "2D.3"
+    version: str = "2D.4"
     status: str = "NOT_CONFIGURED"
     validation_status: str = "HYPOTHESIS_ONLY"
     minimum_dwell_time_seconds: float | None = None
@@ -406,43 +418,63 @@ def validate_state_evidence(ev: StateEvidence, ctx: StateEvaluationContext) -> l
     return []
 
 
-def snapshot_identity(ctx: StateEvaluationContext, layers: dict[str, LayerState],
-                      evidence_ids: list[str], context_snaps: list[str],
-                      evidence_snaps: list[str], derived_asof: str) -> str:
-    parts = [
-        normalize_instrument(ctx.instrument), normalize_family(ctx.target_family),
-        ctx.instrument_role, ctx.calendar_id, ctx.frequency, ctx.horizon,
-        ctx.feature_cutoff_timestamp.isoformat(), ctx.state_origin.isoformat(),
-        V2_STATE_MACHINE_SCHEMA_VERSION,
-        "|".join(_canonical(evidence_ids)),
-        "|".join(_canonical(context_snaps)),
-        "|".join(_canonical(evidence_snaps)),
-        derived_asof,
-    ]
-    for layer in LAYERS:
-        s = layers[layer]
-        parts.append(f"{layer}:{s.value}:{s.status}")
-    return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+def _hash_payload(payload: dict) -> str:
+    return sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    ).hexdigest()[:16]
 
 
-def blocked_snapshot_identity(ctx: StateEvaluationContext, reason: str,
-                              offending_ids: list[str], offending_snaps: list[str],
-                              offending_fingerprint: str = "") -> str:
-    parts = [
-        normalize_instrument(ctx.instrument), normalize_family(ctx.target_family),
-        ctx.instrument_role, ctx.calendar_id, ctx.frequency, ctx.horizon,
-        ctx.feature_cutoff_timestamp.isoformat() if ctx.feature_cutoff_timestamp else "",
-        ctx.state_origin.isoformat() if ctx.state_origin else "",
-        V2_STATE_MACHINE_SCHEMA_VERSION, "BLOCKED", reason,
-        "|".join(_canonical(offending_ids)),
-        "|".join(_canonical(offending_snaps)),
-        offending_fingerprint,
-    ]
-    return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+def _layer_semantic(l: LayerState) -> dict:
+    return {
+        "value": l.value,
+        "status": l.status,
+        "evidence_ids": _canonical(l.evidence_ids),
+        "source_snapshot_ids": _canonical(l.source_snapshot_ids),
+        "reason_codes": _canonical(l.reason_codes),
+    }
+
+
+def _snapshot_semantic_payload(s: StateSnapshot) -> dict:
+    """Canonical identity payload: every semantic field except snapshot_id and created_at."""
+    return {
+        "instrument": normalize_instrument(s.instrument),
+        "target_family": normalize_family(s.target_family),
+        "instrument_role": s.instrument_role,
+        "calendar_id": s.calendar_id,
+        "frequency": s.frequency,
+        "horizon": s.horizon,
+        "feature_cutoff_timestamp": ensure_utc_aware(s.feature_cutoff_timestamp).isoformat()
+        if s.feature_cutoff_timestamp else "",
+        "state_origin": ensure_utc_aware(s.state_origin).isoformat() if s.state_origin else "",
+        "directional_state": _layer_semantic(s.directional_state),
+        "extension_state": _layer_semantic(s.extension_state),
+        "structural_state": _layer_semantic(s.structural_state),
+        "risk_state": _layer_semantic(s.risk_state),
+        "chase_risk_state": _layer_semantic(s.chase_risk_state),
+        "snapshot_status": s.snapshot_status,
+        "evidence_ids": _canonical(s.evidence_ids),
+        "context_source_snapshot_ids": _canonical(s.context_source_snapshot_ids),
+        "evidence_source_snapshot_ids": _canonical(s.evidence_source_snapshot_ids),
+        "source_snapshot_ids": _canonical(s.source_snapshot_ids),
+        "block_reason_codes": _canonical(s.block_reason_codes),
+        "blocked_evidence_ids": _canonical(s.blocked_evidence_ids),
+        "offending_evidence_fingerprint": s.offending_evidence_fingerprint,
+        "context_asof_status": s.context_asof_status,
+        "evidence_asof_statuses": _canonical(s.evidence_asof_statuses),
+        "evidence_asof_by_id": {k: s.evidence_asof_by_id[k] for k in sorted(s.evidence_asof_by_id)},
+        "derived_asof_status": s.derived_asof_status,
+        "state_schema_version": s.state_schema_version,
+    }
+
+
+def snapshot_identity(snap: StateSnapshot) -> str:
+    """Content-addressed snapshot id: same id => same canonical semantic artifact."""
+    return _hash_payload(_snapshot_semantic_payload(snap))
 
 
 def transition_identity(prev_id: str, new_id: str, trigger_ids: list[str]) -> str:
-    return sha256(f"{prev_id}|{new_id}|{'|'.join(_canonical(trigger_ids))}".encode("utf-8")).hexdigest()[:16]
+    parts = [prev_id, new_id, "|".join(_canonical(trigger_ids)), V2_STATE_MACHINE_SCHEMA_VERSION]
+    return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 # ── composition (§18/§19) ──
@@ -490,7 +522,7 @@ def compose_state_snapshot(ctx: StateEvaluationContext,
     evidence_asof_by_id = {ev.evidence_id: ev.asof_status for ev in sorted(eligible, key=lambda e: e.evidence_id)}
 
     snap = StateSnapshot(
-        snapshot_id=snapshot_identity(ctx, layers, evidence_ids, context_snaps, evidence_snaps, derived_asof),
+        snapshot_id="",
         instrument=ctx.instrument, target_family=ctx.target_family,
         instrument_role=ctx.instrument_role, calendar_id=ctx.calendar_id,
         frequency=ctx.frequency, horizon=ctx.horizon,
@@ -506,6 +538,7 @@ def compose_state_snapshot(ctx: StateEvaluationContext,
         derived_asof_status=derived_asof,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
+    snap.snapshot_id = snapshot_identity(snap)
     return snap
 
 
@@ -538,6 +571,7 @@ def _blocked_snapshot(ctx: StateEvaluationContext, reason: str,
     if offending is not None:
         d = asdict(offending)
         d.pop("notes", None)
+        d["source_snapshot_ids"] = _canonical(offending.source_snapshot_ids)
         offending_fp = sha256(
             "|".join(f"{k}={v}" for k, v in sorted(d.items(), key=lambda x: x[0])).encode("utf-8")
         ).hexdigest()[:16]
@@ -545,8 +579,8 @@ def _blocked_snapshot(ctx: StateEvaluationContext, reason: str,
     union_snaps = _canonical(context_snaps + offending_snaps)
     derived = _least_verified_asof(
         [ctx.asof_status] + ([offending.asof_status] if offending else []))
-    return StateSnapshot(
-        snapshot_id=blocked_snapshot_identity(ctx, reason, offending_ids, offending_snaps, offending_fp),
+    snap = StateSnapshot(
+        snapshot_id="",
         instrument=ctx.instrument, target_family=ctx.target_family,
         instrument_role=ctx.instrument_role, calendar_id=ctx.calendar_id,
         frequency=ctx.frequency, horizon=ctx.horizon,
@@ -559,9 +593,12 @@ def _blocked_snapshot(ctx: StateEvaluationContext, reason: str,
         source_snapshot_ids=union_snaps,
         block_reason_codes=[reason],
         blocked_evidence_ids=offending_ids,
+        offending_evidence_fingerprint=offending_fp,
         context_asof_status=ctx.asof_status,
         derived_asof_status=derived,
     )
+    snap.snapshot_id = snapshot_identity(snap)
+    return snap
 
 
 # ── transition (§24/§26/§27/§17/§18/§19) ──
@@ -613,16 +650,16 @@ def transition(previous: StateSnapshot | None,
         new_snapshot_id=current.snapshot_id,
         transition_timestamp=current.state_origin,
         changed_layers=changed,
-        previous_directional_state=prev_layers["DIRECTIONAL"],
-        new_directional_state=curr_layers["DIRECTIONAL"],
-        previous_extension_state=prev_layers["EXTENSION"],
-        new_extension_state=curr_layers["EXTENSION"],
-        previous_structural_state=prev_layers["STRUCTURAL"],
-        new_structural_state=curr_layers["STRUCTURAL"],
-        previous_risk_state=prev_layers["RISK"],
-        new_risk_state=curr_layers["RISK"],
-        previous_chase_risk_state=prev_layers["CHASE_RISK"],
-        new_chase_risk_state=curr_layers["CHASE_RISK"],
+        previous_directional_state=copy.deepcopy(prev_layers["DIRECTIONAL"]),
+        new_directional_state=copy.deepcopy(curr_layers["DIRECTIONAL"]),
+        previous_extension_state=copy.deepcopy(prev_layers["EXTENSION"]),
+        new_extension_state=copy.deepcopy(curr_layers["EXTENSION"]),
+        previous_structural_state=copy.deepcopy(prev_layers["STRUCTURAL"]),
+        new_structural_state=copy.deepcopy(curr_layers["STRUCTURAL"]),
+        previous_risk_state=copy.deepcopy(prev_layers["RISK"]),
+        new_risk_state=copy.deepcopy(curr_layers["RISK"]),
+        previous_chase_risk_state=copy.deepcopy(prev_layers["CHASE_RISK"]),
+        new_chase_risk_state=copy.deepcopy(curr_layers["CHASE_RISK"]),
         trigger_evidence_ids=triggers,
         source_snapshot_ids=src_union,
         probability_before=None, probability_after=None, probability_status="NOT_AVAILABLE",

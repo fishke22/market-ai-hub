@@ -2,7 +2,7 @@
 
 - **Schema**: `V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION = "2E.3"` (module
   `src/market_ai_hub/research/v2/extension_exhaustion.py`)
-- Independent from `2A.1` / `2B.1` / `2C.2` / `2D.3` / `3A.2.3`.
+- Independent from `2A.1` / `2B.1` / `2C.2` / `2D.4` / `3A.2.3`.
 
 ## Scope
 
@@ -95,7 +95,7 @@ EVALUATED, UNVERIFIED, BLOCKED, CONFLICT, INSUFFICIENT_CONFIRMATION. Trusted-neg
 derived time + full evidence lineage, so different offending/negative evidence yields different
 assessment IDs.
 
-## State-machine integration (V2-D 2D.3)
+## State-machine integration (V2-D 2D.4)
 
 - `extension_to_state_evidence` → `layer=EXTENSION` using `extension_event_timestamp`/
   `extension_available_at` (derived), only when `EVALUATED` and same state stream.

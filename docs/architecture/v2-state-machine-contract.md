@@ -1,6 +1,6 @@
 # V2 Dynamic State Machine Contract
 
-- **Schema**: `V2_STATE_MACHINE_SCHEMA_VERSION = "2D.3"` (module `src/market_ai_hub/research/v2/state_machine.py`)
+- **Schema**: `V2_STATE_MACHINE_SCHEMA_VERSION = "2D.4"` (module `src/market_ai_hub/research/v2/state_machine.py`)
 - Independent from `2A.1` / `2B.1` / `2C.2` / `3A.2.3`.
 
 ## Five state domains (layer value ≠ evaluation status)
@@ -47,12 +47,13 @@ produce the same `snapshot_id` AND the same `semantic_dump()`. Snapshot lineage 
 
 ## Blocked snapshots
 
-A blocked snapshot carries a deterministic non-empty `snapshot_id` that fingerprints canonical
-context identity + cutoff/origin + schema + `BLOCKED` + block reason + offending evidence ids +
-offending source snapshot ids + offending evidence semantic fingerprint. It preserves
-`block_reason_codes` / `blocked_evidence_ids` and full context/evidence source lineage, so two
-different malformed evidence produce different blocked ids, and identical malformed inputs produce
-identical ids. Blocked snapshots cannot be transitioned (`BLOCKED_INVALID_SNAPSHOT_TRANSITION`).
+A blocked snapshot is a content-consistent `StateSnapshot` with `snapshot_status=BLOCKED`; its
+`snapshot_id` is the same canonical semantic fingerprint used for success snapshots (see "Snapshot
+identity" below), so context lineage and context `asof_status` participate even when the derived
+asof is masked. It preserves `block_reason_codes` / `blocked_evidence_ids` /
+`offending_evidence_fingerprint` and full context/evidence source lineage, so two different
+malformed evidence produce different blocked ids, and identical malformed inputs produce identical
+ids. Blocked snapshots cannot be transitioned (`BLOCKED_INVALID_SNAPSHOT_TRANSITION`).
 
 ## V2-C outcome anti-leakage
 
@@ -77,6 +78,21 @@ Evidence must match context on instrument / target_family / instrument_role / ca
 frequency / horizon; mismatch or empty → `BLOCKED_IDENTITY_MISMATCH`. Each horizon is an
 independent state stream; transitions may not cross identity or horizon.
 
+## Snapshot identity (2D.4 content-consistency)
+
+`snapshot_id` is content-addressed: it is `sha256(canonical_json(semantic payload))[:16]` where the
+payload covers **every** semantic `StateSnapshot` field except `snapshot_id` and `created_at`.
+Included: target identity, `feature_cutoff_timestamp`/`state_origin`, all five `LayerState` full
+semantics (`value`, `status`, `evidence_ids`, `source_snapshot_ids`, `reason_codes`),
+`snapshot_status`, `evidence_ids`, `context_source_snapshot_ids`/`evidence_source_snapshot_ids`/
+`source_snapshot_ids`, `block_reason_codes`, `blocked_evidence_ids`,
+`offending_evidence_fingerprint`, `context_asof_status`, `evidence_asof_statuses`/
+`evidence_asof_by_id`, `derived_asof_status`, and `state_schema_version`. Canonicalization: set-like
+lists sorted-unique, dict keys sorted, timestamps canonical UTC ISO, `json.dumps(sort_keys=True,
+separators=(",", ":"))`. Invariant: **same `snapshot_id` ⇒ same semantic snapshot artifact**, and
+input order (evidence / source ids / dict insertion) never changes the id, while `created_at`
+(wall-clock) is excluded from identity. Blocked snapshots use this same content-consistent rule.
+
 ## Transition
 
 `transition(previous, current)` produces a deterministic `StateTransitionRecord` whose
@@ -86,6 +102,11 @@ so trigger attribution changes the id while trigger reorder does not. Blocked sn
 `current.evidence_ids`. Monotonic time (backward rejected). `source_snapshot_ids` = union(previous,
 current). `changed_layers` = pure diff. `probability_before/after = None`,
 `probability_status = NOT_AVAILABLE`. No trade fields.
+
+**Transition isolation (2D.4):** every `previous_*_state` / `new_*_state` is a deep copy of the
+source snapshot's `LayerState` (including `evidence_ids`, `source_snapshot_ids`, `reason_codes`). A
+later mutation of the `previous`/`current` snapshot — or of its nested layer lists — cannot rewrite
+an already-produced `StateTransitionRecord`; `semantic_dump()` and `transition_id` stay fixed.
 
 ## Limits (explicit)
 

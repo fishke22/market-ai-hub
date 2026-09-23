@@ -2,7 +2,7 @@
 
 - **Schema**: `V2_CATALYST_RESPONSE_SCHEMA_VERSION = "2F.3"` (module
   `src/market_ai_hub/research/v2/catalyst_response.py`)
-- Independent from `2A.1` / `2B.1` / `2C.2` / `2D.3` / `2E.3` / `3A.2.3`.
+- Independent from `2A.1` / `2B.1` / `2C.2` / `2D.4` / `2E.3` / `3A.2.3`.
 
 ## Descriptive, non-causal
 

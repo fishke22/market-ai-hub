@@ -36,7 +36,7 @@ def _ev(layer, value, eid="e1", **kw):
 
 # ── schema / default truth ──
 def test_schema_version():
-    assert SM.V2_STATE_MACHINE_SCHEMA_VERSION == "2D.3"
+    assert SM.V2_STATE_MACHINE_SCHEMA_VERSION == "2D.4"
 
 
 def test_no_evidence_all_layers_none_not_evaluated():
@@ -585,7 +585,7 @@ def test_transition_source_lineage_unions_previous_and_current():
 
 
 def test_persistence_policy_version_2d2():
-    assert SM.StatePersistencePolicy().version == "2D.3"
+    assert SM.StatePersistencePolicy().version == "2D.4"
 
 
 # ── V2-D audit identity / temporal closure ──
@@ -697,3 +697,150 @@ def test_snapshot_stores_canonical_target_family():
     ctx = _ctx(target_family="osaka_micro")
     s = SM.compose_state_snapshot(ctx, [_ev("DIRECTIONAL", "BULLISH")])
     assert s.target_family == "OSAKA_MICRO"
+
+
+# ── 2D.4 snapshot identity content-consistency ──
+def test_snapshot_id_changes_when_evidence_asof_mapping_changes():
+    s1 = SM.compose_state_snapshot(_ctx(asof_status="LEGACY_TEMPORAL_UNVERIFIED"),
+                                   [_ev("DIRECTIONAL", "BULLISH", "e1", asof_status="ASOF_VERIFIED")])
+    s2 = SM.compose_state_snapshot(_ctx(asof_status="LEGACY_TEMPORAL_UNVERIFIED"),
+                                   [_ev("DIRECTIONAL", "BULLISH", "e1", asof_status="TEMPORAL_UNVERIFIED")])
+    assert s1.derived_asof_status == s2.derived_asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_snapshot_id_changes_when_context_asof_changes_even_if_derived_asof_same():
+    s1 = SM.compose_state_snapshot(_ctx(asof_status="ASOF_VERIFIED"),
+                                   [_ev("DIRECTIONAL", "BULLISH", "e1", asof_status="LEGACY_TEMPORAL_UNVERIFIED")])
+    s2 = SM.compose_state_snapshot(_ctx(asof_status="TEMPORAL_UNVERIFIED"),
+                                   [_ev("DIRECTIONAL", "BULLISH", "e1", asof_status="LEGACY_TEMPORAL_UNVERIFIED")])
+    assert s1.derived_asof_status == s2.derived_asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_snapshot_id_changes_when_context_lineage_changes():
+    s1 = SM.compose_state_snapshot(_ctx(source_snapshot_ids=["ctxA"]), [_ev("DIRECTIONAL", "BULLISH", "e1")])
+    s2 = SM.compose_state_snapshot(_ctx(source_snapshot_ids=["ctxB"]), [_ev("DIRECTIONAL", "BULLISH", "e1")])
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_blocked_snapshot_id_changes_when_context_lineage_changes():
+    s1 = SM.compose_state_snapshot(_ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 8, 0),
+                                        source_snapshot_ids=["ctxA"]), [])
+    s2 = SM.compose_state_snapshot(_ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 8, 0),
+                                        source_snapshot_ids=["ctxB"]), [])
+    assert s1.snapshot_status == s2.snapshot_status == "BLOCKED"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_blocked_snapshot_id_changes_when_context_asof_changes():
+    s1 = SM.compose_state_snapshot(_ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 8, 0),
+                                        asof_status="ASOF_VERIFIED"), [])
+    s2 = SM.compose_state_snapshot(_ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 8, 0),
+                                        asof_status="TEMPORAL_UNVERIFIED"), [])
+    assert s1.snapshot_status == s2.snapshot_status == "BLOCKED"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_same_semantic_snapshot_is_deterministic():
+    evs = [_ev("DIRECTIONAL", "BULLISH", "d1"), _ev("CHASE_RISK", "STOP", "c1")]
+    s1 = SM.compose_state_snapshot(_ctx(), evs)
+    s2 = SM.compose_state_snapshot(_ctx(), list(reversed(evs)))
+    assert s1.snapshot_id == s2.snapshot_id
+    assert s1.semantic_dump() == s2.semantic_dump()
+
+
+def test_source_order_does_not_change_snapshot_id():
+    s1 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d1", source_snapshot_ids=["a", "b"])])
+    s2 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d1", source_snapshot_ids=["b", "a"])])
+    assert s1.snapshot_id == s2.snapshot_id
+
+
+def test_created_at_does_not_change_snapshot_id():
+    evs = [_ev("DIRECTIONAL", "BULLISH", "d1")]
+    s1 = SM.compose_state_snapshot(_ctx(), evs)
+    s2 = SM.compose_state_snapshot(_ctx(), evs)
+    assert s1.snapshot_id == s2.snapshot_id
+    s1.created_at = "2026-09-01T00:00:00+00:00"
+    s2.created_at = "2026-09-02T00:00:00+00:00"
+    assert SM.snapshot_identity(s1) == SM.snapshot_identity(s2)
+
+
+# ── 2D.4 LayerState full-semantics participation ──
+def test_layer_evidence_attribution_participates_in_snapshot_identity():
+    s1 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    s2 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d2")])
+    assert s1.directional_state.value == s2.directional_state.value == "BULLISH"
+    assert s1.directional_state.status == s2.directional_state.status == "EVALUATED"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_layer_reason_codes_participate_in_snapshot_identity():
+    s1 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "a"), _ev("DIRECTIONAL", "BEARISH", "b")])
+    s2 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "a"), _ev("DIRECTIONAL", "STRONG_BEAR", "b")])
+    assert s1.directional_state.status == s2.directional_state.status == "CONFLICT"
+    assert s1.directional_state.value is None and s2.directional_state.value is None
+    assert s1.directional_state.reason_codes != s2.directional_state.reason_codes
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_layer_source_lineage_participates_in_snapshot_identity():
+    s1 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d1", source_snapshot_ids=["srcA"])])
+    s2 = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d1", source_snapshot_ids=["srcB"])])
+    assert s1.directional_state.value == s2.directional_state.value == "BULLISH"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+# ── 2D.4 transition isolation ──
+def _trans_pair():
+    prev = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 8, 0)), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    curr = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 9, 0)), [_ev("DIRECTIONAL", "BEARISH", "d1")])
+    return prev, curr
+
+
+def test_transition_deep_copies_current_layer_state():
+    prev, curr = _trans_pair()
+    t = SM.transition(prev, curr)
+    assert t.new_directional_state is not curr.directional_state
+    assert t.new_directional_state.value == "BEARISH"
+
+
+def test_transition_deep_copies_previous_layer_state():
+    prev, curr = _trans_pair()
+    t = SM.transition(prev, curr)
+    assert t.previous_directional_state is not prev.directional_state
+    assert t.previous_directional_state.value == "BULLISH"
+
+
+def test_mutating_current_snapshot_after_transition_does_not_change_transition_dump():
+    prev, curr = _trans_pair()
+    t = SM.transition(prev, curr)
+    before = t.semantic_dump()
+    tid = t.transition_id
+    curr.directional_state.value = "STRONG_BEAR"
+    curr.directional_state.status = "EVALUATED"
+    assert t.semantic_dump() == before
+    assert t.transition_id == tid
+    assert t.new_directional_state.value == "BEARISH"
+
+
+def test_mutating_previous_snapshot_after_transition_does_not_change_transition_dump():
+    prev, curr = _trans_pair()
+    t = SM.transition(prev, curr)
+    before = t.semantic_dump()
+    prev.directional_state.value = "STRONG_BULL"
+    assert t.semantic_dump() == before
+    assert t.previous_directional_state.value == "BULLISH"
+
+
+def test_mutating_nested_layer_lists_does_not_change_transition():
+    prev, curr = _trans_pair()
+    t = SM.transition(prev, curr)
+    before = t.semantic_dump()
+    curr.directional_state.reason_codes.append("X")
+    curr.directional_state.evidence_ids.append("extra")
+    curr.directional_state.source_snapshot_ids.append("extra_snap")
+    assert t.semantic_dump() == before
+    assert t.new_directional_state.reason_codes == []
+    assert t.new_directional_state.evidence_ids == ["d1"]
+    assert t.new_directional_state.source_snapshot_ids == []
