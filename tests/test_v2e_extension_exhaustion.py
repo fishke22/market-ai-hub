@@ -66,7 +66,7 @@ def _comp(cid, family, present=True, **kw):
 
 # ── schema ──
 def test_schema():
-    assert E.V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION == "2E.2"
+    assert E.V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION == "2E.3"
 
 
 def test_policy_hypothesis_only_not_optimized():
@@ -496,3 +496,174 @@ def test_daily_proxy_not_intraday():
     p = E.DailyExtensionPolicy()
     assert p.scope == "DAILY_RESEARCH_PROXY"
     assert p.reference_kind == "PREVIOUS_CLOSE"
+
+
+# ── V2-E derived-time / audit-lineage closure ──
+def test_extension_available_at_uses_latest_required_input():
+    cc = _scalar("current_close", 105.0, _dt(18, 5, 0), _dt(18, 5, 30))
+    atr = _scalar("atr_baseline", 2.0, _dt(17, 6, 0), _dt(18, 7, 30), atr_period=14, atr_method=E.ATR_METHOD)
+    a = E.evaluate_extension(_ctx(), cc, _prev_close(), atr)
+    assert a.extension_available_at == _dt(18, 7, 30)
+
+
+def test_extension_adapter_uses_derived_extension_available_at():
+    cc = _scalar("current_close", 105.0, _dt(18, 5, 0), _dt(18, 5, 30))
+    atr = _scalar("atr_baseline", 2.0, _dt(17, 6, 0), _dt(18, 7, 30), atr_period=14, atr_method=E.ATR_METHOD)
+    a = E.evaluate_extension(_ctx(), cc, _prev_close(), atr)
+    ev = E.extension_to_state_evidence(a, _ctx())
+    assert ev.available_at == _dt(18, 7, 30)
+
+
+def test_late_atr_cannot_backdate_extension_state_evidence():
+    cc = _scalar("current_close", 105.0, _dt(18, 5, 0), _dt(18, 5, 30))
+    atr = _scalar("atr_baseline", 2.0, _dt(17, 6, 0), _dt(18, 7, 30), atr_period=14, atr_method=E.ATR_METHOD)
+    a = E.evaluate_extension(_ctx(), cc, _prev_close(), atr)
+    ev = E.extension_to_state_evidence(a, _ctx())
+    assert ev.available_at != _dt(18, 5, 30)
+
+
+def test_exhaustion_rejects_different_cutoff_extension():
+    ext = _ext(curr=105.0)
+    ctx9 = _ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 9, 0))
+    a = E.evaluate_exhaustion(ext, [_comp("m1", "MOMENTUM_STALL"), _comp("d1", "PRICE_VOLUME_DIVERGENCE")], ctx9)
+    assert a.assessment_status == "BLOCKED"
+    assert "BLOCKED_STATE_STREAM_MISMATCH" in a.block_reason_codes
+
+
+def test_exhaustion_rejects_different_origin_extension():
+    ext = _ext(curr=105.0)
+    ctx9 = _ctx(state_origin=_dt(18, 9, 0))
+    a = E.evaluate_exhaustion(ext, [_comp("m1", "MOMENTUM_STALL"), _comp("d1", "PRICE_VOLUME_DIVERGENCE")], ctx9)
+    assert a.assessment_status == "BLOCKED"
+
+
+def test_extension_adapter_rejects_different_cutoff():
+    ext = _ext(curr=104.0)
+    with pytest.raises(ValueError):
+        E.extension_to_state_evidence(ext, _ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 9, 0)))
+
+
+def test_extension_adapter_rejects_different_origin():
+    ext = _ext(curr=104.0)
+    with pytest.raises(ValueError):
+        E.extension_to_state_evidence(ext, _ctx(state_origin=_dt(18, 9, 0)))
+
+
+def test_exhaustion_adapter_rejects_different_cutoff():
+    ext = _ext(curr=105.0)
+    a = E.evaluate_exhaustion(ext, [_comp("m1", "MOMENTUM_STALL"), _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    with pytest.raises(ValueError):
+        E.exhaustion_to_state_evidence(a, _ctx(feature_cutoff_timestamp=_dt(18, 9, 0), state_origin=_dt(18, 9, 0)))
+
+
+def test_third_late_family_does_not_delay_warning():
+    ext = E.evaluate_extension(_ctx(), _scalar("current_close", 105.0, _dt(18, 5, 0), _dt(18, 5, 30)), _prev_close(), _atr())
+    comps = [_comp("m1", "MOMENTUM_STALL", available_at=_dt(18, 6, 30)),
+             _comp("d1", "PRICE_VOLUME_DIVERGENCE", available_at=_dt(18, 7, 15)),
+             _comp("o1", "OSCILLATOR_EXTREME", available_at=_dt(18, 7, 50))]
+    a = E.evaluate_exhaustion(ext, comps, _ctx())
+    assert a.warning_available_at == _dt(18, 7, 15)
+
+
+def test_late_duplicate_same_family_does_not_delay_warning():
+    ext = E.evaluate_extension(_ctx(), _scalar("current_close", 105.0, _dt(18, 5, 0), _dt(18, 5, 30)), _prev_close(), _atr())
+    comps = [_comp("m1", "MOMENTUM_STALL", available_at=_dt(18, 6, 30)),
+             _comp("m2", "MOMENTUM_STALL", available_at=_dt(18, 7, 55)),
+             _comp("d1", "PRICE_VOLUME_DIVERGENCE", available_at=_dt(18, 7, 15))]
+    a = E.evaluate_exhaustion(ext, comps, _ctx())
+    assert a.warning_available_at == _dt(18, 7, 15)
+
+
+def test_required_confirmation_set_is_deterministic_and_order_independent():
+    ext = E.evaluate_extension(_ctx(), _scalar("current_close", 105.0, _dt(18, 5, 0), _dt(18, 5, 30)), _prev_close(), _atr())
+    base = [_comp("m1", "MOMENTUM_STALL", available_at=_dt(18, 6, 30)),
+            _comp("d1", "PRICE_VOLUME_DIVERGENCE", available_at=_dt(18, 7, 15)),
+            _comp("o1", "OSCILLATOR_EXTREME", available_at=_dt(18, 7, 50))]
+    a1 = E.evaluate_exhaustion(ext, base, _ctx())
+    a2 = E.evaluate_exhaustion(ext, list(reversed(base)), _ctx())
+    assert a1.required_confirmation_families == a2.required_confirmation_families == ["MOMENTUM_STALL", "PRICE_VOLUME_DIVERGENCE"]
+    assert a1.assessment_id == a2.assessment_id
+
+
+def test_component_timestamp_normalized_to_utc():
+    from zoneinfo import ZoneInfo
+    tz8 = ZoneInfo("Asia/Taipei")
+    c = E.ExhaustionComponentEvidence(component_id="m1", family="MOMENTUM_STALL", present=True,
+                                      instrument="JNU", target_family="OSAKA_MICRO", calendar_id="OSE_DERIVATIVES",
+                                      frequency="DAILY", horizon="1d",
+                                      event_timestamp=datetime(2026, 9, 18, 14, 0, tzinfo=tz8),
+                                      available_at=datetime(2026, 9, 18, 15, 0, tzinfo=tz8),
+                                      source_type="M", source_schema_version="v1", source_version="v1",
+                                      provenance_status="VERIFIED_INPUT")
+    assert c.event_timestamp.utcoffset().total_seconds() == 0
+    assert c.available_at.utcoffset().total_seconds() == 0
+
+
+def test_warning_timestamp_normalized_to_utc():
+    ext = _ext(curr=105.0)
+    a = E.evaluate_exhaustion(ext, [_comp("m1", "MOMENTUM_STALL"), _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    assert a.warning_available_at.utcoffset().total_seconds() == 0
+
+
+def test_normal_extension_exhaustion_preserves_lineage():
+    ctx = _ctx(source_snapshot_ids=["ctx"])
+    ext = E.evaluate_extension(ctx, _curr_close(101.0), _prev_close(), _atr())
+    a = E.evaluate_exhaustion(ext, [_comp("m1", "MOMENTUM_STALL")], ctx)
+    assert a.assessment_status == "INSUFFICIENT_CONFIRMATION"
+    assert a.context_source_snapshot_ids == ["ctx"]
+    assert a.source_snapshot_ids
+
+
+def test_trusted_negative_component_id_is_preserved():
+    a = E.evaluate_exhaustion(_ext(curr=105.0),
+                              [_comp("n1", "MOMENTUM_STALL", present=False),
+                               _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    assert a.negative_component_ids == ["n1"]
+
+
+def test_different_negative_component_ids_change_assessment_id():
+    a1 = E.evaluate_exhaustion(_ext(curr=105.0),
+                               [_comp("n1", "MOMENTUM_STALL", present=False),
+                                _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    a2 = E.evaluate_exhaustion(_ext(curr=105.0),
+                               [_comp("n2", "MOMENTUM_STALL", present=False),
+                                _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    assert a1.assessment_id != a2.assessment_id
+
+
+def test_negative_component_does_not_count_positive():
+    a = E.evaluate_exhaustion(_ext(curr=105.0),
+                              [_comp("n1", "MOMENTUM_STALL", present=False),
+                               _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    assert a.confirmation_family_count == 1
+    assert a.assessment_status == "INSUFFICIENT_CONFIRMATION"
+
+
+def test_conflict_exhaustion_preserves_conflicting_component_ids():
+    a = E.evaluate_exhaustion(_ext(curr=105.0),
+                              [_comp("m1", "MOMENTUM_STALL", True), _comp("m2", "MOMENTUM_STALL", False),
+                               _comp("d1", "PRICE_VOLUME_DIVERGENCE")], _ctx())
+    assert set(a.conflicting_component_ids) == {"m1", "m2"}
+
+
+def test_blocked_extension_preserves_scalar_role_lineage():
+    cc = _scalar("current_close", 101.0, _dt(18, 8, 30), _dt(18, 8, 30), source_snapshot_ids=["badcc"])
+    a = E.evaluate_extension(_ctx(), cc, _prev_close(), _atr())
+    assert a.assessment_status == "BLOCKED"
+    assert "badcc" in a.current_price_source_snapshot_ids
+    assert "badcc" in a.source_snapshot_ids
+
+
+def test_blocked_extension_different_offending_source_changes_id():
+    cc1 = _scalar("current_close", 101.0, _dt(18, 8, 30), _dt(18, 8, 30), source_snapshot_ids=["bad1"])
+    cc2 = _scalar("current_close", 101.0, _dt(18, 8, 30), _dt(18, 8, 30), source_snapshot_ids=["bad2"])
+    a1 = E.evaluate_extension(_ctx(), cc1, _prev_close(), _atr())
+    a2 = E.evaluate_extension(_ctx(), cc2, _prev_close(), _atr())
+    assert a1.assessment_id != a2.assessment_id
+
+
+def test_blocked_extension_preserves_role_asof():
+    cc = _scalar("current_close", 101.0, _dt(18, 8, 30), _dt(18, 8, 30), asof_status="ASOF_VERIFIED")
+    a = E.evaluate_extension(_ctx(asof_status="LEGACY_TEMPORAL_UNVERIFIED"), cc, _prev_close(), _atr())
+    assert a.current_price_asof_status == "ASOF_VERIFIED"
+    assert a.derived_asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
