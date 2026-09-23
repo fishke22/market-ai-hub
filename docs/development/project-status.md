@@ -1,9 +1,13 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-D（Artifact Identity / Transition Isolation Closure — V2-G prerequisite）**
-- Gate: **PHASEV2D_DYNAMIC_STATE_MACHINE_SCAFFOLD_PASS** + **V2G_UPSTREAM_ARTIFACT_INTEGRITY_READY**（前置 PHASEV2F_CATALYST_RESPONSE_SCAFFOLD_PASS）
-- build_id：**8cea090107bc1293**（fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**
+- Current phase: **Phase V2-G（Sequential Updating Scaffold）**
+- Gate: **PHASEV2G_SEQUENTIAL_UPDATING_SCAFFOLD_PASS**（前置 PHASEV2D_DYNAMIC_STATE_MACHINE_SCAFFOLD_PASS）
+- build_id：**94265112f084bfe5**（fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.1**
+- CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
+- Probability velocity/acceleration：**NOT_AVAILABLE**
+- Actual market V2-G sequence：**NOT_AVAILABLE**
+- V2-H：**NOT_STARTED**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
