@@ -36,7 +36,7 @@ def _ev(layer, value, eid="e1", **kw):
 
 # ── schema / default truth ──
 def test_schema_version():
-    assert SM.V2_STATE_MACHINE_SCHEMA_VERSION == "2D.2"
+    assert SM.V2_STATE_MACHINE_SCHEMA_VERSION == "2D.3"
 
 
 def test_no_evidence_all_layers_none_not_evaluated():
@@ -161,10 +161,11 @@ def test_available_at_after_cutoff_blocks():
 
 
 def test_event_timestamp_after_cutoff_blocks():
-    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=_dt(18, 9, 0))
+    # event(09) > available(07) → impossible ordering (event <= available violated)
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=_dt(18, 9, 0), available_at=_dt(18, 7, 0))
     s = SM.compose_state_snapshot(_ctx(), [ev])
     assert s.snapshot_status == "BLOCKED"
-    assert s.directional_state.reason_codes == [SM.BLOCKED_FUTURE_EVIDENCE]
+    assert s.directional_state.reason_codes == [SM.BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
 
 
 def test_cutoff_after_origin_blocks():
@@ -503,12 +504,45 @@ def test_blocked_snapshot_has_deterministic_nonempty_id():
 
 
 def test_different_block_reasons_have_different_snapshot_ids():
-    ev1 = _ev("DIRECTIONAL", "BULLISH", event_timestamp=None)
-    ev2 = _ev("DIRECTIONAL", "BULLISH", available_at=None)
+    ev1 = _ev("DIRECTIONAL", "BULLISH", event_timestamp=None)  # missing event
+    ev2 = _ev("DIRECTIONAL", "BULLISH", available_at=None)     # missing available
     s1 = SM.compose_state_snapshot(_ctx(), [ev1])
     s2 = SM.compose_state_snapshot(_ctx(), [ev2])
-    # both blocked, but for different reasons → different ids (both are TEMPORAL here, so same)
+    # same reason (temporal), but different offending payload → different ids (fingerprint)
     assert s1.snapshot_status == "BLOCKED" and s2.snapshot_status == "BLOCKED"
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_blocked_different_evidence_ids_get_different_snapshot_ids():
+    ev1 = _ev("DIRECTIONAL", "BULLISH", "a", event_timestamp=None)
+    ev2 = _ev("DIRECTIONAL", "BULLISH", "b", event_timestamp=None)
+    s1 = SM.compose_state_snapshot(_ctx(), [ev1])
+    s2 = SM.compose_state_snapshot(_ctx(), [ev2])
+    assert s1.snapshot_id != s2.snapshot_id
+
+
+def test_blocked_same_semantics_get_same_snapshot_id():
+    ev1 = _ev("DIRECTIONAL", "BULLISH", "a", event_timestamp=None)
+    ev2 = _ev("DIRECTIONAL", "BULLISH", "a", event_timestamp=None)
+    s1 = SM.compose_state_snapshot(_ctx(), [ev1])
+    s2 = SM.compose_state_snapshot(_ctx(), [ev2])
+    assert s1.snapshot_id == s2.snapshot_id
+
+
+def test_blocked_snapshot_preserves_offending_evidence_lineage():
+    ev = _ev("DIRECTIONAL", "BULLISH", "a", event_timestamp=None, source_snapshot_ids=["e_snap"])
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.blocked_evidence_ids == ["a"]
+    assert s.evidence_source_snapshot_ids == ["e_snap"]
+    assert "e_snap" in s.source_snapshot_ids
+
+
+def test_blocked_snapshot_preserves_context_lineage():
+    ctx = _ctx(source_snapshot_ids=["ctx_snap"])
+    ev = _ev("DIRECTIONAL", "BULLISH", "a", event_timestamp=None)
+    s = SM.compose_state_snapshot(ctx, [ev])
+    assert s.context_source_snapshot_ids == ["ctx_snap"]
+    assert "ctx_snap" in s.source_snapshot_ids
 
 
 def test_blocked_layer_objects_are_independent():
@@ -551,4 +585,115 @@ def test_transition_source_lineage_unions_previous_and_current():
 
 
 def test_persistence_policy_version_2d2():
-    assert SM.StatePersistencePolicy().version == "2D.2"
+    assert SM.StatePersistencePolicy().version == "2D.3"
+
+
+# ── V2-D audit identity / temporal closure ──
+def test_event_after_available_blocks():
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=_dt(18, 7, 0), available_at=_dt(18, 6, 0))
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+    assert s.directional_state.reason_codes == [SM.BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
+
+
+def test_event_equal_available_allowed():
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=_dt(18, 6, 0), available_at=_dt(18, 6, 0))
+    assert SM.validate_state_evidence(ev, _ctx()) == []
+
+
+def test_event_available_cutoff_origin_order_valid():
+    ctx = _ctx(feature_cutoff_timestamp=_dt(18, 8, 0), state_origin=_dt(18, 8, 0))
+    ev = _ev("DIRECTIONAL", "BULLISH", event_timestamp=_dt(18, 0, 0), available_at=_dt(18, 7, 0))
+    s = SM.compose_state_snapshot(ctx, [ev])
+    assert s.directional_state.status == "EVALUATED"
+
+
+def test_v2c_outcome_non_iso_window_start_blocks():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2",
+             outcome_window_start="a", outcome_first_event_session="2026-09-21",
+             outcome_window_end="2026-09-22")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+
+
+def test_v2c_outcome_non_iso_first_event_blocks():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2",
+             outcome_window_start="2026-09-19", outcome_first_event_session="b",
+             outcome_window_end="2026-09-22")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+
+
+def test_v2c_outcome_non_iso_window_end_blocks():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2",
+             outcome_window_start="2026-09-19", outcome_first_event_session="2026-09-21",
+             outcome_window_end="c")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+
+
+def test_v2c_outcome_impossible_calendar_date_blocks():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2",
+             outcome_window_start="2026-02-30", outcome_first_event_session="2026-09-21",
+             outcome_window_end="2026-09-22")
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+
+
+def test_v2c_outcome_date_order_blocks():
+    ev = _ev("STRUCTURAL", "ACCEPTANCE_CONFIRMED", "s1", source_type="V2C_OUTCOME",
+             settled_at=_dt(18, 7, 0), source_forecast_origin=_dt(18, 0, 0), label_schema_version="2C.2",
+             outcome_window_start="2026-09-21", outcome_first_event_session="2026-09-20",
+             outcome_window_end="2026-09-22")  # first event before window start
+    s = SM.compose_state_snapshot(_ctx(), [ev])
+    assert s.snapshot_status == "BLOCKED"
+
+
+def test_transition_trigger_attribution_changes_transition_id():
+    s1 = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 8, 0)), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    s2 = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 9, 0)), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    t1 = SM.transition(s1, s2)
+    t2 = SM.transition(s1, s2, trigger_evidence_ids=["d1"])
+    assert t1.transition_id != t2.transition_id
+
+
+def test_transition_trigger_order_does_not_change_transition_id():
+    s1 = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 8, 0)), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    s2 = SM.compose_state_snapshot(_ctx(state_origin=_dt(18, 9, 0)),
+                                   [_ev("DIRECTIONAL", "BULLISH", "d1"), _ev("CHASE_RISK", "STOP", "c1")])
+    t1 = SM.transition(s1, s2, trigger_evidence_ids=["d1", "c1"])
+    t2 = SM.transition(s1, s2, trigger_evidence_ids=["c1", "d1"])
+    assert t1.transition_id == t2.transition_id
+    assert t1.semantic_dump() == t2.semantic_dump()
+
+
+def test_initial_transition_trigger_affects_transition_id():
+    s = SM.compose_state_snapshot(_ctx(), [_ev("DIRECTIONAL", "BULLISH", "d1")])
+    t1 = SM.transition(None, s)
+    t2 = SM.transition(None, s, trigger_evidence_ids=["d1"])
+    assert t1.transition_id != t2.transition_id
+
+
+def test_case_normalized_identity_has_same_snapshot_id_and_semantic_dump():
+    ctxA = _ctx(instrument="JNU", target_family="OSAKA_MICRO")
+    ctxB = _ctx(instrument="jnu", target_family="osaka_micro")
+    sA = SM.compose_state_snapshot(ctxA, [_ev("DIRECTIONAL", "BULLISH")])
+    sB = SM.compose_state_snapshot(ctxB, [_ev("DIRECTIONAL", "BULLISH", instrument="jnu", target_family="osaka_micro")])
+    assert sA.snapshot_id == sB.snapshot_id
+    assert sA.semantic_dump() == sB.semantic_dump()
+
+
+def test_snapshot_stores_canonical_instrument():
+    ctx = _ctx(instrument="jnu")
+    s = SM.compose_state_snapshot(ctx, [_ev("DIRECTIONAL", "BULLISH")])
+    assert s.instrument == "JNU"
+
+
+def test_snapshot_stores_canonical_target_family():
+    ctx = _ctx(target_family="osaka_micro")
+    s = SM.compose_state_snapshot(ctx, [_ev("DIRECTIONAL", "BULLISH")])
+    assert s.target_family == "OSAKA_MICRO"
