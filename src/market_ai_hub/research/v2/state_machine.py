@@ -23,15 +23,16 @@ Schema: V2_STATE_MACHINE_SCHEMA_VERSION = "2D.2"  (independent from 2A.1 / 2B.1 
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field as dfield, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as date_cls
 from hashlib import sha256
 from typing import Any
 
 from market_ai_hub.research.v2.asof import normalize_instrument, normalize_family, ensure_utc_aware
 from market_ai_hub.research.v2.labels import V2_DAILY_LABEL_SCHEMA_VERSION
 
-V2_STATE_MACHINE_SCHEMA_VERSION = "2D.2"
+V2_STATE_MACHINE_SCHEMA_VERSION = "2D.3"
 
 # ── enums ──
 LAYERS = ("DIRECTIONAL", "EXTENSION", "STRUCTURAL", "RISK", "CHASE_RISK")
@@ -94,6 +95,19 @@ def _canonical(xs: list[str]) -> list[str]:
     return sorted({x for x in xs if x})
 
 
+_ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _valid_iso_date(s: str) -> bool:
+    if not isinstance(s, str) or not _ISO_DATE_RE.fullmatch(s):
+        return False
+    try:
+        date_cls.fromisoformat(s)
+        return True
+    except ValueError:
+        return False
+
+
 # ── LayerState ──
 @dataclass
 class LayerState:
@@ -137,6 +151,9 @@ class StateEvaluationContext:
             v = getattr(self, name)
             if v is None or v.tzinfo is None:
                 raise ValueError(f"{name} must be tz-aware and non-null")
+        # canonical identity (§18/§19)
+        self.instrument = normalize_instrument(self.instrument)
+        self.target_family = normalize_family(self.target_family)
         # canonical UTC
         self.feature_cutoff_timestamp = ensure_utc_aware(self.feature_cutoff_timestamp)
         self.state_origin = ensure_utc_aware(self.state_origin)
@@ -198,6 +215,9 @@ class StateEvidence:
             raise ValueError(f"unknown provenance_status: {self.provenance_status!r}")
         if self.asof_status not in ASOF_STATUSES:
             raise ValueError(f"unknown asof_status: {self.asof_status!r}")
+        # canonical identity (§18/§19)
+        self.instrument = normalize_instrument(self.instrument)
+        self.target_family = normalize_family(self.target_family)
         # canonical UTC for any provided timestamp
         for name in ("event_timestamp", "available_at", "source_forecast_origin", "settled_at"):
             v = getattr(self, name)
@@ -232,6 +252,8 @@ class StateSnapshot:
     context_source_snapshot_ids: list[str] = dfield(default_factory=list)
     evidence_source_snapshot_ids: list[str] = dfield(default_factory=list)
     source_snapshot_ids: list[str] = dfield(default_factory=list)
+    block_reason_codes: list[str] = dfield(default_factory=list)
+    blocked_evidence_ids: list[str] = dfield(default_factory=list)
     context_asof_status: str = "LEGACY_TEMPORAL_UNVERIFIED"
     evidence_asof_statuses: list[str] = dfield(default_factory=list)
     evidence_asof_by_id: dict[str, str] = dfield(default_factory=dict)
@@ -294,6 +316,9 @@ class StateTransitionRecord:
     invalidation_status: str = "NONE"
     schema_version: str = V2_STATE_MACHINE_SCHEMA_VERSION
 
+    def semantic_dump(self) -> dict:
+        return asdict(self)
+
     def model_dump(self) -> dict:
         return asdict(self)
 
@@ -301,7 +326,7 @@ class StateTransitionRecord:
 # ── StatePersistencePolicy (§30) — no hidden defaults ──
 @dataclass
 class StatePersistencePolicy:
-    version: str = "2D.2"
+    version: str = "2D.3"
     status: str = "NOT_CONFIGURED"
     validation_status: str = "HYPOTHESIS_ONLY"
     minimum_dwell_time_seconds: float | None = None
@@ -347,6 +372,9 @@ def validate_state_evidence(ev: StateEvidence, ctx: StateEvaluationContext) -> l
     # temporal completeness mandatory
     if ev.event_timestamp is None or ev.available_at is None:
         return [BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
+    # temporal ordering: event <= available (impossible provenance ordering otherwise)
+    if ensure_utc_aware(ev.event_timestamp) > ensure_utc_aware(ev.available_at):
+        return [BLOCKED_TEMPORAL_EVIDENCE_PROVENANCE]
     cutoff = ctx.feature_cutoff_timestamp
     if cutoff is not None:
         if ensure_utc_aware(ev.available_at) > ensure_utc_aware(cutoff):
@@ -362,11 +390,18 @@ def validate_state_evidence(ev: StateEvidence, ctx: StateEvaluationContext) -> l
             return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
         if ev.label_schema_version != V2_DAILY_LABEL_SCHEMA_VERSION:
             return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+        # strict ISO dates
+        for name in ("outcome_window_start", "outcome_first_event_session", "outcome_window_end"):
+            if not _valid_iso_date(getattr(ev, name)):
+                return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
+        ws = date_cls.fromisoformat(ev.outcome_window_start)
+        fe = date_cls.fromisoformat(ev.outcome_first_event_session)
+        we = date_cls.fromisoformat(ev.outcome_window_end)
+        if not (ws <= fe <= we):
+            return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
         if ensure_utc_aware(ev.source_forecast_origin) > ensure_utc_aware(ev.event_timestamp):
             return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
         if ensure_utc_aware(ev.event_timestamp) > ensure_utc_aware(ev.settled_at):
-            return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
-        if not (ev.outcome_window_start <= ev.outcome_first_event_session <= ev.outcome_window_end):
             return [BLOCKED_FUTURE_OUTCOME_EVIDENCE]
     return []
 
@@ -390,19 +425,24 @@ def snapshot_identity(ctx: StateEvaluationContext, layers: dict[str, LayerState]
     return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def blocked_snapshot_identity(ctx: StateEvaluationContext, reason: str) -> str:
+def blocked_snapshot_identity(ctx: StateEvaluationContext, reason: str,
+                              offending_ids: list[str], offending_snaps: list[str],
+                              offending_fingerprint: str = "") -> str:
     parts = [
         normalize_instrument(ctx.instrument), normalize_family(ctx.target_family),
         ctx.instrument_role, ctx.calendar_id, ctx.frequency, ctx.horizon,
         ctx.feature_cutoff_timestamp.isoformat() if ctx.feature_cutoff_timestamp else "",
         ctx.state_origin.isoformat() if ctx.state_origin else "",
         V2_STATE_MACHINE_SCHEMA_VERSION, "BLOCKED", reason,
+        "|".join(_canonical(offending_ids)),
+        "|".join(_canonical(offending_snaps)),
+        offending_fingerprint,
     ]
     return sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def transition_identity(prev_id: str, new_id: str) -> str:
-    return sha256(f"{prev_id}|{new_id}".encode("utf-8")).hexdigest()[:16]
+def transition_identity(prev_id: str, new_id: str, trigger_ids: list[str]) -> str:
+    return sha256(f"{prev_id}|{new_id}|{'|'.join(_canonical(trigger_ids))}".encode("utf-8")).hexdigest()[:16]
 
 
 # ── composition (§18/§19) ──
@@ -419,12 +459,12 @@ def compose_state_snapshot(ctx: StateEvaluationContext,
     for ev in evidence:
         if ev.evidence_id in seen:
             if asdict(seen[ev.evidence_id]) != asdict(ev):
-                return _blocked_snapshot(ctx, BLOCKED_EVIDENCE_ID_COLLISION)
+                return _blocked_snapshot(ctx, BLOCKED_EVIDENCE_ID_COLLISION, ev)
             continue
         seen[ev.evidence_id] = ev
         reasons = validate_state_evidence(ev, ctx)
         if reasons:
-            return _blocked_snapshot(ctx, reasons[0])
+            return _blocked_snapshot(ctx, reasons[0], ev)
     eligible = list(seen.values())
 
     by_layer: dict[str, list[StateEvidence]] = {l: [] for l in LAYERS}
@@ -488,11 +528,25 @@ def _compose_layer(layer: str, evs: list[StateEvidence]) -> LayerState:
                       source_snapshot_ids=snaps, reason_codes=sorted(values))
 
 
-def _blocked_snapshot(ctx: StateEvaluationContext, reason: str) -> StateSnapshot:
+def _blocked_snapshot(ctx: StateEvaluationContext, reason: str,
+                      offending: StateEvidence | None = None) -> StateSnapshot:
     def blocked_layer() -> LayerState:
         return LayerState(value=None, status="BLOCKED", reason_codes=[reason])
+    offending_ids = _canonical([offending.evidence_id]) if offending else []
+    offending_snaps = _canonical([sid for sid in offending.source_snapshot_ids]) if offending else []
+    offending_fp = ""
+    if offending is not None:
+        d = asdict(offending)
+        d.pop("notes", None)
+        offending_fp = sha256(
+            "|".join(f"{k}={v}" for k, v in sorted(d.items(), key=lambda x: x[0])).encode("utf-8")
+        ).hexdigest()[:16]
+    context_snaps = _canonical(ctx.source_snapshot_ids)
+    union_snaps = _canonical(context_snaps + offending_snaps)
+    derived = _least_verified_asof(
+        [ctx.asof_status] + ([offending.asof_status] if offending else []))
     return StateSnapshot(
-        snapshot_id=blocked_snapshot_identity(ctx, reason),
+        snapshot_id=blocked_snapshot_identity(ctx, reason, offending_ids, offending_snaps, offending_fp),
         instrument=ctx.instrument, target_family=ctx.target_family,
         instrument_role=ctx.instrument_role, calendar_id=ctx.calendar_id,
         frequency=ctx.frequency, horizon=ctx.horizon,
@@ -500,8 +554,13 @@ def _blocked_snapshot(ctx: StateEvaluationContext, reason: str) -> StateSnapshot
         directional_state=blocked_layer(), extension_state=blocked_layer(),
         structural_state=blocked_layer(), risk_state=blocked_layer(),
         chase_risk_state=blocked_layer(), snapshot_status="BLOCKED",
+        context_source_snapshot_ids=context_snaps,
+        evidence_source_snapshot_ids=offending_snaps,
+        source_snapshot_ids=union_snaps,
+        block_reason_codes=[reason],
+        blocked_evidence_ids=offending_ids,
         context_asof_status=ctx.asof_status,
-        derived_asof_status=_least_verified_asof([ctx.asof_status]),
+        derived_asof_status=derived,
     )
 
 
@@ -546,7 +605,7 @@ def transition(previous: StateSnapshot | None,
         (previous.source_snapshot_ids if previous else []) + current.source_snapshot_ids)
 
     return StateTransitionRecord(
-        transition_id=transition_identity(previous.snapshot_id if previous else "", current.snapshot_id),
+        transition_id=transition_identity(previous.snapshot_id if previous else "", current.snapshot_id, triggers),
         instrument=current.instrument, target_family=current.target_family,
         instrument_role=current.instrument_role, calendar_id=current.calendar_id,
         frequency=current.frequency, horizon=current.horizon,
