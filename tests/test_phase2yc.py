@@ -67,6 +67,10 @@ def test_no_generic_method_invoker():
     assert "def invoke(" not in SRT
     assert "def call_method(" not in SRT
 
+    assert "request_tick_detail_last" in SRT
+    for forbidden in ("SendStockOrder", "SendFutureOrder", "GetBankBalance", "GetFutStoreSummary"):
+        assert forbidden not in SRT
+
 
 def test_login_bool_not_success():
     # login() 回傳 bool accepted，註解明確說非成功

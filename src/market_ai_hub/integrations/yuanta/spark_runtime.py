@@ -5,7 +5,7 @@
 - 不使用 Assembly.GetTypes() 完整 reflection（ReflectionTypeLoadException 不阻擋公開 API）。
 - enum 值 runtime 反射：PROD=2 / UAT=1 / OSE=207（以 installed DLL 為準，不硬 cast 猜值）。
 - Login() return True 只代表 accepted；真正結果來自 OnResponse 的 LoginResult.LoginStatus.MsgCode。
-- 只允許 open_prod / login / logout / close / dispose；無 generic invoke、無 order method。
+- 只允許明確列出的 quote-only lifecycle/query 方法；無 generic invoke、無 order method。
 """
 from __future__ import annotations
 
@@ -51,6 +51,7 @@ class SparkRuntime:
         self._callbacks = deque(maxlen=1000)
         self._system_messages = deque(maxlen=100)
         self.on_quote_callback = None  # optional callable(intMark, strIndex, objValue)
+        self.on_tick_detail_callback = None  # optional typed GetStkTickDetail result hook
         self.enum_values: dict = {}
         self._load()
 
@@ -73,6 +74,7 @@ class SparkRuntime:
             enumLogType,
             enumMarketType,
             enumQuoteIndexType,
+            enumStkTickSelectType,
         )
 
         self.YuantaSparkAPITrader = YuantaSparkAPITrader
@@ -82,6 +84,7 @@ class SparkRuntime:
         self.enumLogType = enumLogType
         self.enumMarketType = enumMarketType
         self.enumQuoteIndexType = enumQuoteIndexType
+        self.enumStkTickSelectType = enumStkTickSelectType
 
         self.enum_values = {
             "environment_prod": int(enumEnvironmentMode.PROD),
@@ -120,6 +123,9 @@ class SparkRuntime:
                     received=True,
                 )
                 self._login_event.set()
+            elif str(strIndex) == "GetStkTickDetail":
+                if self.on_tick_detail_callback is not None:
+                    self.on_tick_detail_callback(int(intMark), objValue)
             elif self.on_quote_callback is not None:
                 # quote-only: bounded probe hook; no persistent stream
                 self.on_quote_callback(int(intMark), str(strIndex), objValue)
@@ -160,6 +166,28 @@ class SparkRuntime:
             return et(0)
         except Exception:
             return None
+
+    def request_tick_detail_last(self, account: str, market_no: int, stock_code: str,
+                                 last_count: int = 20) -> bool:
+        """Submit bounded read-only GetStkTickDetail(last N); callback proves result, bool only acceptance."""
+        if not str(account or "").strip():
+            raise ValueError("account required")
+        code = str(stock_code or "").strip()
+        if not code or len(code) > 64 or any(ch in code for ch in "\r\n\t"):
+            raise ValueError("invalid stock_code")
+        count = int(last_count)
+        if count < 1 or count > 20:
+            raise ValueError("last_count must be 1..20")
+        return bool(self._api.GetStkTickDetail(
+            account,
+            self.enumMarketType(int(market_no)),
+            code,
+            self.enumStkTickSelectType(1),
+            "00:00:00",
+            "23:59:59",
+            count,
+            self.enumLangType.UTF8,
+        ))
 
     def login(self, account: str, password: str) -> bool:
         """Login() 回傳 True 只代表 accepted；真正結果來自 OnResponse。"""

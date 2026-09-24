@@ -868,7 +868,7 @@ def v2_schema_versions() -> dict[str, str]:
     from market_ai_hub.research.v2 import (
         asof, calibration_evaluation, catalyst_response, evaluation_governance,
         extension_exhaustion, factor_representation, forward_cycle, gap_session, labels,
-        sequential_update, session_truth, state_machine,
+        sequential_update, session_truth, state_machine, tick_detail_source,
     )
     return {
         "asof": asof.V2_ASOF_SCHEMA_VERSION,
@@ -884,4 +884,5 @@ def v2_schema_versions() -> dict[str, str]:
         "calibration_evaluation": calibration_evaluation.V2_CALIBRATION_EVALUATION_SCHEMA_VERSION,
         "evaluation_governance": evaluation_governance.W3_EVALUATION_GOVERNANCE_SCHEMA_VERSION,
         "forward_cycle": forward_cycle.W3_FORWARD_CYCLE_SCHEMA_VERSION,
+        "tick_detail_source": tick_detail_source.W3_TICK_DETAIL_SOURCE_SCHEMA_VERSION,
     }
