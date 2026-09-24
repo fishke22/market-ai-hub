@@ -3,9 +3,9 @@
 本輪只做下一個可驗收工作包：受控確認 recorder 修補是否已被現場程序載入，接著建立/驗證 field-aware quote reader 到既有 V2-A.2 資料契約的離線 replay 接線；先不 fitting、不增模型、不做交易。
 
 GitHub：https://github.com/fishke22/market-ai-hub 。上輪實際 repo 在 D:\MARKET_AI_HUB；C:\Users\fishk\Documents\ChatGPT\MARKET_AI_HUB 是文件工作區。位置可能改變，不能硬編碼。
-修補 commit：3ea367ab4d5f5cd224857d6a8c8c04dc64f550d2（實作與測試基準）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：GitHub lightweight CI 發布時執行中；以 PR checks 為準，未宣稱通過；remote：codex/quote-hub-correctness 已推送並核對 SHA；main 基準仍為 eb9202a。
+修補 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b（最終程式/安裝/測試基準；後續純文件 commit 見 PR）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：PASS：1679 passed、15 skipped、34 deselected、110 warnings，48.76s；https://github.com/fishke22/market-ai-hub/actions/runs/36025129753；對應實作 commit 40fd77a；remote：codex/quote-hub-correctness 已推送並核對實作 SHA；main 基準仍為 eb9202a。
 
-先讀 AGENTS.md、執行 scripts/agent_bootstrap.ps1、讀 AGENT_HANDOFF/project-status/當前 contracts，記錄時間、branch、HEAD、remote main、dirty/untracked、build_id。保留別人的工作，不 reset/clean/stash/force push。程式與文件矛盾要列出，不憑聊天假設已驗證。
+先讀 AGENTS.md、執行 scripts/agent_bootstrap.ps1、讀 AGENT_HANDOFF/project-status/當前 contracts，記錄時間、branch、HEAD、remote main、dirty/untracked、build_id。若 PR #55 仍 OPEN，修補基準在 codex/quote-hub-correctness，不能只讀舊 main 就判定修補不存在；先保全 dirty 工作再決定續工分支。若已合併則核對合併後基準。保留別人的工作，不 reset/clean/stash/force push。程式與文件矛盾要列出，不憑聊天假設已驗證。
 
 已完成的源碼修補：成功寫 Parquet 後才 ack、atomic publish、bounded/locked buffer、per-field provenance、單一 owner mutex、control action/cap/path/atomic inbox、共用資料根、audit probability fail-closed、read-only candidate readiness、安裝 native failure guard、CI markers、完整 config fingerprint。請先跑相關 regression 確認仍在，不重新推倒架構。
 

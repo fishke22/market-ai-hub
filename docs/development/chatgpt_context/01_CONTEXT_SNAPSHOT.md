@@ -1,6 +1,6 @@
 # MARKET_AI_HUB 跨對話上下文快照
 
-快照日期：2026-09-24（Asia/Taipei）。用途：上傳 ChatGPT 專案資料來源。此檔是查核資料，不是新的執行授權。後續應替換此快照，避免多份「最新」並存。
+快照日期：2026-09-25（Asia/Taipei）。用途：上傳 ChatGPT 專案資料來源。此檔是查核資料，不是新的執行授權。後續應替換此快照，避免多份「最新」並存。
 
 ## 1. 先讀這段
 
@@ -10,15 +10,15 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-24 修補後交接：
+2026-09-25 修補後交接：
 
-修補 commit：3ea367ab4d5f5cd224857d6a8c8c04dc64f550d2（實作與測試基準）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：GitHub lightweight CI 發布時執行中；以 PR checks 為準，未宣稱通過；remote：codex/quote-hub-correctness 已推送並核對 SHA；main 基準仍為 eb9202a。
+修補 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b（最終程式/安裝/測試基準；後續純文件 commit 見 PR）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：PASS：1679 passed、15 skipped、34 deselected、110 warnings，48.76s；https://github.com/fishke22/market-ai-hub/actions/runs/36025129753；對應實作 commit 40fd77a；remote：codex/quote-hub-correctness 已推送並核對實作 SHA；main 基準仍為 eb9202a。
 
-公開前一基準已從 PR #53 d649059 前進至 PR #54 eb9202a。本文以修補報告為準，不再使用舊 dirty branch / no callback 描述當現況。runtime build_id = `7c3ea8b62785600a`。
+公開前一基準已從 PR #53 d649059 前進至 PR #54 eb9202a。本文以修補報告為準，不再使用舊 dirty branch / no callback 描述當現況。runtime build_id = `192cdccf6173305e`。
 
 本輪已實修 H1–H4 與 H5 的控制/資源邊界、readiness、安裝失敗處理、CI 分類、runtime config fingerprint、狀態/模型/資料來源文件。詳見 03_AUDIT_AND_REPAIRS.md，不需要下一棒重做同一漏洞修補。
 
-最終驗證：1702 passed、23 deselected、132 warnings，175.88s，exit 0；預設 profile（不含 live/optional_model/private_data/broker_diagnostic）。原始碼跨 D→C 槽、中文/空白路徑與任意 cwd 的 relocation smoke 通過；非完整乾淨安裝驗收。
+最終驗證：1705 passed、23 deselected、132 warnings，165.76s，exit 0；預設 profile（不含 live/optional_model/private_data/broker_diagnostic）。原始碼跨 D→C 槽、中文/空白路徑與任意 cwd 的 relocation smoke 通過；非完整乾淨安裝驗收。
 
 **舊常駐 recorder 未由本輪重啟，所以不能聲稱新 source 已在其 process 生效。** 回報中的多市場 callbacks 是 PR #54 歷史 capability 證據，狀態檔 heartbeat 也不是每欄行情 freshness。無新 broker login/訂閱/登出/下單/帳務操作。
 
