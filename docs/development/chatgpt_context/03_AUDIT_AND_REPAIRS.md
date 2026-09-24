@@ -78,13 +78,22 @@
 - 驗證：focused 85 passed；broader 236 passed/1 deselected；audit path/build 74 passed；final default 1749 passed/23 deselected/132 warnings，172.00s，exit 0；changed implementation/test secret scan 0 hits；diff check PASS。
 - 上述 W3 測試使用 synthetic temporary DB，只算 ENGINE/GOVERNANCE PASS；真實 forward predictive evidence 仍未建立。
 
+## 2026-09-25 W3.2 precommitted forward cycle
+
+- 實作 commit：`2f374ad533a74e3647fdfdeb73d9ebb2f379631a`；runtime build_id `81f02a25847b9e65`。
+- 第一個 scope 固定 OSAKA_MICRO / JNU / 1 OSE session / existing `last_price_naive`。只接受 contract-specific DAILY、PIT-safe、source-snapshotted close；15:45 JST source close 後、17:00 JST target night open 前才能 precommit，沒有 backdate 入口。
+- 專用 Feature Store contract 為 `terminal_close / w3.2-contract-daily-close-1`；沿用 W2 read-only model-input gate，TICK 不做 silent resample。settlement 必須同合約/month、同 sealed target trading date、到期後才可 append，之後才交 W3.1/2I.1。
+- runtime read-only probe：legacy Osaka continuous parquet 960 rows、latest 2026-09-01，缺 available_at/source IDs/contract/month/roll；canonical Feature Store 存在但 OSE observations=0。eligible W3.2 candidate=none，real prediction inserted=none。
+- 驗證：core 101 passed；Feature Store/operator 127 passed；broader 303 passed/2 deselected；default 1773 passed/23 deselected/132 warnings，156.48s，exit 0；changed implementation/test secret scan 0 hits；diff check PASS。
+- W3.2 = ENGINE PASS，不是 FORWARD EVIDENCE。沒有 scheduler、broker action、calibration fitting 或交易。
+
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
 2. 自動 reconnect、授權拒絕後生命週期、session/contract 自動 roll、durable spool/WAL 尚未實作。新 status 保守標 NOT_CONTINUOUSLY_VERIFIED、MANUAL_SINGLE_OWNER、BUFFERED_NOT_ZERO_LOSS；跨 UTC 日提示 CONTRACT_REVALIDATION_REQUIRED。這些是下一工作包，不能把 flags 當已實現。
 3. recorder→V2-A.2→V2-H→Feature Store→packet→model-input boundary 已完成離線契約；但 broker TICK 仍不相容現有 1d models，沒有 validated bar aggregation，所以 DATA READY / broker-driven inference 仍不成立。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。
-4. Outcome horizon maturity / evaluation_as_of / homogeneous model-version-event scope 的 W3.1 工程契約已補足；**但真實 precommitted forward predictions/outcomes 尚未自然累積成證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
-5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。ENGINE PASS ≠ CALIBRATED ≠ EDGE。
+4. W3.1 governance 與 W3.2 precommit/settlement engine 已補足；**但 dedicated contract DAILY/PIT-safe input 尚未有真實來源，故 precommitted forward predictions/outcomes 尚未自然累積成證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
+5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。下一資料工作包是 dedicated contract DAILY terminal-close feature；不可把 2026-09-01 截止的 continuous bars 或 TICK 直接升格。ENGINE PASS ≠ DATA READY ≠ CALIBRATED ≠ EDGE。
 6. 新 Windows、重建 venv、WinCred/COM/合法 SDK/模型權重重新配置與恢復演練仍需 W7；不能整包複製就保證即用。
 
 ## 回復與下一棒
@@ -93,4 +102,4 @@
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W2 離線契約與 W3.1 governance engine 已關閉；下一個無需 broker 維護窗口的工作是把最小 `FORWARD_PRECOMMITTED` prediction/outcome cycle 接到 2H.3/W3.1，開始累積真實可稽核樣本。若使用者另提供維護窗口，可先受控交接舊 recorder。W4 calibration fitting 只能在真實成熟樣本足夠後啟動。長期 Price/Probability Map 設計見 02_ROADMAP.md。
+下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W2/W3.1/W3.2 engineering engines 已關閉；下一個無需 broker 維護窗口的工作是建立 W3.2 專用 contract DAILY terminal-close feature 的可重現 ingestion/aggregation contract，先離線 fail-closed 驗證，不用 legacy continuous bars 冒充。若使用者另提供維護窗口，可先受控交接舊 recorder。W4 calibration fitting 只能在真正 forward outcome 足夠成熟後啟動。長期 Price/Probability Map 設計見 02_ROADMAP.md。

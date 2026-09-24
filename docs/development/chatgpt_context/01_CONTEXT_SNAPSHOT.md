@@ -10,17 +10,19 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-25 W3.1 治理工作包交接：
+2026-09-25 W3.2 前向循環工作包交接：
 
-W1/W2 已完成的修補與離線資料鏈不重做。W3.1 implementation commit 為 `95289de6722c1477c5183e172384a3fd196050fd`；工作分支仍為 `codex/quote-hub-correctness`。runtime build_id = `98fe354dcc4fb275`。PR/remote/CI 的最終發布狀態以 handoff 與本次回報為準。
+W1/W2/W3.1 已完成的工程不重做。W3.2 implementation commit 為 `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`；工作分支仍為 `codex/quote-hub-correctness`。runtime build_id = `81f02a25847b9e65`。PR/remote/CI 的最終發布狀態以 handoff 與本次回報為準。
 
-V2-H 已升到 2H.3：prediction identity 可在結果出現前封存 `sample_origin` 與 label window；有封存 window 時，outcome 未到期或 target_period 不符會在寫入邊界直接拒絕。W3.1 再要求明確 `evaluation_as_of` 與同 target/model/version/event/label/sample-origin scope，forward precommitted 與 retrospective replay 不得混算，duplicate logical sample / superseded selection fail closed；通過後才交給既有 2I.1 指標引擎。
+W3.2 新增第一條可稽核 precommitted cycle：OSAKA_MICRO / JNU / 1 OSE session / existing `last_price_naive`。只接受 contract-specific DAILY、PIT-safe、source-snapshotted close；source day 15:45 JST 收盤後且 target night 17:00 JST 開始前才能 precommit。預測寫入 2H.3，target close 到期後同合約 settlement，再進 W3.1 `evaluation_as_of` governance 與既有 2I.1 POINT metrics。沒有 backdate，也沒有把 legacy forward-shadow/replay 冒充 forward。
 
-最新 code/test 驗證：W3/V2-H/V2-I focused 85 passed；W3 + PPM/packet broader 236 passed、1 deselected；audit path/build 74 passed；default suite 1749 passed、23 deselected、132 warnings，172.00s，exit 0。本輪 implementation/test secret scan 0 命中，`git diff --check` PASS。
+Feature Store 使用專用 `terminal_close / w3.2-contract-daily-close-1` 契約，TICK 不會被 silent resample。真實 read-only probe 顯示：舊 Osaka continuous parquet 960 rows、最新 2026-09-01，缺 available_at/source IDs/contract/month/roll；canonical Feature Store 存在但 probe cutoff 下 OSE observation=0。故 eligible W3.2 candidate=none，**本棒沒有建立任何真實 prediction，actual forward evidence 仍 NONE_YET**。
 
-**這仍不是 CALIBRATED。** W3.1 測試樣本是 temporary synthetic audit records，只證明 governance/leakage engine。真實 `FORWARD_PRECOMMITTED` 預測仍需在結果前實際封存並等 horizon 自然到期；W4 fitting 必須等足夠真實、同 scope 的成熟樣本。
+最新 code/test 驗證：core 101 passed；Feature Store/operator focused 127 passed；broader 303 passed、2 deselected；default suite 1773 passed、23 deselected、132 warnings，156.48s，exit 0。changed implementation/test secret scan 0 命中，`git diff --check` PASS。
 
-**現場 recorder 仍明確為 RUNTIME_ADOPTION_PENDING。** 本棒沒有 broker login/訂閱/登出/重啟/下單/帳務操作；受控重啟仍需使用者明確維護窗口授權。
+**這仍不是 CALIBRATED。** W3.2 synthetic tests 只證明 forward-cycle engine；W4 fitting 必須等真正 `FORWARD_PRECOMMITTED` outcome 自然成熟且樣本足夠。
+
+**現場 recorder 仍明確為 RUNTIME_ADOPTION_PENDING。** 本棒沒有 broker login/訂閱/登出/重啟/下單/帳務操作，也沒有啟用 scheduler；受控重啟仍需使用者明確維護窗口授權。
 
 ## 2. 查核深度與限制
 
@@ -72,6 +74,7 @@ V2-H 已升到 2H.3：prediction identity 可在結果出現前封存 `sample_or
 | sequential updating | 2G.2 |
 | prediction audit DB | 2H.3 |
 | evaluation governance | W3.1 |
+| precommitted forward cycle | W3.2 |
 | calibration evaluation | 2I.1 |
 | Price/Probability Map | 3A.2.3 |
 
@@ -109,4 +112,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 PR #55/HEAD/dirty/remote SHA 與現場 recorder。W2 離線鏈與 W3.1 governance engine 已完成，不要重做。下一個不需維護窗口的工作是把真正的 precommitted forward prediction/outcome cycle 接到 2H.3/W3.1 並開始累積可稽核樣本；若使用者提供維護窗口，則可先按尾端落盤/rollback/單一 owner 步驟受控交接 recorder。W4 fitting 仍須等足夠真實成熟樣本；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。
+先核對 PR #55/HEAD/dirty/remote SHA 與現場 recorder。W2、W3.1、W3.2 engineering engines 已完成，不要重做。下一個不需維護窗口的工作是建立 W3.2 所需的 dedicated PIT-safe contract DAILY terminal-close feature（優先從既有持久化來源做可重現 aggregation/ingestion contract；舊 continuous bars 不得升格）；若使用者提供維護窗口，則可先受控交接 recorder。W4 fitting 仍須等真正 forward outcome 足夠成熟；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。

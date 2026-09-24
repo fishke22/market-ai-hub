@@ -1,17 +1,17 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W3.1 outcome/evaluation governance after W2 offline closure.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W3.2 precommitted forward-cycle engine after W3.1 governance.
 
 ## Current repair checkpoint
 
-Read `research/phase3/reports/W3_OUTCOME_EVALUATION_GOVERNANCE_2026-09-25.md` for the newest package, then the W2 reports for the offline quote/model-input chain. W3.1 implementation commit is `95289de6722c1477c5183e172384a3fd196050fd`; runtime build_id is `98fe354dcc4fb275`.
+Read `research/phase3/reports/W32_PRECOMMITTED_FORWARD_CYCLE_2026-09-25.md` first, then the W3.1 governance and W2 reports. W3.2 implementation commit is `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; runtime build_id is `81f02a25847b9e65`.
 
 Runtime adoption is still **RUNTIME_ADOPTION_PENDING**. Read-only inspection found the running recorder status still has the old field set and all 22 current `latest.json` quotes lack `field_provenance` / `freshness_semantics`; no broker login, logout, subscription, restart, order or account action was performed. Do not use a newly imported build_id as evidence for the already-running process.
 
 Offline W2 reader/replay now maps trade/bid/ask independently from per-field provenance into the existing V2-A.2 `FactorRepresentationObservation`, preserves V2-H lineage/source IDs, rejects market/contract/session mismatches, out-of-order receipts, partial files and persistence/overflow truth, and never combines source time-of-day with a fabricated date. Old schema without per-field provenance is explicitly downgraded to `LEGACY_TOP_LEVEL_RECEIPT_ONLY` and cannot become DIRECT_LIVE.
 
-W2 offline contract remains **PASS** through the model-input boundary. W3.1 governance is now **PASS**: V2-H 2H.3 prediction identity seals forward/retrospective origin plus label-window bounds; sealed outcomes cannot be appended before horizon maturity or under a mismatched target period; governed evaluation requires explicit `evaluation_as_of` and exact target/model/version/event/label/sample-origin scope before invoking the unchanged 2I.1 metrics. Synthetic tests prove the engine only — real forward samples and calibration evidence are still absent. Recorder handover still requires explicit maintenance-window authorization.
+W2 offline contract and W3.1 governance remain **PASS**. W3.2 now adds a minimal OSAKA_MICRO/JNU 1-session `last_price_naive` forward cycle: only contract-specific DAILY/PIT-safe/source-snapshotted closes can precommit between the verified 15:45 JST source close and 17:00 JST target night open; settlement must use the same contract and exact sealed target close, then W3.1/2I.1 evaluate it. Current runtime probe found no eligible W3.2 DAILY Feature Store candidate, so **actual forward evidence remains NONE_YET and no real prediction was inserted**. Recorder handover still requires explicit maintenance-window authorization.
 
 ## Read first (order)
 
@@ -35,11 +35,12 @@ W2 offline contract remains **PASS** through the model-input boundary. W3.1 gove
 | V2-G Sequential updating | 2G.2 | `docs/architecture/v2-sequential-update-contract.md` |
 | V2-H Prediction audit DB | 2H.3 | `docs/architecture/v2-prediction-audit-contract.md` |
 | W3 Evaluation governance | W3.1 | `docs/architecture/v2-evaluation-governance-contract.md` |
+| W3 Forward cycle | W3.2 | `docs/architecture/v2-forward-cycle-contract.md` |
 | V2-I Calibration evaluation | 2I.1 | `docs/architecture/v2-calibration-evaluation-contract.md` |
 | Price/Probability Map | 3A.2.3 | `research/price_probability_map.py` |
 
 Closed foundations (do not redo): V2-A.2, V2-B.1, V2-C.2, V2-D.4, V2-E.3, V2-F.3, V2-G.2, V2-H 2H.3,
-V2-I 2I.1; W3.1 governance engine is closed. Real W3 forward sample accumulation remains evidence work, not an engine gap.
+V2-I 2I.1; W3.1 governance and W3.2 forward-cycle engines are closed. Real W3 forward sample accumulation remains evidence/data work, not an engine gap.
 V2-I 2I.1 closed = **evaluation engine only**. CALIBRATION FITTING and probability publication are
 **NOT STARTED**; `ACTUAL_CALIBRATION_EVIDENCE = NONE_YET`; `CALIBRATED` stays FORBIDDEN until real
 settled probabilistic samples exist.
@@ -132,6 +133,8 @@ V2-G.2  PHASEV2G_SEQUENTIAL_UPDATING_SCAFFOLD_PASS
 V2-H.3  PREDICTION_AUDIT_OUTCOME_MATURITY_PASS
 W3.1    OUTCOME_EVALUATION_GOVERNANCE_PASS
         evaluation_as_of + homogeneous scope + duplicate/supersession gates
+W3.2    PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS
+        ACTUAL_FORWARD_EVIDENCE = NONE_YET; eligible DAILY contract-close input absent
 V2-I.1  PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS
         YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE
 V2-I    evaluation engine only — CALIBRATION FITTING NOT STARTED. ACTUAL_CALIBRATION_EVIDENCE =

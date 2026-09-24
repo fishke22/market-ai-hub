@@ -50,7 +50,7 @@ W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊�
 
 ### W3：真實預測、到期結算與前向樣本
 
-**2026-09-25 狀態：W3.1 governance engine PASS；真實 forward sample accumulation 仍待實際時間/資料。** 2H.3 已把 sample origin + label window 綁入 prediction identity，W3.1 已有 evaluation_as_of / scope / duplicate / supersession gate；這不等於已有 predictive evidence。
+**2026-09-25 狀態：W3.1 governance + W3.2 precommitted forward-cycle engines PASS；actual forward evidence 仍 NONE_YET。** 2H.3 已把 sample origin + label window 綁入 prediction identity；W3.2 已固定 OSAKA_MICRO/JNU 1-session baseline 的 precommit/settlement 時序與 Feature Store 契約。現場仍缺合格的 contract DAILY/PIT-safe input，所以沒有真實 forward prediction 被建立。
 
 建立最小的可運作研究循環，先一個直接商品、一個 horizon、一個簡單 baseline，再依同一契約擴展到各市場族群。不能把每個 callback 當獨立預測樣本。
 
@@ -58,7 +58,7 @@ forecast origin 前封存 prediction、model/version、完整參數、feature cu
 
 2I.1 指標引擎仍只吃 audit DB，現在由 2H.3 + W3.1 governance 先決定 eligible samples；evaluator 仍不能直接補 CSV。歷史來源可經合法 ingestion/replay 建立 audit artifact，但標為 `RETROSPECTIVE_REPLAY`，與真正預先封存的 `FORWARD_PRECOMMITTED` 分開；基礎模型訓練 cutoff 不明時揭露預訓練重疊風險。
 
-工程驗收已通過：未到期、evaluation_as_of 後才可得 outcome、未知來源、重複樣本、錯 model/version/event/label scope、錯 artifact pairing / superseded selection 會拒絕或排除；樣本數可回查 IDs。可靠度清單可顯示 coverage、missing outcome、事件 count、可判定時的 missing days、重疊 horizon 與有效樣本數。**尚未完成的是實際 forward 樣本自然累積，不得用 synthetic 測試代替。**
+工程驗收已通過：未到期、evaluation_as_of 後才可得 outcome、未知來源、重複樣本、錯 model/version/event/label scope、錯 artifact pairing / superseded selection 會拒絕或排除；W3.2 另拒絕不具 PIT/source/contract/roll provenance 的 daily input、錯 precommit 時點與跨合約 settlement。**尚未完成的是 dedicated contract DAILY terminal-close feature 的真實來源與 forward 樣本自然累積，不得用 synthetic 測試代替。**
 
 ### W4：校準與外樣本治理
 

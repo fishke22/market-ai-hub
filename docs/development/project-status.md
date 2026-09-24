@@ -1,16 +1,16 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
-- Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
-- build_id：**98fe354dcc4fb275**（W3.1 outcome/evaluation governance；fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；calibration evaluation **2I.1**
+- Current phase: **W3 Forward Evidence Engineering（W3.2 cycle engine PASS；eligible DAILY input / actual forward evidence pending）**
+- Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
+- build_id：**81f02a25847b9e65**（W3.2 precommitted forward-cycle engine；fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
 - Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets; see Yuanta guide. This is historical capability evidence. Current live recorder remains **RUNTIME_ADOPTION_PENDING** because its status/latest files still expose the old schema; offline W2 reader PASS is not live deployment.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
-- V2-H：**2H.3 OUTCOME_MATURITY_PASS**；W3.1：**OUTCOME_EVALUATION_GOVERNANCE_PASS**
+- V2-H：**2H.3 OUTCOME_MATURITY_PASS**；W3.1：**OUTCOME_EVALUATION_GOVERNANCE_PASS**；W3.2：**PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
@@ -68,6 +68,17 @@ Automatic reconnect/roll, durable crash spool, validated TICK→daily aggregatio
 - Default prediction-audit DB now follows canonical `MARKET_AI_DATA_ROOT`. Cross-prediction reuse of the same artifact identity is a typed binding rejection rather than a raw DuckDB constraint error.
 - Validation: W3/V2-H/V2-I focused `85 passed`; W3 + PPM/packet broader `236 passed, 1 deselected`; final code/test default suite `1749 passed, 23 deselected, 132 warnings` in 172.00s, exit 0. Changed implementation/test secret scan: 0 hits; `git diff --check` PASS.
 - Evidence boundary: the new W3 regression samples are synthetic temporary DB records and are **not** market predictive evidence. Real precommitted forward sample accumulation is still pending.
+
+
+## 2026-09-25 W3.2 precommitted forward cycle
+
+- Implementation commit: `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; build_id `81f02a25847b9e65`.
+- First supported scope is OSAKA_MICRO / JNU / 1 verified OSE session / existing `last_price_naive`. Prediction is a POINT terminal-price baseline, not a probability.
+- Precommit is accepted only from a contract-specific DAILY/PIT-safe/source-snapshotted close after 15:45 JST and before the target night session begins at 17:00 JST. No public backdate argument exists.
+- Feature Store reader requires dedicated `terminal_close / w3.2-contract-daily-close-1` rows and reuses W2 read-only model-input gating. TICK cannot impersonate DAILY. Settlement requires the same contract/month and exact sealed target close before W3.1/2I.1 evaluation.
+- Runtime read-only probe: legacy continuous Osaka parquet = 960 rows, latest 2026-09-01, blocked by missing available_at/source IDs/contract/month/roll provenance; canonical Feature Store existed but had 0 OSE observations at the probe cutoff. Eligible W3.2 candidate = none; real W3.2 prediction inserted = none.
+- Validation: focused 101 passed; final Feature Store/operator focused 127 passed; broader 303 passed/2 deselected; default 1773 passed/23 deselected/132 warnings in 156.48s, exit 0; changed implementation/test secret scan 0 hits; diff check PASS.
+- No scheduler was enabled, no recorder/broker action occurred, and CALIBRATION FITTING remains NOT_STARTED.
 
 ## Phase 2 全歷程 Gate
 
