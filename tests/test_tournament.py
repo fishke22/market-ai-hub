@@ -188,7 +188,9 @@ def test_performance_store_roundtrip(tmp_path):
     store = PerformanceStore(root=tmp_path)
     store.save("abc123", "X", "1d", "normal", ("2026-01-01", "2026-06-01"), "rev1",
                {"model": "m1", "task": "price", "sample_size": 10, "effective_sample_size": 10,
-                "failure_rate": 0.0, "mae": 1.0, "rmse": 1.1, "mase": 0.9, "pinball_loss": 0.5,
+                "failure_count": 0, "abstention_count": 0, "nonfinite_count": 0,
+                "invalid_target_count": 0, "failure_rate": 0.0, "coverage_rate": 1.0,
+                "mae": 1.0, "rmse": 1.1, "mase": 0.9, "pinball_loss": 0.5,
                 "coverage": 0.8, "interval_width": 0.1, "calibration_error": 0.0,
                 "direction_accuracy": 0.6, "balanced_accuracy": 0.5, "macro_f1": 0.5, "mcc": 0.1,
                 "runtime_seconds": 1.0, "peak_vram_mb": 0.0})
@@ -223,4 +225,4 @@ def test_gpu_cleanup():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "eca898aa6fc222c2"
+    assert build_fingerprint()["build_id"] == "c64b98bd4a09d576"

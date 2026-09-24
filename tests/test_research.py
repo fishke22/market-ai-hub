@@ -172,4 +172,4 @@ def test_v1_build_unchanged():
     """build_id 凍結：Phase 2H MCP 整合後新 build_id（含 V1 correctness contract）。"""
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "eca898aa6fc222c2"
+    assert build_fingerprint()["build_id"] == "c64b98bd4a09d576"

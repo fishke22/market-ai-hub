@@ -94,19 +94,25 @@ class MarketRegimeEngine:
     def _rates(self, panel) -> dict:
         us10 = self._series(panel, "US10Y")
         us5 = self._series(panel, "US5Y")
-        if us10 is None or us5 is None or len(us10) == 0 or len(us5) == 0:
+        if us10 is None or us5 is None:
             return self.protection.insufficient_result("rates_regime", 0)
-        slope = float(us10.iloc[-1] - us5.iloc[-1])
+        curve = pd.concat([us10.rename("US10Y"), us5.rename("US5Y")], axis=1).dropna()
+        if len(curve) < 21:
+            return self.protection.insufficient_result("rates_regime", len(curve))
+        slope = float(curve["US10Y"].iloc[-1] - curve["US5Y"].iloc[-1])
         if slope < -0.1:
             shape = "inverted"
         elif slope < 0.3:
             shape = "flat"
         else:
             shape = "normal"
-        direction = "rising" if (us10.iloc[-1] - us10.iloc[min(len(us10) - 1, 20)]) > 0 else "falling"
-        return self._result("rates_regime", f"{shape}_{direction}", min(len(us10), len(us5)),
-                            {"us10y": float(us10.iloc[-1]), "us5y": float(us5.iloc[-1]),
-                             "slope": slope, "curve": "10Y-5Y"})
+        change_20 = float(curve["US10Y"].iloc[-1] - curve["US10Y"].iloc[-21])
+        direction = "rising" if change_20 > 0 else "falling"
+        return self._result("rates_regime", f"{shape}_{direction}", len(curve),
+                            {"us10y": float(curve["US10Y"].iloc[-1]),
+                             "us5y": float(curve["US5Y"].iloc[-1]),
+                             "slope": slope, "curve": "10Y-5Y",
+                             "lookback_sessions": 20, "us10y_change_20": change_20})
 
     def _fx(self, panel) -> dict:
         s = self._series(panel, "USDJPY=X")

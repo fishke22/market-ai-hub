@@ -171,9 +171,9 @@ def test_nhits_nbeatsx_smoke():
 
 def test_best_baseline_comparison():
     summaries = {
-        "last_price_naive": {"model": "last_price_naive", "mae": 1.0},
-        "seasonal_naive": {"model": "seasonal_naive", "mae": 0.58},
-        "chronos-2": {"model": "chronos-2", "mae": 0.96},
+        "last_price_naive": {"model": "last_price_naive", "mae": 1.0, "coverage_rate": 1.0},
+        "seasonal_naive": {"model": "seasonal_naive", "mae": 0.58, "coverage_rate": 1.0},
+        "chronos-2": {"model": "chronos-2", "mae": 0.96, "coverage_rate": 1.0},
     }
     bm = _best_baseline_and_model(summaries)
     assert bm["best_baseline"] == "seasonal_naive"
@@ -200,4 +200,4 @@ def test_sample_size_report():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "eca898aa6fc222c2"
+    assert build_fingerprint()["build_id"] == "c64b98bd4a09d576"
