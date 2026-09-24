@@ -62,8 +62,8 @@ def test_credential_fake_roundtrip(monkeypatch):
 
     import market_ai_hub.integrations.yuanta.credential_store as cs
     monkeypatch.setattr(cs, "_require_wincred", lambda: None)
-    monkeypatch.setattr("win32cred.CredWrite", fake_write)
-    monkeypatch.setattr("win32cred.CredRead", fake_read)
+    from types import SimpleNamespace
+    monkeypatch.setitem(sys.modules, "win32cred", SimpleNamespace(CredWrite=fake_write, CredRead=fake_read))
 
     write_credential(CRED_TARGET_FUTURES, "FAKE_USER", "FAKE_PASSWORD")
     c = read_credential(CRED_TARGET_FUTURES)

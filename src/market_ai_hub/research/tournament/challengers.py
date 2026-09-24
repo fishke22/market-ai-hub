@@ -16,7 +16,6 @@ def _closes(df: pd.DataFrame) -> pd.Series:
 
 class _NeuralForecastAdapter(ModelAdapter):
     task = "price"
-    model_cls = None
     _model_name = "nhits"
 
     def __init__(self) -> None:
@@ -25,6 +24,7 @@ class _NeuralForecastAdapter(ModelAdapter):
     def forecast(self, df, steps):
         try:
             from neuralforecast import NeuralForecast
+            from neuralforecast.models import NHITS as model_cls
         except Exception as e:
             return ForecastResult(point=None, warnings=[f"{self.name} import failed: {type(e).__name__}"])
         closes = _closes(df)
@@ -37,11 +37,11 @@ class _NeuralForecastAdapter(ModelAdapter):
         })
         input_size = min(64, len(closes) - steps)
         try:
-            model = self.model_cls(h=steps, input_size=input_size, max_steps=100)
+            model = model_cls(h=steps, input_size=input_size, max_steps=100)
             nf = NeuralForecast(models=[model], freq="D")
             nf.fit(nf_df)
             fc = nf.predict()
-            col = self.model_cls.__name__  # 預測欄位名 = 模型類別名（NHITS / NBEATSx）
+            col = model_cls.__name__  # 預測欄位名 = 模型類別名（NHITS / NBEATSx）
             point = float(fc[fc["unique_id"] == "1"][col].iloc[-1])
         except Exception as e:
             return ForecastResult(point=None, warnings=[f"{self.name} failed: {type(e).__name__}"])
@@ -54,29 +54,23 @@ class NHITSAdapter(_NeuralForecastAdapter):
     _model_name = "nhits"
     revision = "3.2.2"
 
-    def __init__(self) -> None:
-        super().__init__()
-        from neuralforecast.models import NHITS
-
-        self.model_cls = NHITS
-
-
 class NBEATSxAdapter(_NeuralForecastAdapter):
     _model_name = "nbeatsx"
     revision = "3.2.2"
 
     def __init__(self) -> None:
         super().__init__()
-        from neuralforecast.models import NBEATSx
-
         # 只用 identity block（trend/seasonality 與短 horizon h=1 衝突）
         self._nbeatsx_kwargs = {"stack_types": ["identity"], "n_blocks": [3],
                                 "random_seed": 42, "max_steps": 100}
-        self.model_cls = NBEATSx
 
     def forecast(self, df, steps):
         # 覆寫：NBEATSx 需額外參數
-        from neuralforecast import NeuralForecast
+        try:
+            from neuralforecast import NeuralForecast
+            from neuralforecast.models import NBEATSx as model_cls
+        except Exception as e:
+            return ForecastResult(point=None, warnings=[f"{self.name} import failed: {type(e).__name__}"])
 
         closes = _closes(df)
         if len(closes) < 30:
@@ -84,11 +78,11 @@ class NBEATSxAdapter(_NeuralForecastAdapter):
         nf_df = pd.DataFrame({"unique_id": "1", "ds": pd.to_datetime(closes.index), "y": closes.values})
         input_size = min(64, len(closes) - steps)
         try:
-            model = self.model_cls(h=steps, input_size=input_size, **self._nbeatsx_kwargs)
+            model = model_cls(h=steps, input_size=input_size, **self._nbeatsx_kwargs)
             nf = NeuralForecast(models=[model], freq="D")
             nf.fit(nf_df)
             fc = nf.predict()
-            col = self.model_cls.__name__
+            col = model_cls.__name__
             point = float(fc[fc["unique_id"] == "1"][col].iloc[-1])
         except Exception as e:
             return ForecastResult(point=None, warnings=[f"{self.name} failed: {type(e).__name__}"])

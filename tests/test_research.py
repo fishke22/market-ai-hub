@@ -148,6 +148,13 @@ def test_fev_adapter_baselines_and_metrics():
     assert fev.evaluate_price(a, f, naive)["mae"] == pytest.approx(m["mae"])
 
 
+def test_mlflow_sanitize_without_optional_runtime():
+    from market_ai_hub.research.mlflow_tracker import sanitize_params
+    clean = sanitize_params({"model": "chronos-2", "api_key": "SECRET", "revision": "rev"})
+    assert clean == {"model": "chronos-2", "revision": "rev"}
+
+
+@pytest.mark.integration
 def test_mlflow_recording(tmp_path, monkeypatch):
     from market_ai_hub.research.mlflow_tracker import sanitize_params, start_run
 
@@ -165,4 +172,4 @@ def test_v1_build_unchanged():
     """build_id 凍結：Phase 2H MCP 整合後新 build_id（含 V1 correctness contract）。"""
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "7c3ea8b62785600a"
+    assert build_fingerprint()["build_id"] == "192cdccf6173305e"

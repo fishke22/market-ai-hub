@@ -113,6 +113,48 @@ def test_nhits_nbeatsx_adapters_in_tournament():
     assert "nhits" in names and "nbeatsx" in names
 
 
+def test_missing_optional_models_do_not_break_construction(monkeypatch):
+    import builtins
+    original = builtins.__import__
+    attempts = []
+    def without_neuralforecast(name, *args, **kwargs):
+        if name == "neuralforecast" or name.startswith("neuralforecast."):
+            attempts.append(name)
+            raise ModuleNotFoundError(name)
+        return original(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", without_neuralforecast)
+    adapters = [a for a in build_adapters() if a.name in ("nhits", "nbeatsx")]
+    assert len(adapters) == 2 and not attempts
+    for adapter in adapters:
+        result = adapter.forecast(_df(range(40)), 1)
+        assert result.point is None and "import failed" in result.warnings[0]
+
+
+def test_optional_forecast_dispatch_preserves_model_parameters(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    calls = []
+    def init(self, **kwargs):
+        calls.append((type(self).__name__, kwargs))
+    models = SimpleNamespace(NHITS=type("NHITS", (), {"__init__": init}),
+                             NBEATSx=type("NBEATSx", (), {"__init__": init}))
+    class FakeForecast:
+        def __init__(self, models, freq):
+            self.column = type(models[0]).__name__
+        def fit(self, frame):
+            assert len(frame) == 40
+        def predict(self):
+            return pd.DataFrame({"unique_id": ["1"], self.column: [101.]})
+    monkeypatch.setitem(sys.modules, "neuralforecast", SimpleNamespace(NeuralForecast=FakeForecast))
+    monkeypatch.setitem(sys.modules, "neuralforecast.models", models)
+    for adapter in (NHITSAdapter(), NBEATSxAdapter()):
+        result = adapter.forecast(_df(range(40)), 1)
+        assert result.point == 101. and result.direction == "up"
+    assert [name for name, _ in calls] == ["NHITS", "NBEATSx"]
+    assert calls[0][1] == {"h": 1, "input_size": 39, "max_steps": 100}
+    assert calls[1][1]["stack_types"] == ["identity"]
+
+
 @pytest.mark.live
 @pytest.mark.optional_model
 def test_nhits_nbeatsx_smoke():
@@ -158,4 +200,4 @@ def test_sample_size_report():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "7c3ea8b62785600a"
+    assert build_fingerprint()["build_id"] == "192cdccf6173305e"

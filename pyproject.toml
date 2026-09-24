@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 timesfm = ["timesfm[torch]>=1.3.0"]
 dev = ["pytest>=8.0", "pytest-timeout>=2.2"]
+research = ["neuralforecast==3.2.2", "mlflow==3.16.1"]
 
 [project.scripts]
 market-ai-mcp = "market_ai_hub.mcp.server:main_sync"
