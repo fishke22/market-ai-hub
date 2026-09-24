@@ -1,18 +1,20 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W3.2 precommitted forward-cycle engine after W3.1 governance.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C1 model-evaluation comparison correctness after W3.2/W3.3 engineering.
 
 ## Current repair checkpoint
 
-2026-09-25 model-credibility correction: read `docs/development/MODEL_CREDIBILITY_PLAN_2026-09-25.md`
-and `MODEL_CREDIBILITY_VALIDATION_2026-09-25.md` before using old tournament results.
-Code commit `ea29c12af8bdffb36bbaa1dd8275d445fc7135a0`, build `eca898aa6fc222c2` fixes exact
-outcome labels, seasonal horizons, aligned/valid interval metrics, invented trend confidence and
-classifier forecast-origin inputs. Final offline profile: 1785 passed / 34 deselected; focused 172 passed.
-W3.3 tick-detail source code already exists at baseline `b567233`; OSE timestamp basis and terminal-close
-materialization still require evidence. Do not redo W3.1/W3.2/W3.3 engines. No live recorder action was taken.
-Next bounded offline package: C1 evaluation comparison/abstention audit described in the plan.
+2026-09-25 C1 evaluation-comparison package is implemented in commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`; runtime build is `c64b98bd4a09d576`. It adds explicit VALID/FAILED/ABSTAINED/NONFINITE/INVALID_TARGET accounting, common-origin pairwise metrics plus each model's full coverage, fail-closed finite/accounting persistence, C1.1 leaderboard version isolation, horizon-aware random walk, train-only classification majority baseline, and aligned 20-session rates lookback. CLI run now persists pairwise rows and compare reads those rows instead of comparing different success subsets.
+
+Validation: initial C1 regression was 11 passed / 4 failed; final focused is 198 passed / 6 deselected, exit 0. Final offline profile is 1804 passed / 35 deselected / 110 warnings, exit 0, explicitly excluding only `test_single_instance_lock_releases_after_error` because the Windows global quote-owner mutex is already held by the live recorder. The unfiltered run was 1802 passed / 34 deselected / 1 failed at that mutex. The recorder was not stopped/restarted to make the test pass. Changed-file secret scan = 0; diff check PASS.
+
+The earlier `ea29c12...` credibility correction and W3.2 checkpoint remain historical evidence; read `MODEL_CREDIBILITY_PLAN_2026-09-25.md`, `MODEL_CREDIBILITY_VALIDATION_2026-09-25.md`, and `research/phase3/reports/C1_MODEL_EVALUATION_CORRECTNESS_2026-09-25.md` before using old tournament results. Old rankings require versioned re-evaluation and cannot be carried forward.
+
+W3.3 tick-detail source code already exists; OSE timestamp basis and terminal-close materialization still require runtime evidence. Pre-existing staged W3.3 contract/report files were preserved and are not part of commit `50f209a`. Do not redo W3.1/W3.2/W3.3 engines. No live broker action was taken.
+
+Next bounded package: C2 controlled W3.3 source/runtime evidence and contract-specific DAILY terminal-close semantics. It requires explicit maintenance-window authorization before recorder restart/login; otherwise remain offline and do not fabricate DATA READY. C3/C4 remain gated on real C1/C2 inputs.
+
 The W3.2 checkpoint below is historical, including its runtime build, not the latest source identity.
 
 Read `research/phase3/reports/W32_PRECOMMITTED_FORWARD_CYCLE_2026-09-25.md` first, then the W3.1 governance and W2 reports. W3.2 implementation commit is `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; runtime build_id is `81f02a25847b9e65`.

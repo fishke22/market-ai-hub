@@ -10,19 +10,17 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-25 W3.2 前向循環工作包交接：
+2026-09-25 C1 模型評估比較可信度交接：
 
-W1/W2/W3.1 已完成的工程不重做。W3.2 implementation commit 為 `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`；工作分支仍為 `codex/quote-hub-correctness`。runtime build_id = `81f02a25847b9e65`。PR/remote/CI 的最終發布狀態以 handoff 與本次回報為準。
+W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `50f209a095a151b6ae42c6db5d0d462d11fd2395`；工作分支 `codex/quote-hub-correctness`；runtime build_id = `c64b98bd4a09d576`。C1 把每個 forecast origin 分成 VALID / FAILED / ABSTAINED / NONFINITE / INVALID_TARGET，pairwise 只用共同有效 origins 且同時揭露雙方 full coverage；store C1.1 fail-closed 拒絕非有限值與缺失/矛盾 accounting，舊 leaderboard 依 schema 隔離、不重寫歷史。
 
-W3.2 新增第一條可稽核 precommitted cycle：OSAKA_MICRO / JNU / 1 OSE session / existing `last_price_naive`。只接受 contract-specific DAILY、PIT-safe、source-snapshotted close；source day 15:45 JST 收盤後且 target night 17:00 JST 開始前才能 precommit。預測寫入 2H.3，target close 到期後同合約 settlement，再進 W3.1 `evaluation_as_of` governance 與既有 2I.1 POINT metrics。沒有 backdate，也沒有把 legacy forward-shadow/replay 冒充 forward。
+另外修正 random-walk horizon、缺 train labels 時 classification baseline 偷看 test labels、rates regime 對齊與 20-session lookback；CLI run 會持久化 pairwise，compare 不再拿不同成功子集直接比 MAE。舊 tournament 排名必須重跑，不能挪用舊績效。
 
-Feature Store 使用專用 `terminal_close / w3.2-contract-daily-close-1` 契約，TICK 不會被 silent resample。真實 read-only probe 顯示：舊 Osaka continuous parquet 960 rows、最新 2026-09-01，缺 available_at/source IDs/contract/month/roll；canonical Feature Store 存在但 probe cutoff 下 OSE observation=0。故 eligible W3.2 candidate=none，**本棒沒有建立任何真實 prediction，actual forward evidence 仍 NONE_YET**。
+驗證：初始 C1 regression `11 passed, 4 failed`；最終 focused `198 passed, 6 deselected`，exit 0。未排除 Windows global quote-owner mutex 的完整離線跑法為 `1802 passed, 34 deselected, 1 failed`，唯一失敗是現場 owner 已存在；沒有停止 recorder 換綠燈。最終 offline profile 明確排除該單一 mutex 測試：`1804 passed, 35 deselected, 110 warnings`，129.47s，exit 0。changed-file secret scan 0；diff check PASS。
 
-最新 code/test 驗證：core 101 passed；Feature Store/operator focused 127 passed；broader 303 passed、2 deselected；default suite 1773 passed、23 deselected、132 warnings，156.48s，exit 0。changed implementation/test secret scan 0 命中，`git diff --check` PASS。
+**這仍不是 DATA READY、CALIBRATED、PREDICTIVE EVIDENCE 或 TRADING EDGE。** 本包未做 calibration fitting、未建立真實 forward prediction/outcome、未重跑真實市場排行榜，也沒有新增模型。
 
-**這仍不是 CALIBRATED。** W3.2 synthetic tests 只證明 forward-cycle engine；W4 fitting 必須等真正 `FORWARD_PRECOMMITTED` outcome 自然成熟且樣本足夠。
-
-**現場 recorder 仍明確為 RUNTIME_ADOPTION_PENDING。** 本棒沒有 broker login/訂閱/登出/重啟/下單/帳務操作，也沒有啟用 scheduler；受控重啟仍需使用者明確維護窗口授權。
+**現場 recorder 仍由既有 owner 持有。** 本包沒有 broker login/訂閱/登出/重啟/下單/帳務操作。開工時已有兩個 staged W3.3 contract/report 檔，本包完整保留且未提交。C2 若要做 runtime timestamp/terminal-close 證據，仍需使用者明確維護窗口授權。
 
 ## 2. 查核深度與限制
 
@@ -112,4 +110,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 PR #55/HEAD/dirty/remote SHA 與現場 recorder。W2、W3.1、W3.2 engineering engines 已完成，不要重做。下一個不需維護窗口的工作是建立 W3.2 所需的 dedicated PIT-safe contract DAILY terminal-close feature（優先從既有持久化來源做可重現 aggregation/ingestion contract；舊 continuous bars 不得升格）；若使用者提供維護窗口，則可先受控交接 recorder。W4 fitting 仍須等真正 forward outcome 足夠成熟；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。
+先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。下一包是 C2：在明確維護窗口授權下驗證 OSE tick-detail 日期/時區/逐合約/terminal-close 語義，建立可追溯 contract DAILY terminal close 後接既有 W3.2；沒有授權就不 restart/login/retry broker。C3/C4 仍等待真實 C1/C2 輸入；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。

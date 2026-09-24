@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W3 Forward Evidence Engineering + model-evaluation correctness（W3.3 source code present；timestamp verification / eligible DAILY input / actual forward evidence pending）**
+- Current phase: **C1 MODEL_EVALUATION_CORRECTNESS_PASS / W3 Forward Evidence Engineering（W3.3 source code present；timestamp verification / eligible DAILY input / actual forward evidence pending）**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**eca898aa6fc222c2**（model-credibility corrections after W3.3；source fingerprint，不證明常駐 process 已升級）
+- build_id：**c64b98bd4a09d576**（C1 model-evaluation correctness；source fingerprint，不證明常駐 recorder process 已升級）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -26,6 +26,17 @@ and classifier forecast-origin inputs fixed. Offline profile 1785 passed / 34 de
 172 passed / 3 deselected. See `MODEL_CREDIBILITY_PLAN_2026-09-25.md` and
 `MODEL_CREDIBILITY_VALIDATION_2026-09-25.md` in this directory for scope and limitations.
 Prior tournament rankings affected by these changes require versioned re-evaluation.
+
+## 2026-09-25 C1 evaluation comparison / abstention correctness
+
+- Implementation commit: `50f209a095a151b6ae42c6db5d0d462d11fd2395`; build_id `c64b98bd4a09d576`.
+- Tournament now counts VALID / FAILED / ABSTAINED / NONFINITE / INVALID_TARGET separately. Effective sample and coverage no longer treat refusals/failures as valid observations.
+- Pairwise comparison uses common valid origins and simultaneously records each model's full coverage. CLI persists pairwise rows; `compare` no longer compares unmatched success subsets. Best-summary ranking requires full coverage.
+- Performance Store C1.1 rejects NaN/Inf, missing/inconsistent accounting, isolates legacy leaderboard rows by schema, and keeps legacy data inspectable without rewriting history.
+- Random walk now respects horizon steps; research majority-class baseline requires train labels; rates regime uses aligned 10Y/5Y observations and an actual 20-session lookback.
+- Validation: initial C1 `11 passed, 4 failed`; final focused `198 passed, 6 deselected`, exit 0. Unfiltered full offline: `1802 passed, 34 deselected, 1 failed` only because Windows global quote-owner mutex reported `YUANTA_LIVE_ALREADY_RUNNING`. Final offline profile excluding that one live-owner-conflicting test: `1804 passed, 35 deselected, 110 warnings` in 129.47s, exit 0. Changed-file secret scan 0; diff check PASS.
+- No broker/login/restart/subscription/order/account action; no calibration fitting; no new model; no real forward sample or market ranking rerun. ENGINE PASS remains distinct from DATA READY / CALIBRATED / PREDICTIVE EVIDENCE / TRADING EDGE.
+
 
 Source fixes: durable-write acknowledgement, per-field freshness, bounded callbacks,
 single-owner mutex, subscription request validation/limits, shared data-root resolution,
