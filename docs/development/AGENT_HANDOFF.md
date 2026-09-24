@@ -39,19 +39,19 @@ settled probabilistic samples exist.
 SECURITIES API
 = Yuanta SPARK / 元大證券API
 = SPARK API supports securities + futures MARKETS by official contract
-  (SubscribeWatchlist / SubscribeWatchlistAll LoginAcno accepts either account type;
-   enumMarketType TAIFEX=3 / CME=203 / OSE=207)
-= API_SUPPORT != ACCOUNT_ENTITLEMENT: per-market entitlement is MEASURED, never assumed
-= measured (securities profile, account_profile=SECURITIES): login ACCEPTED MsgCode 0001;
-  TAIFEX TMFJ6 + OSE JNU2612 subscription calls ACCEPTED (both methods) but ZERO callbacks
-  in 10s while both venues were in session -> quote stays NOT_AVAILABLE
-= usable for Taiwan stock data, but only upgraded to LIVE after an actual quote-capability check
+= securities profile login SERVER_VERIFIED MsgCode=0001
+= measured quote identity must state account_profile=SECURITIES and market=TAIFEX / market=OSE / CME / CBOT / CBOE / NYBOT as applicable
+= 2026-09-24 PROD matching callbacks VERIFIED on TAIFEX/OSE/CME/CBOT/CBOE/NYBOT
+= night-session quote codes are API-specific (e.g. TMFPM*/JNUPM*); resolve dynamically from FunctionList
+= primary cross-market live quote provider
+= API_SUPPORT != FUTURES_ACCOUNT_ENTITLEMENT: separate futures-profile login still returns 0112
 
 FUTURES QUOTE API
 = YuantaQuote ActiveX/COM (ProgID YUANTAQUOTE.YuantaQuoteCtrl.1, x86 sidecar)
 = independent quote API
-= T / T+1 login already SERVER_VERIFIED LogonOK (Status=2, code=0)
-= live quote callback still UNRESOLVED (registration OnRegError ErrCode=3, meaning UNKNOWN)
+= T / T+1 login SERVER_VERIFIED LogonOK (Status=2, code=0)
+= 2026-09-24 T+1 TX/MX/TMF/UNF matching OnGetMktData VERIFIED
+= domestic TAIFEX live backup; current overseas AddMktReg path is NOT verified
 
 FUTURES TRADING API
 = YuantaOrd (Yuanta.YuantaOrdCtrl.1)
@@ -59,10 +59,12 @@ FUTURES TRADING API
 = NO ORDER (quote-only policy)
 ```
 
-Never re-promote SPARK as the official futures quote provider without official evidence.
-SPARK futures-market entitlement is measured BLOCKED (futures profile login -> 0112
-API_PERMISSION_UNAVAILABLE, no retry). The independent FUTURES QUOTE API (YuantaQuote COM)
-remains the futures quote family; account_profile + market must be stated with any SPARK claim.
+Official evidence now confirms SPARK supports futures markets, and securities-profile live callbacks
+have been measured across multiple futures venues. Keep the claim precise: **SPARK securities profile
+quote success != SPARK futures-account entitlement**. The futures profile still returns 0112.
+The independent YuantaQuote COM API remains the separate FUTURES QUOTE API family and is a verified
+domestic TAIFEX backup. Full method/evidence: `docs/integrations/yuanta/YUANTA_LIVE_MULTIFACTOR_GUIDE_ZH_TW.md`
+and `config/yuanta_live_factor_matrix.yaml`. Rebuild/setup rules are in `docs/integrations/yuanta/YUANTA_FROM_SCRATCH_SETUP_ZH_TW.md`, product-code/session rules in `docs/integrations/yuanta/YUANTA_PRODUCT_CODE_AND_SESSION_RULES_ZH_TW.md`, and official download/source URLs in `config/yuanta_source_manifest.yaml`.
 
 ## System principles (Yuanta)
 
@@ -78,13 +80,17 @@ TAIEX / TX / MTX / TMF : cash and futures identities stay separate forever
 ## Provider status truth (machine-readable: `integrations.yuanta.capabilities.PROVIDER_STATUS`)
 
 ```
-legacy_futures_auth    : VERIFIED                      (ReqType=1/2 measured Status=2 LogonOK code=0)
-legacy_domestic_quote  : AUTH_VERIFIED_REGISTRATION_UNRESOLVED
-spark_securities_taifex_quote : SUBSCRIPTION_ACCEPTED_NO_CALLBACK  (account_profile=SECURITIES, market=TAIFEX)
-spark_securities_ose_quote    : SUBSCRIPTION_ACCEPTED_NO_CALLBACK  (account_profile=SECURITIES, market=OSE 207)
-spark_futures          : SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED (futures-profile login measured 0112, no retry)
-ose_micro_live         : NOT_AVAILABLE                 (nearest StkCode JNU2612, MarketNo 207)
-taifex_live            : NOT_AVAILABLE_UNTIL_CALLBACK
+legacy_futures_auth    : VERIFIED
+legacy_domestic_quote  : LIVE_CALLBACK_VERIFIED
+spark_securities_taifex_quote : LIVE_CALLBACK_VERIFIED
+spark_securities_ose_quote    : LIVE_CALLBACK_VERIFIED
+spark_securities_cme_quote    : LIVE_CALLBACK_VERIFIED
+spark_securities_cbot_quote   : LIVE_CALLBACK_VERIFIED
+spark_securities_cboe_quote   : LIVE_CALLBACK_VERIFIED
+spark_securities_nybot_quote  : LIVE_CALLBACK_VERIFIED
+spark_futures          : SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED (futures-profile login measured 0112)
+ose_micro_live         : LIVE_CALLBACK_VERIFIED_SPARK_SECURITIES
+taifex_live            : LIVE_CALLBACK_VERIFIED_SPARK_AND_LEGACY
 ```
 
 ## Legacy quote (EASYWIN) — canonical API facts
@@ -105,7 +111,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 - No fabricated timestamps, prices, probabilities, or provider status.
 - Keep cutoff / leakage gates machine-enforced; report `NOT_AVAILABLE` instead of guessing.
 - Never persist secrets; Windows Credential Manager only, masked output only.
-- Quote-only: no order, no account query, no position/balance, no recorder, no auto-retry.
+- Quote-only: no order, no account query, no position/balance。即時行情由單一常駐 `live_quote_recorder` 負責；agent 必須讀 `data/live/yuanta/latest.json` 或透過 `scripts/request_yuanta_quote.ps1` 追加訂閱，不得自行重複登入/登出。
 
 ## Current gates
 

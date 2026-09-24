@@ -1,0 +1,167 @@
+version: "2026-09-24"
+status: MEASURED_PROD_QUOTE_ONLY
+purpose: "Yuanta live multi-factor capability evidence; measured symbols are evidence, never permanent contract codes."
+security:
+  orders: false
+  account_query: false
+  position_balance: false
+  recorder: false
+  persist_secrets: false
+
+spark:
+  api_family: SECURITIES_API_SPARK
+  login_profile: securities
+  login_status: SERVER_VERIFIED_MSG_0001
+  subscription_method: SubscribeWatchlistAll
+  account_scope_note: "Securities-profile login can receive futures-market quotes; this does not prove futures-account entitlement."
+  official_limits:
+    max_total_subscriptions_per_connection: 2000
+    max_products_per_single_subscription_call: 200
+    max_subscription_calls_per_function_per_second: 10
+    max_total_subscriptions_per_account: 3000
+    max_simultaneous_connections_per_account: 10
+  callback_contract:
+    success_requires_market_and_instrument_match: true
+    source_time_of_day_only: "IndexFlag29/TYuantaTime has time-of-day but no date."
+    local_receive_time_only_allowed_for_capability_evidence: true
+  measured_live:
+    - factor: TW_INDEX
+      representation: TAIFEX_TMF_NIGHT
+      market_no: 3
+      measured_symbol: TMFPMJ6
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: JP_EQUITY
+      representation: OSE_MICRO_NIGHT
+      market_no: 207
+      measured_symbol: JNUPM2612
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: US_TECH_RISK
+      representation: CME_NQ
+      market_no: 203
+      measured_symbol: NQ_2612
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: US_TECH_RISK
+      representation: CME_MNQ
+      market_no: 203
+      measured_symbol: MNQ2612
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: US_BROAD_RISK
+      representation: CME_ES
+      market_no: 203
+      measured_symbol: ES_2612
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: US_VOLATILITY
+      representation: CBOE_VX_FUTURES
+      market_no: 215
+      measured_symbol: VX2610
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: JPY_FX
+      representation: CME_JPY_FUTURES
+      market_no: 203
+      measured_symbol: JY_2612
+      result: LIVE_CALLBACK_VERIFIED
+      semantic_warning: "JPY futures is a derivative proxy; do not treat its return as USDJPY spot return."
+    - factor: US_RATES
+      representation: CBOT_US5Y_FUTURES
+      market_no: 204
+      measured_symbol: ZF2612
+      result: LIVE_CALLBACK_VERIFIED
+      semantic_warning: "Treasury futures price is not a yield; direction versus yield is generally inverse."
+    - factor: US_RATES
+      representation: CBOT_US10Y_FUTURES
+      market_no: 204
+      measured_symbol: ZN2612
+      result: LIVE_CALLBACK_VERIFIED
+      semantic_warning: "Treasury futures price is not a yield; direction versus yield is generally inverse."
+    - factor: GOLD
+      representation: CME_GOLD_FUTURES
+      market_no: 203
+      measured_symbol: GC2610
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: WTI_OIL
+      representation: CME_WTI_FUTURES
+      market_no: 203
+      measured_symbol: CL2611
+      result: LIVE_CALLBACK_VERIFIED
+      note: "CL2610 had no callback; CL2611 did. Resolve the active contract dynamically."
+    - factor: USD_BROAD
+      representation: ICE_DXY_FUTURES
+      market_no: 209
+      measured_symbol: DOLINDX2612
+      result: LIVE_CALLBACK_VERIFIED
+  measured_closed_cash:
+    - representation: TWSE_TAIEX
+      market_no: 1
+      measured_symbol: IX0001
+      result: SUBSCRIPTION_ACCEPTED_NO_CALLBACK
+      note: "Measured while TWSE cash market was closed; not evidence of missing entitlement."
+    - representation: TWSE_2330
+      market_no: 1
+      measured_symbol: "2330"
+      result: SUBSCRIPTION_ACCEPTED_NO_CALLBACK
+      note: "Measured while TWSE cash market was closed; use cash session truth."
+
+legacy_quote:
+  api_family: FUTURES_QUOTE_API_YUANTAQUOTE_COM
+  login_status: SERVER_VERIFIED_T_AND_TPLUS1_LOGONOK
+  login_id_semantics: "operator identity-document login ID; never store the actual identifier in repo"
+  password_source: "securities profile secret from Windows Credential Manager"
+  register_call: "AddMktReg(base_symbol, 4, ReqType, 0)"
+  t_req_type: 1
+  tplus1_req_type: 2
+  official_subscription_limit: UNKNOWN_NOT_FOUND_IN_CURRENT_LOCAL_MANUAL
+  measured_live:
+    - factor: TW_INDEX
+      representation: TX_FUTURES
+      measured_symbol: TXFJ6
+      req_type: 2
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: TW_INDEX
+      representation: MTX_FUTURES
+      measured_symbol: MXFJ6
+      req_type: 2
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: TW_INDEX
+      representation: TMF_FUTURES
+      measured_symbol: TMFJ6
+      req_type: 2
+      result: LIVE_CALLBACK_VERIFIED
+    - factor: US_TECH_RISK
+      representation: TAIFEX_UNF
+      measured_symbol: UNFL6
+      req_type: 2
+      result: LIVE_CALLBACK_VERIFIED
+  overseas_probe:
+    contract_symbols:
+      JNU2612: "REG_ERROR_3"
+      NQ2612: "REG_ERROR_3"
+      MNQ2612: "REG_ERROR_3"
+      ES2612: "REG_ERROR_3"
+      VX2610: "REG_ERROR_3"
+      JY2612: "REG_ERROR_3"
+      FV2609: "REG_ERROR_3"
+      TY2609: "REG_ERROR_3"
+      GC2610: "REG_ERROR_3"
+      CL2610: "REG_ERROR_3"
+    alias_probe:
+      NQ1: "ADDMKTREG_RETURN_1_NO_CALLBACK"
+      JNU1: "REG_ERROR_3"
+    conclusion: "Do not use Legacy Quote as the primary overseas multi-factor feed with current measured entitlement/path."
+
+routing_policy:
+  primary_cross_market_live_provider: SPARK_SECURITIES_PROFILE
+  domestic_taifex_backup_provider: LEGACY_FUTURES_QUOTE
+  contract_selection: "Resolve from current FunctionList.xlsx/EasyWin tables; never hardcode measured symbols."
+  cash_futures_identity_separation: true
+  provider_open_does_not_imply_live_data: true
+  callback_match_required: "market_no + instrument_code"
+  direct_vs_proxy:
+    OSE_MICRO_NIGHT: DIRECT
+    CME_NQ: DERIVATIVE_PROXY
+    CME_MNQ: DERIVATIVE_PROXY
+    CME_ES: DERIVATIVE_PROXY
+    CBOE_VX_FUTURES: DERIVATIVE_PROXY
+    CME_JPY_FUTURES: DERIVATIVE_PROXY
+    CBOT_US5Y_FUTURES: DERIVATIVE_PROXY
+    CBOT_US10Y_FUTURES: DERIVATIVE_PROXY
+    ICE_DXY_FUTURES: DERIVATIVE_PROXY
