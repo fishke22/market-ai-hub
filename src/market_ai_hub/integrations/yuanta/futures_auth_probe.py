@@ -1,4 +1,4 @@
-"""Phase 2Y-E — Yuanta Futures COM auth_probe（32-bit sidecar，quote-only，單次 login）。
+r"""Phase 2Y-E — Yuanta Futures COM auth_probe（32-bit sidecar，quote-only，單次 login）。
 
 在 .venv-yuanta-futures-x86 執行（或透過 scripts\yuanta_futures_auth.ps1）。
 流程：WinCred account preset（masked）→ STA/ActiveX connect → getpass →
@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from market_ai_hub.integrations.yuanta.credential_store import (
     CredentialBackendError,
     read_profile_credential,
+    read_profile_password,
 )
 from market_ai_hub.integrations.yuanta.sanitizer import mask_account
 from market_ai_hub.integrations.yuanta.futures_com import (
@@ -95,7 +96,13 @@ def main() -> int:
     print("Mode:       QUOTE_ONLY")
     print("=" * 40)
 
-    password = getpass.getpass("Password: ")
+    # 密碼來源：Windows Credential Manager futures secret（normalized）→ 無則 getpass fallback
+    password = read_profile_password("futures")
+    if not password:
+        password = getpass.getpass("Password: ")
+        print("password source: getpass (WinCred futures secret not preset)")
+    else:
+        print("password source: Windows Credential Manager (futures secret, normalized)")
 
     client = YuantaFuturesQuoteClient()
     state = None
