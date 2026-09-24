@@ -2,7 +2,7 @@
 
 日期：2026-09-24；本轮應使用本報告的修補後狀態，不再把初版稽核反例當成現況。
 
-修補 commit：LOCAL_PASS（發布後以 PR commits 為準）；PR：準備建立；CI：尚未執行 GitHub CI；remote：待發布。
+修補 commit：3ea367ab4d5f5cd224857d6a8c8c04dc64f550d2（實作與測試基準）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：GitHub lightweight CI 發布時執行中；以 PR checks 為準，未宣稱通過；remote：codex/quote-hub-correctness 已推送並核對 SHA；main 基準仍為 eb9202a。
 
 ## 基準與查核範圍
 

@@ -12,4 +12,4 @@
 此次已能直接在 Codex 施工，因此不另外產生過期的 OpenCode 修補 prompt。04 已規定網頁版 Remote 真正失敗時，依當時實測生成適配 OpenCode / DeepSeek 的自足 prompt；不預先假定模型 ID 或 variant。
 
 只需上傳上述三份 Markdown，不上傳測試暫存、備份、AUDIT_EVIDENCE.json 或真實行情/憑證。ZIP 只含六份交付文件與SHA256 manifest。現有 ChatGPT/Remote/DeepSeek 帳號費與 API 配額不保證免費；本規劃未新增付費服務。
-修補 commit：LOCAL_PASS（發布後以 PR commits 為準）；PR：準備建立；CI：尚未執行 GitHub CI；remote：待發布。
+修補 commit：3ea367ab4d5f5cd224857d6a8c8c04dc64f550d2（實作與測試基準）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：GitHub lightweight CI 發布時執行中；以 PR checks 為準，未宣稱通過；remote：codex/quote-hub-correctness 已推送並核對 SHA；main 基準仍為 eb9202a。

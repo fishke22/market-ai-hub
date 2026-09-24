@@ -3,7 +3,7 @@
 本輪只做下一個可驗收工作包：受控確認 recorder 修補是否已被現場程序載入，接著建立/驗證 field-aware quote reader 到既有 V2-A.2 資料契約的離線 replay 接線；先不 fitting、不增模型、不做交易。
 
 GitHub：https://github.com/fishke22/market-ai-hub 。上輪實際 repo 在 D:\MARKET_AI_HUB；C:\Users\fishk\Documents\ChatGPT\MARKET_AI_HUB 是文件工作區。位置可能改變，不能硬編碼。
-修補 commit：LOCAL_PASS（發布後以 PR commits 為準）；PR：準備建立；CI：尚未執行 GitHub CI；remote：待發布。
+修補 commit：3ea367ab4d5f5cd224857d6a8c8c04dc64f550d2（實作與測試基準）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：GitHub lightweight CI 發布時執行中；以 PR checks 為準，未宣稱通過；remote：codex/quote-hub-correctness 已推送並核對 SHA；main 基準仍為 eb9202a。
 
 先讀 AGENTS.md、執行 scripts/agent_bootstrap.ps1、讀 AGENT_HANDOFF/project-status/當前 contracts，記錄時間、branch、HEAD、remote main、dirty/untracked、build_id。保留別人的工作，不 reset/clean/stash/force push。程式與文件矛盾要列出，不憑聊天假設已驗證。
 
