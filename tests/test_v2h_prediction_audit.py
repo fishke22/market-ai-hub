@@ -58,22 +58,23 @@ def _outcome(prediction_id, **kw):
 
 
 # ── schema / storage ──
-def test_schema_version_2h2():
-    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.2"
+def test_schema_version_2h3():
+    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.3"
 
 
 def test_default_db_path_is_local_audit_dir():
+    from market_ai_hub.config.runtime_paths import data_root
+
     p = PA.default_audit_db_path()
-    assert p.name == "prediction_audit.duckdb"
-    assert p.parent.name == "audit"
-    assert "data" in p.parts
+    assert p == data_root() / "audit" / "prediction_audit.duckdb"
 
 
 def test_v2_schema_versions_assembled_from_modules():
     v = PA.v2_schema_versions()
     assert v["asof"] == "2A.2" and v["session_truth"] == "2A.2" and v["factor_routing"] == "2A.2"
     assert v["state_machine"] == "2D.4" and v["sequential_update"] == "2G.2"
-    assert v["prediction_audit"] == "2H.2"
+    assert v["prediction_audit"] == "2H.3"
+    assert v["evaluation_governance"] == "W3.1"
 
 
 # ── temporal order ──

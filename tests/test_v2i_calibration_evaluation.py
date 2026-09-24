@@ -273,7 +273,7 @@ def test_cross_prediction_and_unknown_prediction_blocked(db):
 
 def test_members_never_cross_predictions(db):
     p1, a1, _ = _sample(db, value=0.4, actual=1.0)
-    p2, _, _ = _sample(db, value=0.5, actual=0.0)
+    p2, a2, _ = _sample(db, value=0.5, actual=0.0)
     man = _manifest(db, [p1, p2])
     assert len(man.members) == 2
     for m in man.members:
@@ -281,7 +281,7 @@ def test_members_never_cross_predictions(db):
         assert art.prediction_id == m.prediction_id
         assert [o for o in db.get_outcomes(m.prediction_id) if o.outcome_id == m.outcome_id]
     assert {m.forecast_artifact_id for m in man.members} == {
-        a1.forecast_artifact_id, man.members[1].forecast_artifact_id}
+        a1.forecast_artifact_id, a2.forecast_artifact_id}
 
 
 def test_missing_outcome_is_non_blocking_but_excluded(db):

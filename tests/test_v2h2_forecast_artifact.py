@@ -58,8 +58,8 @@ def _bundle(db, artifacts=None, lineage=None, **pred_kw):
 
 
 # ── artifact identity / validation ──
-def test_schema_version_2h2():
-    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.2"
+def test_schema_version_2h3():
+    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.3"
 
 
 def test_forecast_artifact_deterministic_identity():
@@ -125,6 +125,18 @@ def test_bundle_insert_round_trip_verifies(db):
     assert db.get_forecast_artifact(stored[0].forecast_artifact_id) == stored[0]
     assert db.get_prediction(pred.prediction_id).forecast_artifact_digest == pred.forecast_artifact_digest
     assert db.verify_prediction(pred.prediction_id) is True
+
+
+def test_same_artifact_identity_cannot_bind_to_two_predictions(db):
+    template = _artifact("x")
+    p1, lin1, arts1 = _bundle(db, artifacts=[template], build_id="build-a")
+    p2, lin2, arts2 = _bundle(db, artifacts=[template], build_id="build-b")
+    assert p1.prediction_id != p2.prediction_id
+    assert arts1[0].forecast_artifact_id == arts2[0].forecast_artifact_id
+    assert db.append_prediction_bundle(p1, lin1, arts1) == PA.APPEND_INSERTED
+    with pytest.raises(PA.ArtifactBindingError) as e:
+        db.append_prediction_bundle(p2, lin2, arts2)
+    assert e.value.code == PA.BLOCKED_ARTIFACT_PREDICTION_MISMATCH
 
 
 def test_bundle_insert_atomic_rollback(db, monkeypatch):
