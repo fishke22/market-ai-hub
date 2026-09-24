@@ -58,8 +58,8 @@ def _outcome(prediction_id, **kw):
 
 
 # ── schema / storage ──
-def test_schema_version_2h1():
-    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.1"
+def test_schema_version_2h2():
+    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.2"
 
 
 def test_default_db_path_is_local_audit_dir():
@@ -73,7 +73,7 @@ def test_v2_schema_versions_assembled_from_modules():
     v = PA.v2_schema_versions()
     assert v["asof"] == "2A.2" and v["session_truth"] == "2A.2" and v["factor_routing"] == "2A.2"
     assert v["state_machine"] == "2D.4" and v["sequential_update"] == "2G.2"
-    assert v["prediction_audit"] == "2H.1"
+    assert v["prediction_audit"] == "2H.2"
 
 
 # ── temporal order ──
