@@ -34,6 +34,12 @@ _ALIAS_RE = re.compile(r"^(?P<root>TXF|MXF|TMF)(?P<pm>PM)?1$")
 # 下單代碼（≠ 報價碼；由 primary_targets / yuanta_product_codes 為準）→ legacy 商品根
 TRADING_ORDER_CODES = {"TX": "TXF", "MTX": "MXF", "TMF": "TMF"}
 
+# Legacy AddMktReg ReqType（官方 sample / reg_Ses2.log：T=1、T+1=2；symbol 皆為 base symbol）
+LEGACY_REQ_TYPES = {"T": 1, "TPLUS1": 2, "T+1": 2}
+# 官方 Python sample 預設 UpdateMode = 4 (SnapshotUpd)；SetMap = 0
+LEGACY_UPDATE_MODE_DEFAULT = "4"
+LEGACY_SET_MAP_DEFAULT = 0
+
 
 @dataclass
 class EasyWinQuoteSymbol:
@@ -124,15 +130,15 @@ class LegacyEasyWinResolver:
 
     def resolve_quote_symbol(self, order_code: str, session: str = "T",
                              asof: date | None = None, market: str = "TAIFEX") -> str | None:
-        """下單商品根（TX/MTX/TMF）+ session → legacy 報價商品代碼。
+        """Legacy **canonical AddMktReg symbol** = BASE (day) symbol for BOTH T and T+1.
 
-        session `T` → day 合約；`T+1` / `PM` → 盤後（PM）合約。
+        官方 sample / reg_Ses2.log 證實 T+1 用 base symbol（TXFL7，非 TXFL7PM）；
+        `xxxPM` 只是 EasyWin UI/alias metadata，永不在此回傳（見 `pm_alias_for`）。
         以來源檔的 expiry 欄挑「目前有效且最近」合約；不 hardcode 月份。
         """
         root = (order_code or "").upper().strip()
         if root not in TRADING_ORDER_CODES:
             return None
-        want_pm = session.upper() in ("T+1", "TPLUS1", "PM", "AFTER_HOURS")
         asof = asof or date.today()
         best: tuple[int, str] | None = None
         for s in self.load_market(market):
@@ -155,7 +161,23 @@ class LegacyEasyWinResolver:
                 best = key
         if best is None:
             return None
-        return best[1] + "PM" if want_pm else best[1]
+        return best[1]
+
+    def resolve_api_symbol(self, order_code: str, session: str = "T",
+                           asof: date | None = None, market: str = "TAIFEX") -> tuple[str, int] | None:
+        """(canonical AddMktReg symbol, ReqType)。T → ReqType 1、T+1 → ReqType 2，symbol 相同。"""
+        symbol = self.resolve_quote_symbol(order_code, "T", asof, market)
+        if symbol is None:
+            return None
+        return symbol, LEGACY_REQ_TYPES.get((session or "T").upper(), 1)
+
+    def pm_alias_for(self, symbol: str) -> str:
+        """EasyWin UI/alias metadata only — never the canonical AddMktReg symbol."""
+        s = symbol or ""
+        return s if (not s or s.endswith("PM")) else s + "PM"
+
+    def pm_alias_exists(self, symbol: str, market: str = "TAIFEX") -> bool:
+        return self.is_legacy_symbol(self.pm_alias_for(symbol), market)
 
     def namespaces(self) -> dict:
         return {"SPARK": NAMESPACE_SPARK, "LEGACY_EASYWIN": NAMESPACE_LEGACY_EASYWIN,

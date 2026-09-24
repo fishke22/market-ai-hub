@@ -139,7 +139,19 @@ def test_easwin_resolution_follows_session():
         d = r.resolve_quote_symbol(order, "T", asof=date(2026, 9, 24))
         p = r.resolve_quote_symbol(order, "T+1", asof=date(2026, 9, 24))
         assert d and d.startswith(root) and not d.endswith("PM")
-        assert p == d + "PM"
+        assert p == d          # canonical AddMktReg symbol = BASE symbol for T and T+1
+        api_t = r.resolve_api_symbol(order, "T", asof=date(2026, 9, 24))
+        api_t1 = r.resolve_api_symbol(order, "T+1", asof=date(2026, 9, 24))
+        assert api_t == (d, 1) and api_t1 == (d, 2)
+
+
+def test_pm_variant_is_alias_metadata_only():
+    r = _resolve_or_skip()
+    base = r.resolve_quote_symbol("TMF", "T", asof=date(2026, 9, 24))
+    alias = r.pm_alias_for(base)
+    assert alias == base + "PM"
+    assert r.is_legacy_symbol(alias) is True          # PM exists as EasyWin UI/alias row
+    assert r.resolve_quote_symbol("TMF", "T+1", asof=date(2026, 9, 24)) != alias
 
 
 def test_easwin_resolution_is_asof_aware():

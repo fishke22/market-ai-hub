@@ -1,9 +1,54 @@
 # V2 Prediction Audit Contract
 
-- **Schema**: `V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.1"`
+- **Schema**: `V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.2"`
   (module `src/market_ai_hub/research/v2/prediction_audit.py`)
 - **Store**: `data/audit/prediction_audit.duckdb` — **LOCAL_ONLY** (no remote, no sync).
 - Independent of `2A.2` / `2B.1` / `2C.2` / `2D.4` / `2E.3` / `2F.3` / `2G.2` / `3A.2.3`.
+
+## 2H.2 addition — forecast artifact audit
+
+2H.1 stored prediction metadata + factor lineage + outcomes but **not the forecast output itself**, so
+Brier/log-loss/calibration could not be computed from the audit DB alone. 2H.2 adds an immutable
+`ForecastArtifactRecord` + `forecast_artifacts` table:
+
+```
+artifact_type ∈ POINT / QUANTILE / INTERVAL / CLASS_SCORE / EVENT_PROBABILITY / STATE / NOT_AVAILABLE
+fields: forecast_artifact_id, prediction_id, calibration_domain, probability_type, event_definition_id,
+        label_type, value, raw_score, class_label, quantile_level, lower_value, upper_value,
+        nominal_coverage, units, status, calibration_status_at_origin, calibration_evidence_id,
+        distribution_id, distribution_version, generated_at, source_snapshot_ids
+non-applicable fields stay None/"" — never fabricated
+```
+
+Type-specific requirements: `QUANTILE` needs `quantile_level`; `INTERVAL` needs
+`lower/upper/nominal_coverage` with `lower <= upper`; `EVENT_PROBABILITY` needs
+`event_definition_id`; `NOT_AVAILABLE` must carry no value/raw_score.
+
+`raw score != calibrated probability` and `EVENT_PROBABILITY != automatically CALIBRATED`.
+`is_public_probability(artifact)` is True only for `EVENT_PROBABILITY`/`CLASS_SCORE` with
+`calibration_status_at_origin == CALIBRATED` **and** a `calibration_evidence_id` and a value.
+Everything else stays an internal audit artifact — no public probability.
+
+### Prediction binding
+`PredictionRecord.forecast_artifact_digest` is part of the prediction payload, so identity binds
+`factor_lineage_digest + forecast_artifact_digest`. A prediction cannot secretly gain a forecast
+output later (same id + changed digest = `BLOCKED_ID_COLLISION`).
+
+### Atomic bundle
+`append_prediction_bundle(prediction, lineage, forecast_artifacts)` validates everything first, then
+writes prediction + lineage + artifacts in ONE transaction; any failure rolls back with no partial
+prediction. `append_prediction()` (2H.1 path) delegates to the bundle with no artifacts.
+
+### Outcome binding
+`OutcomeRecord.forecast_artifact_id` (optional) must exist, belong to the same `prediction_id`, and
+be type/scope compatible: `TOUCH` probability cannot pair with a `TERMINAL` outcome, and a
+`DIRECTION` score cannot pair with a price-touch outcome. V2-I can therefore build exact
+`forecast_artifact <-> outcome` evaluation pairs.
+
+### Temporal gates (added to all 2H.1 gates)
+`generated_at <= forecast_origin` (`BLOCKED_ARTIFACT_TEMPORAL`) and
+`outcome available_at >= forecast_origin` (`BLOCKED_OUTCOME_TEMPORAL`); future artifacts are refused.
+
 
 ## Purpose
 

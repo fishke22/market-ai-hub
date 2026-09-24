@@ -1,22 +1,29 @@
-"""V2-H 2H.1 — Prediction Audit DB Foundation（LOCAL_ONLY, append-only）。
+"""V2-H — Prediction Audit DB（LOCAL_ONLY, append-only）。
 
-目的：永久保存「預測當時知道什麼」（prediction + factor lineage）與之後「實際發生什麼」
-（outcome），且兩者**永遠分離**，防止 future leakage。
+2H.1：prediction metadata + V2-A.2 factor lineage + outcome（分表、不可合併）。
+2H.2：把「預測當時實際輸出的 forecast artifact」納入同一 append-only chain，並以
+      `append_prediction_bundle()` 單一 transaction 原子寫入 prediction + lineage + artifacts。
 
 不變式（machine-enforced）：
-- `feature_cutoff_timestamp <= forecast_origin`（否則 BLOCKED_TEMPORAL_ORDER）
+- `feature_cutoff_timestamp <= forecast_origin`（BLOCKED_TEMPORAL_ORDER）
 - prediction payload 不得含 outcome/realized/future 欄位（BLOCKED_OUTCOME_IN_PREDICTION）
-- factor lineage 的 `available_at <= feature_cutoff_timestamp`（否則 BLOCKED_FUTURE_FACTOR）
+- factor lineage `available_at <= feature_cutoff_timestamp`（BLOCKED_FUTURE_FACTOR）
+- forecast artifact `generated_at <= forecast_origin`（BLOCKED_ARTIFACT_TEMPORAL；future artifact 禁止）
+- outcome `available_at >= forecast_origin`（BLOCKED_OUTCOME_TEMPORAL）
+- prediction identity 綁定 `factor_lineage_digest` + `forecast_artifact_digest`
+  （同一 prediction 不能事後偷偷追加 forecast output）
+- artifact / outcome 指定時必須存在、同 prediction、type/label scope 相容
 - public API 只有 append + read：**無 UPDATE / DELETE**
 - 同 id + 同 payload → IDEMPOTENT；同 id + 不同 payload → BLOCKED_ID_COLLISION
-- 修正只能 new record + `supersedes_id`
-- canonical JSON + SHA256 identity；讀回後可重驗 `record_identity == stored id`
-- prediction 與 outcome payload 分開 hash（不同 namespace）
+- canonical JSON + SHA256；prediction / outcome / lineage / forecast artifact 分開 hash namespace
 
-不在本棒：calibration / Brier / log-loss / model training / trading / broker / scheduled recorder。
-Yuanta live capability 不是 gate：live 有 → 存 live lineage；live 無 → 存 unavailable lineage。
+`raw score != calibrated probability`；`EVENT_PROBABILITY != automatically CALIBRATED`。
+沒有真實 CalibrationEvidence 的值只能留在 audit（`is_public_probability()` == False），不得對外公開機率。
 
-Schema: V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.1"。
+不在本棒：calibration fitting / Brier / log-loss / model training / trading / broker / recorder。
+Yuanta live capability 不是 gate：live → 存 live lineage；unavailable → 存 unavailable lineage。
+
+Schema: V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.2"。
 """
 from __future__ import annotations
 
@@ -27,11 +34,15 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.1"
+V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.2"
 
 PREDICTION_STATUSES = ("PENDING", "SUPERSEDED", "VOID")
 LINEAGE_AVAILABILITY = ("AVAILABLE", "NOT_AVAILABLE", "EXTERNAL_ENTITLEMENT_BLOCKED", "UNKNOWN")
-OUTCOME_KINDS = ("RETURN", "STATE", "DIRECTION", "TOUCH", "BREAK", "ACCEPTANCE", "CUSTOM")
+OUTCOME_KINDS = ("RETURN", "STATE", "DIRECTION", "TOUCH", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM")
+
+FORECAST_ARTIFACT_TYPES = ("POINT", "QUANTILE", "INTERVAL", "CLASS_SCORE",
+                           "EVENT_PROBABILITY", "STATE", "NOT_AVAILABLE")
+CALIBRATION_STATUSES = ("UNCALIBRATED", "CALIBRATED", "NOT_APPLICABLE", "UNKNOWN")
 
 APPEND_INSERTED = "INSERTED"
 APPEND_IDEMPOTENT = "IDEMPOTENT"
@@ -41,6 +52,11 @@ BLOCKED_TEMPORAL_ORDER = "BLOCKED_TEMPORAL_ORDER"
 BLOCKED_OUTCOME_IN_PREDICTION = "BLOCKED_OUTCOME_IN_PREDICTION"
 BLOCKED_FUTURE_FACTOR = "BLOCKED_FUTURE_FACTOR"
 BLOCKED_UNKNOWN_PREDICTION = "BLOCKED_UNKNOWN_PREDICTION"
+BLOCKED_ARTIFACT_TEMPORAL = "BLOCKED_ARTIFACT_TEMPORAL"
+BLOCKED_ARTIFACT_PREDICTION_MISMATCH = "BLOCKED_ARTIFACT_PREDICTION_MISMATCH"
+BLOCKED_ARTIFACT_NOT_FOUND = "BLOCKED_ARTIFACT_NOT_FOUND"
+BLOCKED_ARTIFACT_OUTCOME_MISMATCH = "BLOCKED_ARTIFACT_OUTCOME_MISMATCH"
+BLOCKED_OUTCOME_TEMPORAL = "BLOCKED_OUTCOME_TEMPORAL"
 
 # 出現在 prediction/lineage payload 即視為 outcome leakage 的 key
 _OUTCOME_KEYS = frozenset({
@@ -49,8 +65,28 @@ _OUTCOME_KEYS = frozenset({
     "settled_value", "settlement_price", "label_value",
 })
 
-_DT_FIELDS = ("forecast_origin", "feature_cutoff_timestamp", "created_at",
+# artifact_type -> 允許的 outcome_kind（避免 DIRECTION score 配 price-touch outcome）
+_ARTIFACT_OUTCOME_KINDS = {
+    "POINT": {"RETURN", "TERMINAL", "CUSTOM"},
+    "QUANTILE": {"RETURN", "TERMINAL", "CUSTOM"},
+    "INTERVAL": {"RETURN", "TERMINAL", "CUSTOM"},
+    "CLASS_SCORE": {"DIRECTION", "STATE", "CUSTOM"},
+    "EVENT_PROBABILITY": {"TOUCH", "BREAK", "ACCEPTANCE", "CUSTOM"},
+    "STATE": {"STATE", "CUSTOM"},
+    "NOT_AVAILABLE": set(),
+}
+
+_DT_FIELDS = ("forecast_origin", "feature_cutoff_timestamp", "created_at", "generated_at",
               "event_timestamp", "available_at", "provider_timestamp", "received_at")
+
+
+def label_scope(label_type: str) -> str:
+    """TOUCH / TERMINAL / DIRECTION / STATE scope token（TOUCH != TERMINAL）。"""
+    t = (label_type or "").upper()
+    for token in ("TOUCH", "BREAK", "ACCEPT", "TERMINAL", "RETURN", "DIRECTION", "STATE"):
+        if token in t:
+            return "ACCEPTANCE" if token == "ACCEPT" else ("TERMINAL" if token == "RETURN" else token)
+    return "UNKNOWN"
 
 
 class PredictionAuditError(Exception):
@@ -75,6 +111,26 @@ class FutureFactorError(PredictionAuditError):
 
 class UnknownPredictionError(PredictionAuditError):
     code = BLOCKED_UNKNOWN_PREDICTION
+
+
+class ArtifactTemporalError(PredictionAuditError):
+    code = BLOCKED_ARTIFACT_TEMPORAL
+
+
+class ArtifactBindingError(PredictionAuditError):
+    code = BLOCKED_ARTIFACT_PREDICTION_MISMATCH
+
+
+class ArtifactNotFoundError(PredictionAuditError):
+    code = BLOCKED_ARTIFACT_NOT_FOUND
+
+
+class ArtifactOutcomeMismatchError(PredictionAuditError):
+    code = BLOCKED_ARTIFACT_OUTCOME_MISMATCH
+
+
+class OutcomeTemporalError(PredictionAuditError):
+    code = BLOCKED_OUTCOME_TEMPORAL
 
 
 # ── canonical serialization / identity ──
@@ -112,9 +168,22 @@ def lineage_identity(payload: dict) -> str:
     return "v2h_lin_" + _hash("lineage", payload)
 
 
+def forecast_artifact_identity(payload: dict) -> str:
+    return "v2h_art_" + _hash("forecast_artifact", payload)
+
+
+def _digest_of_ids(prefix: str, ids: list[str]) -> str:
+    if not ids:
+        return ""
+    return prefix + sha256("|".join(sorted(ids)).encode("utf-8")).hexdigest()[:16]
+
+
 def factor_lineage_digest(lineage: list["FactorLineageRecord"]) -> str:
-    keys = sorted(r.lineage_id for r in lineage)
-    return "v2h_lindig_" + sha256("|".join(keys).encode("utf-8")).hexdigest()[:16]
+    return _digest_of_ids("v2h_lindig_", [r.lineage_id for r in lineage])
+
+
+def forecast_artifact_digest(artifacts: list["ForecastArtifactRecord"]) -> str:
+    return _digest_of_ids("v2h_artdig_", [a.forecast_artifact_id for a in artifacts])
 
 
 def _scan_for_outcome_keys(payload: Any, path: str = "") -> str | None:
@@ -136,6 +205,10 @@ def _scan_for_outcome_keys(payload: Any, path: str = "") -> str | None:
 def _require_aware(name: str, value: datetime | None) -> None:
     if value is not None and value.tzinfo is None:
         raise PredictionAuditError(f"{name} must be tz-aware")
+
+
+def _canon_ids(ids) -> list[str]:
+    return sorted({s for s in (ids or []) if s})
 
 
 # ── records ──
@@ -179,7 +252,66 @@ class FactorLineageRecord:
             raise PredictionAuditError(f"unknown lineage availability_status: {self.availability_status!r}")
         for n in ("event_timestamp", "available_at", "provider_timestamp", "received_at"):
             _require_aware(n, getattr(self, n))
-        object.__setattr__(self, "source_snapshot_ids", sorted({s for s in self.source_snapshot_ids if s}))
+        object.__setattr__(self, "source_snapshot_ids", _canon_ids(self.source_snapshot_ids))
+
+    def model_dump(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ForecastArtifactRecord:
+    """The forecast output actually produced at prediction time (immutable audit artifact)."""
+    prediction_id: str = ""
+    artifact_type: str = "NOT_AVAILABLE"
+    calibration_domain: str = ""
+    probability_type: str = ""
+    event_definition_id: str = ""
+    label_type: str = ""
+    value: float | None = None
+    raw_score: float | None = None
+    class_label: str = ""
+    quantile_level: float | None = None
+    lower_value: float | None = None
+    upper_value: float | None = None
+    nominal_coverage: float | None = None
+    units: str = ""
+    status: str = "OK"
+    calibration_status_at_origin: str = "UNCALIBRATED"
+    calibration_evidence_id: str = ""
+    distribution_id: str = ""
+    distribution_version: str = ""
+    generated_at: datetime | None = None
+    source_snapshot_ids: list[str] = dfield(default_factory=list)
+    schema_version: str = V2_PREDICTION_AUDIT_SCHEMA_VERSION
+    forecast_artifact_id: str = ""  # derived, excluded from payload
+    created_at: datetime | None = None  # runtime metadata, excluded from payload
+
+    def __post_init__(self):
+        if self.artifact_type not in FORECAST_ARTIFACT_TYPES:
+            raise PredictionAuditError(f"unknown artifact_type: {self.artifact_type!r}")
+        if self.calibration_status_at_origin not in CALIBRATION_STATUSES:
+            raise PredictionAuditError(
+                f"unknown calibration_status_at_origin: {self.calibration_status_at_origin!r}")
+        _require_aware("generated_at", self.generated_at)
+        # 不適用欄位保持 None/""：只在對應 type 才要求必填
+        if self.artifact_type == "QUANTILE" and self.quantile_level is None:
+            raise PredictionAuditError("QUANTILE artifact requires quantile_level")
+        if self.artifact_type == "INTERVAL":
+            if self.lower_value is None or self.upper_value is None or self.nominal_coverage is None:
+                raise PredictionAuditError("INTERVAL artifact requires lower_value/upper_value/nominal_coverage")
+            if self.lower_value > self.upper_value:
+                raise PredictionAuditError("INTERVAL lower_value > upper_value")
+        if self.artifact_type == "CLASS_SCORE" and not self.class_label and self.raw_score is None:
+            raise PredictionAuditError("CLASS_SCORE artifact requires class_label or raw_score")
+        if self.artifact_type == "EVENT_PROBABILITY" and not self.event_definition_id:
+            raise PredictionAuditError("EVENT_PROBABILITY artifact requires event_definition_id")
+        if self.artifact_type == "NOT_AVAILABLE" and (self.value is not None or self.raw_score is not None):
+            raise PredictionAuditError("NOT_AVAILABLE artifact must not carry value/raw_score")
+        for n in ("value", "raw_score", "quantile_level", "lower_value", "upper_value", "nominal_coverage"):
+            v = getattr(self, n)
+            if v is not None and not isinstance(v, (int, float)):
+                raise PredictionAuditError(f"{n} must be numeric or None")
+        object.__setattr__(self, "source_snapshot_ids", _canon_ids(self.source_snapshot_ids))
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -203,6 +335,7 @@ class PredictionRecord:
     sequence_id: str = ""
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     factor_lineage_digest: str = ""
+    forecast_artifact_digest: str = ""
     status: str = "PENDING"
     supersedes_id: str = ""
     prediction_id: str = ""       # derived, excluded from payload
@@ -213,7 +346,7 @@ class PredictionRecord:
             raise PredictionAuditError(f"unknown prediction status: {self.status!r}")
         _require_aware("forecast_origin", self.forecast_origin)
         _require_aware("feature_cutoff_timestamp", self.feature_cutoff_timestamp)
-        object.__setattr__(self, "source_snapshot_ids", sorted({s for s in self.source_snapshot_ids if s}))
+        object.__setattr__(self, "source_snapshot_ids", _canon_ids(self.source_snapshot_ids))
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -232,7 +365,8 @@ class OutcomeRecord:
     label_schema_version: str = ""
     source_snapshot_ids: list[str] = dfield(default_factory=list)
     notes: str = ""
-    outcome_id: str = ""          # derived, excluded from payload
+    forecast_artifact_id: str = ""   # optional binding to a forecast artifact
+    outcome_id: str = ""             # derived, excluded from payload
     created_at: datetime | None = None  # runtime metadata, excluded from payload
 
     def __post_init__(self):
@@ -240,7 +374,7 @@ class OutcomeRecord:
             raise PredictionAuditError(f"unknown outcome_kind: {self.outcome_kind!r}")
         for n in ("event_timestamp", "available_at"):
             _require_aware(n, getattr(self, n))
-        object.__setattr__(self, "source_snapshot_ids", sorted({s for s in self.source_snapshot_ids if s}))
+        object.__setattr__(self, "source_snapshot_ids", _canon_ids(self.source_snapshot_ids))
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -266,6 +400,24 @@ def lineage_payload(record: FactorLineageRecord) -> dict:
     d.pop("lineage_id", None)
     d.pop("prediction_id", None)
     return d
+
+
+def forecast_artifact_payload(record: ForecastArtifactRecord) -> dict:
+    d = asdict(record)
+    d.pop("forecast_artifact_id", None)
+    d.pop("prediction_id", None)   # FK, excluded so identity is not circular with the prediction id
+    d.pop("created_at", None)
+    return d
+
+
+def is_public_probability(artifact: ForecastArtifactRecord) -> bool:
+    """True 只在有真實 CalibrationEvidence 時；否則只能是內部 audit artifact。"""
+    return bool(
+        artifact.artifact_type in ("EVENT_PROBABILITY", "CLASS_SCORE")
+        and artifact.calibration_status_at_origin == "CALIBRATED"
+        and artifact.calibration_evidence_id
+        and artifact.value is not None
+    )
 
 
 def make_lineage(**kwargs) -> FactorLineageRecord:
@@ -308,12 +460,22 @@ def lineage_from_observation(obs: Any) -> FactorLineageRecord:
     )
 
 
-def make_prediction(lineage: list[FactorLineageRecord] | None = None, **kwargs) -> PredictionRecord:
-    """Build a prediction record with content-addressed id and lineage digest."""
+def make_forecast_artifact(prediction_id: str = "", **kwargs) -> ForecastArtifactRecord:
+    rec = ForecastArtifactRecord(prediction_id=prediction_id, **kwargs)
+    return replace(rec, forecast_artifact_id=forecast_artifact_identity(forecast_artifact_payload(rec)))
+
+
+def make_prediction(lineage: list[FactorLineageRecord] | None = None,
+                    forecast_artifacts: list[ForecastArtifactRecord] | None = None,
+                    **kwargs) -> PredictionRecord:
+    """Build a prediction whose identity binds factor lineage + forecast artifact digests."""
     lineage = list(lineage or [])
+    artifacts = list(forecast_artifacts or [])
     rec = PredictionRecord(**kwargs)
     if lineage:
         rec = replace(rec, factor_lineage_digest=factor_lineage_digest(lineage))
+    if artifacts:
+        rec = replace(rec, forecast_artifact_digest=forecast_artifact_digest(artifacts))
     return replace(rec, prediction_id=prediction_identity(prediction_payload(rec)))
 
 
@@ -378,26 +540,31 @@ class PredictionAuditDB:
                     PRIMARY KEY (prediction_id, lineage_id)
                 )""")
             con.execute("""
+                CREATE TABLE IF NOT EXISTS forecast_artifacts (
+                    forecast_artifact_id VARCHAR PRIMARY KEY, prediction_id VARCHAR NOT NULL,
+                    artifact_type VARCHAR, calibration_domain VARCHAR,
+                    calibration_status_at_origin VARCHAR, label_type VARCHAR,
+                    generated_at TIMESTAMP,
+                    payload_json VARCHAR NOT NULL, created_at TIMESTAMP NOT NULL
+                )""")
+            con.execute("""
                 CREATE TABLE IF NOT EXISTS outcomes (
                     outcome_id VARCHAR PRIMARY KEY, prediction_id VARCHAR NOT NULL,
                     label_type VARCHAR, outcome_kind VARCHAR, available_at TIMESTAMP,
+                    forecast_artifact_id VARCHAR,
                     payload_json VARCHAR NOT NULL, created_at TIMESTAMP NOT NULL
                 )""")
 
-    # ── append ──
-    def append_prediction(self, record: PredictionRecord,
-                          lineage: list[FactorLineageRecord] | None = None) -> str:
-        lineage = list(lineage or [])
+    # ── validation helpers ──
+    @staticmethod
+    def _validate_prediction(record: PredictionRecord, lineage: list[FactorLineageRecord],
+                             artifacts: list[ForecastArtifactRecord]) -> None:
         cutoff, origin = record.feature_cutoff_timestamp, record.forecast_origin
         if cutoff is not None and origin is not None and cutoff > origin:
             raise TemporalOrderError(f"{BLOCKED_TEMPORAL_ORDER}: feature_cutoff > forecast_origin")
-        payload = prediction_payload(record)
-        hit = _scan_for_outcome_keys(payload)
+        hit = _scan_for_outcome_keys(prediction_payload(record))
         if hit:
             raise OutcomeInPredictionError(f"{BLOCKED_OUTCOME_IN_PREDICTION}: {hit}")
-        expect_digest = factor_lineage_digest(lineage) if lineage else ""
-        if expect_digest and record.factor_lineage_digest != expect_digest:
-            raise PredictionAuditError("factor_lineage_digest does not match provided lineage")
         reps = [r.representation_id for r in lineage]
         if len(reps) != len(set(reps)):
             raise PredictionAuditError("duplicate representation_id in lineage set")
@@ -405,35 +572,130 @@ class PredictionAuditDB:
             if cutoff is not None and r.available_at is not None and r.available_at > cutoff:
                 raise FutureFactorError(
                     f"{BLOCKED_FUTURE_FACTOR}: {r.representation_id} available_at > feature_cutoff")
+        if lineage and record.factor_lineage_digest != factor_lineage_digest(lineage):
+            raise PredictionAuditError("factor_lineage_digest does not match provided lineage")
+        if artifacts and record.forecast_artifact_digest != forecast_artifact_digest(artifacts):
+            raise PredictionAuditError("forecast_artifact_digest does not match provided artifacts")
+        for a in artifacts:
+            if a.prediction_id != record.prediction_id:
+                raise ArtifactBindingError(
+                    f"{BLOCKED_ARTIFACT_PREDICTION_MISMATCH}: artifact {a.forecast_artifact_id}")
+            if a.generated_at is None or origin is None or a.generated_at > origin:
+                raise ArtifactTemporalError(
+                    f"{BLOCKED_ARTIFACT_TEMPORAL}: {a.forecast_artifact_id} generated_at > forecast_origin")
 
-        pid = record.prediction_id or prediction_identity(payload)
-        if record.prediction_id and record.prediction_id != prediction_identity(payload):
-            raise IdCollisionError(f"{BLOCKED_ID_COLLISION}: prediction_id does not match payload")
+    # ── transaction steps (separate so atomic rollback is testable) ──
+    def _insert_prediction_row(self, con, record: PredictionRecord, payload_json: str, created: datetime) -> None:
+        con.execute(
+            "INSERT INTO predictions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [record.prediction_id, record.target_family, record.instrument, record.horizon,
+             _utc_naive(record.forecast_origin), _utc_naive(record.feature_cutoff_timestamp),
+             record.build_id, record.state_snapshot_id, record.sequence_id,
+             record.status, record.supersedes_id, payload_json, _utc_naive(created)])
+
+    def _insert_lineage_rows(self, con, prediction_id: str,
+                             lineage: list[FactorLineageRecord]) -> None:
+        for r in lineage:
+            con.execute("INSERT INTO factor_lineage VALUES (?,?,?,?,?)",
+                        [prediction_id, r.lineage_id, r.representation_id, r.availability_status,
+                         canonical_json(lineage_payload(r))])
+
+    def _insert_artifact_rows(self, con, prediction_id: str,
+                              artifacts: list[ForecastArtifactRecord],
+                              created: datetime | None = None) -> None:
+        created = created or datetime.now(timezone.utc)
+        for a in artifacts:
+            con.execute("INSERT INTO forecast_artifacts VALUES (?,?,?,?,?,?,?,?,?)",
+                        [a.forecast_artifact_id, prediction_id, a.artifact_type,
+                         a.calibration_domain, a.calibration_status_at_origin, a.label_type,
+                         _utc_naive(a.generated_at), canonical_json(forecast_artifact_payload(a)),
+                         _utc_naive(a.created_at or created)])
+
+    # ── append ──
+    def append_prediction_bundle(self, prediction: PredictionRecord,
+                                 lineage: list[FactorLineageRecord] | None = None,
+                                 forecast_artifacts: list[ForecastArtifactRecord] | None = None) -> str:
+        """Validate everything first, then write prediction + lineage + artifacts in ONE transaction."""
+        lineage = list(lineage or [])
+        artifacts = list(forecast_artifacts or [])
+        self._validate_prediction(prediction, lineage, artifacts)
+
+        payload = prediction_payload(prediction)
         payload_json = canonical_json(payload)
-        created = datetime.now(timezone.utc)
+        pid = prediction.prediction_id or prediction_identity(payload)
+        if prediction.prediction_id and prediction.prediction_id != prediction_identity(payload):
+            raise IdCollisionError(f"{BLOCKED_ID_COLLISION}: prediction_id does not match payload")
+        record = prediction if prediction.prediction_id else replace(prediction, prediction_id=pid)
 
-        with self._conn() as con:
-            row = con.execute("SELECT payload_json FROM predictions WHERE prediction_id = ?",
-                              [pid]).fetchone()
-            if row is not None:
-                if row[0] == payload_json:
+        for a in artifacts:
+            if a.forecast_artifact_id and a.forecast_artifact_id != forecast_artifact_identity(
+                    forecast_artifact_payload(a)):
+                raise IdCollisionError(
+                    f"{BLOCKED_ID_COLLISION}: forecast_artifact_id {a.forecast_artifact_id}")
+
+        con = self._conn()
+        try:
+            con.execute("BEGIN TRANSACTION")
+            existing = con.execute("SELECT payload_json FROM predictions WHERE prediction_id = ?",
+                                   [pid]).fetchone()
+            if existing is not None:
+                if existing[0] == payload_json:
+                    con.execute("COMMIT")
                     return APPEND_IDEMPOTENT
-                raise IdCollisionError(f"{BLOCKED_ID_COLLISION}: prediction_id {pid} exists with different payload")
-            con.execute(
-                "INSERT INTO predictions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                [pid, record.target_family, record.instrument, record.horizon,
-                 _utc_naive(record.forecast_origin), _utc_naive(record.feature_cutoff_timestamp),
-                 record.build_id, record.state_snapshot_id, record.sequence_id,
-                 record.status, record.supersedes_id, payload_json, _utc_naive(created)])
-            for r in lineage:
-                con.execute("INSERT INTO factor_lineage VALUES (?,?,?,?,?)",
-                            [pid, r.lineage_id, r.representation_id, r.availability_status,
-                             canonical_json(lineage_payload(r))])
+                raise IdCollisionError(
+                    f"{BLOCKED_ID_COLLISION}: prediction_id {pid} exists with different payload")
+            for a in artifacts:
+                row = con.execute(
+                    "SELECT payload_json FROM forecast_artifacts WHERE forecast_artifact_id = ?",
+                    [a.forecast_artifact_id]).fetchone()
+                if row is not None and row[0] != canonical_json(forecast_artifact_payload(a)):
+                    raise IdCollisionError(
+                        f"{BLOCKED_ID_COLLISION}: forecast_artifact_id {a.forecast_artifact_id}")
+            now = datetime.now(timezone.utc)
+            self._insert_prediction_row(con, record, payload_json, now)
+            self._insert_lineage_rows(con, pid, lineage)
+            self._insert_artifact_rows(con, pid, artifacts, now)
+            con.execute("COMMIT")
+        except Exception:
+            try:
+                con.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
+        finally:
+            con.close()
         return APPEND_INSERTED
 
+    def append_prediction(self, record: PredictionRecord,
+                          lineage: list[FactorLineageRecord] | None = None) -> str:
+        """2H.1-compatible path (no forecast artifacts). Artifacts require the bundle."""
+        if record.forecast_artifact_digest:
+            raise ArtifactBindingError(
+                "use append_prediction_bundle() when forecast artifacts exist")
+        return self.append_prediction_bundle(record, lineage, [])
+
     def append_outcome(self, record: OutcomeRecord) -> str:
-        if self.get_prediction(record.prediction_id) is None:
+        pred = self.get_prediction(record.prediction_id)
+        if pred is None:
             raise UnknownPredictionError(f"{BLOCKED_UNKNOWN_PREDICTION}: {record.prediction_id}")
+        if record.forecast_artifact_id:
+            art = self.get_forecast_artifact(record.forecast_artifact_id)
+            if art is None:
+                raise ArtifactNotFoundError(
+                    f"{BLOCKED_ARTIFACT_NOT_FOUND}: {record.forecast_artifact_id}")
+            if art.prediction_id != record.prediction_id:
+                raise ArtifactBindingError(
+                    f"{BLOCKED_ARTIFACT_PREDICTION_MISMATCH}: {record.forecast_artifact_id}")
+            if (record.outcome_kind not in _ARTIFACT_OUTCOME_KINDS.get(art.artifact_type, set())
+                    or label_scope(record.label_type) != label_scope(art.label_type)):
+                raise ArtifactOutcomeMismatchError(
+                    f"{BLOCKED_ARTIFACT_OUTCOME_MISMATCH}: {art.artifact_type}/"
+                    f"{art.label_type} vs {record.outcome_kind}/{record.label_type}")
+        if (record.available_at is not None and pred.forecast_origin is not None
+                and record.available_at < pred.forecast_origin):
+            raise OutcomeTemporalError(
+                f"{BLOCKED_OUTCOME_TEMPORAL}: available_at < forecast_origin")
+
         payload = outcome_payload(record)
         oid = record.outcome_id or outcome_identity(payload)
         if record.outcome_id and record.outcome_id != outcome_identity(payload):
@@ -447,9 +709,10 @@ class PredictionAuditDB:
                 if row[0] == payload_json:
                     return APPEND_IDEMPOTENT
                 raise IdCollisionError(f"{BLOCKED_ID_COLLISION}: outcome_id {oid} exists with different payload")
-            con.execute("INSERT INTO outcomes VALUES (?,?,?,?,?,?,?)",
+            con.execute("INSERT INTO outcomes VALUES (?,?,?,?,?,?,?,?)",
                         [oid, record.prediction_id, record.label_type, record.outcome_kind,
-                         _utc_naive(record.available_at), payload_json, _utc_naive(created)])
+                         _utc_naive(record.available_at), record.forecast_artifact_id,
+                         payload_json, _utc_naive(created)])
         return APPEND_INSERTED
 
     # ── read ──
@@ -471,6 +734,30 @@ class PredictionAuditDB:
                 "ORDER BY representation_id, lineage_id", [prediction_id]).fetchall()
         return [FactorLineageRecord(**_restore(json.loads(r[1])), lineage_id=r[0], prediction_id=prediction_id)
                 for r in rows]
+
+    def get_forecast_artifacts(self, prediction_id: str) -> list[ForecastArtifactRecord]:
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT forecast_artifact_id, prediction_id, payload_json, created_at FROM forecast_artifacts "
+                "WHERE prediction_id = ? ORDER BY forecast_artifact_id", [prediction_id]).fetchall()
+        out = []
+        for aid, pid, payload_json, created in rows:
+            d = _restore(json.loads(payload_json))
+            d["created_at"] = created.replace(tzinfo=timezone.utc) if created is not None else None
+            out.append(ForecastArtifactRecord(**d, forecast_artifact_id=aid, prediction_id=pid))
+        return out
+
+    def get_forecast_artifact(self, forecast_artifact_id: str) -> ForecastArtifactRecord | None:
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT prediction_id, payload_json, created_at FROM forecast_artifacts "
+                "WHERE forecast_artifact_id = ?", [forecast_artifact_id]).fetchone()
+        if row is None:
+            return None
+        pid, payload_json, created = row
+        d = _restore(json.loads(payload_json))
+        d["created_at"] = created.replace(tzinfo=timezone.utc) if created is not None else None
+        return ForecastArtifactRecord(**d, forecast_artifact_id=forecast_artifact_id, prediction_id=pid)
 
     def get_outcomes(self, prediction_id: str) -> list[OutcomeRecord]:
         with self._conn() as con:
@@ -498,12 +785,22 @@ class PredictionAuditDB:
                 return False
             if prediction_identity(json.loads(row[0])) != prediction_id:
                 return False
+            payload = json.loads(row[0])
             for (payload_json,) in con.execute(
                     "SELECT payload_json FROM factor_lineage WHERE prediction_id = ?",
                     [prediction_id]).fetchall():
-                payload = json.loads(payload_json)
-                if lineage_identity(payload) != ("v2h_lin_" + _hash("lineage", payload)):
+                if lineage_identity(json.loads(payload_json)) != (
+                        "v2h_lin_" + _hash("lineage", json.loads(payload_json))):
                     return False
+            artifact_ids = []
+            for aid, payload_json in con.execute(
+                    "SELECT forecast_artifact_id, payload_json FROM forecast_artifacts "
+                    "WHERE prediction_id = ?", [prediction_id]).fetchall():
+                if forecast_artifact_identity(json.loads(payload_json)) != aid:
+                    return False
+                artifact_ids.append(aid)
+            if payload.get("forecast_artifact_digest") != _digest_of_ids("v2h_artdig_", artifact_ids):
+                return False
             for oid, payload_json in con.execute(
                     "SELECT outcome_id, payload_json FROM outcomes WHERE prediction_id = ?",
                     [prediction_id]).fetchall():

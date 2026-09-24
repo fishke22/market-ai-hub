@@ -24,6 +24,10 @@ from market_ai_hub.integrations.yuanta.credential_store import (
     read_profile_password,
     write_credential,
 )
+from market_ai_hub.integrations.yuanta.easwin_resolver import (
+    LEGACY_SET_MAP_DEFAULT,
+    LEGACY_UPDATE_MODE_DEFAULT,
+)
 from market_ai_hub.integrations.yuanta.futures_com import require_32bit, YuantaFuturesQuoteClient
 from market_ai_hub.integrations.yuanta.sanitizer import mask_account
 
@@ -69,6 +73,7 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=8.0)
     args = ap.parse_args()
     req_type = REQ_TYPE_SESSIONS[args.session]
+    update_mode = LEGACY_UPDATE_MODE_DEFAULT   # 官方 Python sample 預設 4-SnapshotUpd；SetMap=0
 
     if _security_precheck() != 0:
         return 1
@@ -136,9 +141,12 @@ def main() -> int:
         del password
         state = client.wait_login(timeout=45.0)
         evidence["login_status"] = getattr(state, "state", "UNKNOWN")
-        ret = client.register_quote_symbol(args.symbol, "1", req_type)  # 單一商品
-        evidence["subscription"] = {"symbol": args.symbol, "req_type": req_type, "AddMktReg_return": ret}
-        print(f"AddMktReg({args.symbol}, ReqType={req_type}) ret={ret}")
+        ret = client.register_quote_symbol(args.symbol, update_mode, req_type)  # 單一商品
+        evidence["subscription"] = {"symbol": args.symbol, "session": args.session,
+                                    "req_type": req_type, "update_mode": update_mode,
+                                    "set_map": LEGACY_SET_MAP_DEFAULT,
+                                    "AddMktReg_return": ret}
+        print(f"AddMktReg({args.symbol}, UpdateMode={update_mode}, ReqType={req_type}, SetMap=0) ret={ret}")
         events = client.pump_quote(timeout=float(args.seconds))
         reg_errors = [e for e in events if "reg_error" in e]
         quotes = [e for e in events if e.get("event") in ("OnGetMktData", "OnGetMktQuote")]
