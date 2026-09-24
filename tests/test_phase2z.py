@@ -43,7 +43,7 @@ def test_request_dedup_validation(tmp_path, monkeypatch):
     df = pd.DataFrame([{"product": "Nikkei 225 Micro Futures", "contract": "202612",
                         "settlement_price": 65100.0, "date": "20260918"}])
     atomic_write(dest / "rb20260918.parquet", df.to_parquet(index=False))
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(root))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(root))
 
     get_provider_metrics().reset()
     b.clear_caches()

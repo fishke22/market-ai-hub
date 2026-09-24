@@ -58,7 +58,7 @@ def test_tradingview_source_semantics():
 # --- no core dependency ---
 def test_tradingview_no_core_dependency(tmp_path, monkeypatch):
     # get_analysis_packet 不 import/呼叫 TradingView bridge；bridge 不可用仍成功
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(tmp_path / "data"))
     import market_ai_hub.packet.builder as b
     import pandas as pd
 

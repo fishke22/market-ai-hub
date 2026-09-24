@@ -82,7 +82,7 @@ def test_audit_packet():
 # --- data lake reuse ---
 def test_data_lake_reuse(tmp_path, monkeypatch):
     root = _tmp_settlement_root(tmp_path)
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(root))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(root))
     p = build_analysis_packet(market="osaka", save_analysis=False)
     assert p["reference_price_type"] == PRICE_TYPE_SETTLEMENT
     assert "jpx_micro_settlement" in p["data_reused"]
@@ -120,7 +120,7 @@ def test_research_center_reproducible():
 # --- archive ---
 def test_analysis_archive_auto_save(tmp_path, monkeypatch):
     root = _tmp_settlement_root(tmp_path)
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(root))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(root))
     p = build_analysis_packet(market="osaka", detail_level="normal", save_analysis=True)
     assert p["saved_to_archive"] is True and p["analysis_id"]
 
@@ -186,7 +186,7 @@ def test_model_audit_skill():
 # --- token benchmark ---
 def test_token_benchmark(tmp_path, monkeypatch):
     root = _tmp_settlement_root(tmp_path)
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(root))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(root))
     full = build_analysis_packet(market="osaka", detail_level="normal", save_analysis=False)
     bm = token_benchmark(full)
     assert bm["compact"]["mcp_calls"] == 1

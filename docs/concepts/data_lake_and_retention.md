@@ -1,7 +1,7 @@
 # Data Lake 與資料保留政策
 
 ## 目錄結構
-`data/`（可透過 env `MARKET_AI_HUB_DATA_ROOT` 搬移到其他磁碟，未來 Yuanta L2/Tick 可外移）：
+`data/`（canonical env 為 `MARKET_AI_DATA_ROOT`；舊 `MARKET_AI_HUB_DATA_ROOT` 僅保留 migration fallback。可搬移到其他磁碟，未來 Yuanta L2/Tick 可外移）：
 
 ```
 data/

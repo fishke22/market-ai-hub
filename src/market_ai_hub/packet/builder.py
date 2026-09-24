@@ -270,6 +270,67 @@ def _parse_reference_ts(raw: str, tz: str):
     return ts.tz_convert("UTC").to_pydatetime()
 
 
+_FACTOR_OBSERVATION_REPS = {
+    "OSAKA_MICRO": ["OSE_MICRO_FUTURES"],
+    "TAIWAN_INDEX": ["TX_FUTURES", "MTX_FUTURES", "TMF_FUTURES"],
+    "TAIWAN_STOCK": [],
+}
+
+
+def _factor_observation_summary(family: str, as_of: datetime) -> list[dict]:
+    """Read-only W2 view from the canonical Feature Store; never creates/migrates a DB."""
+    from market_ai_hub.feature_store.store import FeatureStore
+
+    reps = _FACTOR_OBSERVATION_REPS.get(family, [])
+    if not reps:
+        return []
+    rows = FeatureStore().latest_observations(as_of=as_of, representation_ids=reps, limit=6)
+    out: list[dict] = []
+    cutoff = pd.Timestamp(as_of)
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.tz_localize("UTC")
+    else:
+        cutoff = cutoff.tz_convert("UTC")
+    for row in rows:
+        available = row.get("available_at")
+        age = None
+        freshness = "UNKNOWN"
+        if available:
+            at = pd.Timestamp(available)
+            if at.tzinfo is None:
+                at = at.tz_localize("UTC")
+            else:
+                at = at.tz_convert("UTC")
+            age = max(0.0, (cutoff - at).total_seconds())
+            freshness = "FRESH" if age <= 60.0 else ("DELAYED" if age <= 300.0 else "STALE")
+        out.append({
+            "lineage_id": row.get("lineage_id", ""),
+            "economic_factor_id": row.get("economic_factor_id", ""),
+            "representation_id": row.get("representation_id", ""),
+            "resolved_role_at_ingest": row.get("resolved_role", ""),
+            "venue_id": row.get("venue_id", ""),
+            "session_status_at_ingest": row.get("session_status", ""),
+            "trading_date": row.get("trading_date", ""),
+            "value": row.get("value"),
+            "event_timestamp": row.get("event_timestamp"),
+            "available_at": available,
+            "timestamp_precision": row.get("timestamp_precision", "UNKNOWN"),
+            "quality_status": row.get("quality_status", "UNKNOWN"),
+            "provider": row.get("provider", ""),
+            "source_type": row.get("source_type", ""),
+            "data_grade": row.get("data_grade", ""),
+            "contract_code": row.get("contract_code", ""),
+            "contract_month": row.get("contract_month", ""),
+            "roll_status": row.get("roll_status", ""),
+            "series_semantics": row.get("series_semantics", ""),
+            "source_snapshot_ids": row.get("source_snapshot_ids", []),
+            "model_feature_gate_at_ingest": row.get("model_feature_gate_at_ingest", ""),
+            "packet_age_seconds": age,
+            "packet_freshness": freshness,
+        })
+    return out
+
+
 def _fill_target_session_truth(packet: "AnalysisPacket", family: str) -> None:
     """V2-A.2: populate packet.market_session / packet.freshness from session truth (no fake live)."""
     from datetime import datetime, timezone
@@ -576,6 +637,15 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
 
     # 2b. V2-A.2 target/reference session + freshness truth（typed；不得 fabricated live status）
     _fill_target_session_truth(packet, family)
+
+    # 2c. W2 persisted quote provenance. This is evidence/quality context only; it does not
+    # silently replace the existing target/reference price selection.
+    packet.factor_observation_summary = _t(
+        "feature_factor_observation",
+        lambda: _factor_observation_summary(family, packet.information_cutoff),
+    )
+    if packet.factor_observation_summary:
+        packet.data_reused.append("feature_store:v2_factor_observations")
 
     # 3. regime / event（family 隔離，§7；provider 失敗 → degrade，不整份分析失敗）
     try:

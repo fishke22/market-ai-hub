@@ -41,6 +41,11 @@ def normalized_ose_micro_dir() -> Path:
     return data_root() / "normalized" / "ose_micro"
 
 
+def feature_store_root() -> Path:
+    """Canonical Feature Store root：<DATA_ROOT>/feature_store。"""
+    return data_root() / "feature_store"
+
+
 def ose_micro_bars_path() -> Path:
     return normalized_ose_micro_dir() / "ose_micro_daily_bar_v1.parquet"
 
