@@ -1,19 +1,23 @@
-"""Phase 2Y-G.2 — Yuanta SPARK Futures quote_probe CLI（quote-only，單次 login，bounded）。
+"""Yuanta SPARK quote probe（quote-only，單次 login，bounded，per-profile）。
 
-用法（64-bit .venv，需證券商 API 帳號）：
+官方 SPARK API 同時支援 securities 與 futures 市場（依官方文件：SubscribeWatchlist /
+SubscribeWatchlistAll 的 LoginAcno 可為 securities 或 futures 帳號；enumMarketType TAIFEX=3 /
+CME=203 / OSE=207）。**API_SUPPORT != ACCOUNT_ENTITLEMENT**：能否訂閱仍取決於帳號權限。
+
+用法：
+  python -m market_ai_hub.integrations.yuanta.spark_futures_quote_probe --profile securities
   python -m market_ai_hub.integrations.yuanta.spark_futures_quote_probe --profile futures
 
 規則：
-- 只做一次 Login。MsgCode 0112/0102 → ABORT（不 retry）。0001/00001 → 才進行情 probe。
-- 商品：OSE Micro（MarketNo=207，StkCode = resolver 由 FunctionList 選出的有效最近 JNU 合約）
-        與一檔國內指數期貨（TAIFEX TX/MTX/TMF，同樣由 resolver 選出）。
+- 每次執行只做 **一次** Login；0112/0102 → 立即停止（不 retry / 不 brute-force）。
 - 只訂閱單一商品、每個最多 10 秒；收到 callback 即 UnSubscribe。不建長期 stream / recorder。
-- 安全：無 order / account query / position / balance；password 只 process memory。
+- 三個層次分開記錄：LOGIN_ACCEPTED / SUBSCRIPTION_ACCEPTED / LIVE_CALLBACK_RECEIVED。
+- 安全：無 order / account query / position / balance；不列印 secret。
 
-方法名稱/簽名皆取自實裝 DLL（YuantaOneAPI.YuantaSparkAPITrader）：
+方法簽名取自實裝 DLL（YuantaOneAPI.YuantaSparkAPITrader）：
+  SubscribeWatchlistAll(login_acno, List<WatchlistAll>, enumLangType)
   SubscribeWatchlist(login_acno, List<Watchlist>, enumLangType)
-  UnSubscribeWatchlist(login_acno, List<Watchlist>, enumLangType)
-  Watchlist{ MarketType enumMarketType, StockCode String, IndexFlag enumQuoteIndexType }
+  WatchlistAll{MarketType enumMarketType, StockCode String}
 """
 from __future__ import annotations
 
@@ -26,19 +30,30 @@ from datetime import datetime, timezone
 from market_ai_hub.integrations.yuanta.credential_store import (
     CredentialBackendError,
     read_profile_credential,
+    read_profile_password,
 )
 from market_ai_hub.integrations.yuanta.resolver import YuantaInstrumentResolver
 from market_ai_hub.integrations.yuanta.sanitizer import mask_account
 from market_ai_hub.integrations.yuanta.spark_runtime import MSG_SUCCESS, SparkRuntime
 
-RESULT_PATH = "YUANTA_SPARK_FUTURES_QUOTE_RESULT.json"
+RESULT_PATH = "YUANTA_SPARK_QUOTE_PROBE_RESULT.json"
 
 MAX_SUBSCRIBE_SECONDS = 10.0
 ABORT_CODES = ("0112", "0102")
 
+# classification
+LIVE_CALLBACK_VERIFIED = "LIVE_CALLBACK_VERIFIED"
+SUBSCRIPTION_ACCEPTED_NO_CALLBACK = "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
+ACCOUNT_NOT_ENTITLED = "ACCOUNT_NOT_ENTITLED"
+LOGIN_NOT_ENTITLED = "LOGIN_NOT_ENTITLED"
+SERVER_REJECTED = "SERVER_REJECTED"
+TIMEOUT = "TIMEOUT"
+ERROR = "ERROR"
+NOT_TESTED = "NOT_TESTED"
+
 # timestamp quality（不得 fabricated exchange timestamp）
-TS_SOURCE_TIME_OF_DAY = "SOURCE_TIME_OF_DAY_ONLY"   # API 提供交易所時刻但無日期
-TS_LOCAL_RECEIVE_ONLY = "LOCAL_RECEIVE_TIME_ONLY"   # 無來源時間戳
+TS_SOURCE_TIME_OF_DAY = "SOURCE_TIME_OF_DAY_ONLY"
+TS_LOCAL_RECEIVE_ONLY = "LOCAL_RECEIVE_TIME_ONLY"
 
 
 def _security_precheck() -> int:
@@ -55,7 +70,7 @@ def _is_success(code: str | None) -> bool:
 
 
 def _extract_quote(obj) -> dict | None:
-    """Sanitized quote callback extraction (real field names from installed DLL)."""
+    """Sanitized quote callback extraction (real field names from the installed DLL)."""
     try:
         code = getattr(obj, "StkCode", None)
         if code is None:
@@ -88,37 +103,58 @@ def _extract_quote(obj) -> dict | None:
 
 
 def _probe_subscription(rt: SparkRuntime, login_acno: str, market_no: int, stk_code: str,
-                        seconds: float) -> dict:
-    """單一商品短訂閱：SubscribeWatchlist → wait callbacks → UnSubscribeWatchlist。"""
-    from YuantaOneAPI import Watchlist, enumLangType, enumMarketType
+                        seconds: float, method: str) -> dict:
+    """單一商品短訂閱：Subscribe* → bounded wait → UnSubscribe*。"""
+    from System.Collections.Generic import List as NetList
+    from YuantaOneAPI import Watchlist, WatchlistAll, enumLangType, enumMarketType
 
     received: list[dict] = []
     rt.on_quote_callback = lambda intMark, strIndex, objValue: received.append(
-        {"callback_type": strIndex, "payload": _extract_quote(objValue)})
+        {"callback_type": strIndex, "int_mark": intMark, "payload": _extract_quote(objValue)})
 
-    wl = Watchlist()
-    wl.MarketType = enumMarketType(market_no)
-    wl.StockCode = stk_code
-    flag = rt.enum_quote_index_default()
-    if flag is not None:
-        try:
-            wl.IndexFlag = flag
-        except Exception:
-            pass
-    lst = [wl]
-    evidence: dict = {"market_no": market_no, "instrument_code": stk_code}
+    evidence: dict = {"market_no": market_no, "instrument": stk_code, "subscription_method": method}
     try:
-        rt._api.SubscribeWatchlist(login_acno, lst, enumLangType.UTF8)
-        evidence["subscription_called"] = True
-    except Exception as e:
+        if method == "watchlist_all":
+            item = WatchlistAll()
+            item.MarketType = enumMarketType(market_no)
+            item.StockCode = stk_code
+            lst = NetList[WatchlistAll]()
+            lst.Add(item)
+            subscribe = lambda: rt._api.SubscribeWatchlistAll(login_acno, lst, enumLangType.UTF8)
+            unsubscribe = lambda: rt._api.UnSubscribeWatchlistAll(login_acno, lst, enumLangType.UTF8)
+        else:
+            item = Watchlist()
+            item.MarketType = enumMarketType(market_no)
+            item.StockCode = stk_code
+            flag = rt.enum_quote_index_default()
+            if flag is not None:
+                try:
+                    item.IndexFlag = flag
+                except Exception:
+                    pass
+            lst = NetList[Watchlist]()
+            lst.Add(item)
+            subscribe = lambda: rt._api.SubscribeWatchlist(login_acno, lst, enumLangType.UTF8)
+            unsubscribe = lambda: rt._api.UnSubscribeWatchlist(login_acno, lst, enumLangType.UTF8)
+        try:
+            ret = subscribe()
+            evidence["method_return"] = (None if ret is None else bool(ret))
+            evidence["subscription_called"] = True
+        except Exception as e:
+            evidence["subscription_called"] = False
+            evidence["method_return"] = None
+            evidence["subscription_error"] = f"{type(e).__name__}: {str(e)[:150]}"
+            return evidence
+    except Exception as e:  # type/interop unavailable
         evidence["subscription_called"] = False
-        evidence["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+        evidence["subscription_error"] = f"{type(e).__name__}: {str(e)[:150]}"
         return evidence
+
     deadline = time.time() + seconds
     while time.time() < deadline and not any(r["payload"] for r in received):
         rt.pump(0.2)
     try:
-        rt._api.UnSubscribeWatchlist(login_acno, lst, enumLangType.UTF8)
+        unsubscribe()
         evidence["unsubscribed"] = True
     except Exception:
         evidence["unsubscribed"] = False
@@ -126,6 +162,7 @@ def _probe_subscription(rt: SparkRuntime, login_acno: str, market_no: int, stk_c
 
     quotes = [r for r in received if r["payload"]]
     evidence["callback_count"] = len(quotes)
+    evidence["callback_types"] = sorted({str(r["callback_type"]) for r in received})
     if quotes:
         q = quotes[0]
         ev = dict(q["payload"])
@@ -136,12 +173,19 @@ def _probe_subscription(rt: SparkRuntime, login_acno: str, market_no: int, stk_c
         if "source_time_of_day" not in ev:
             ev["event_timestamp"] = "UNKNOWN"
         evidence["first_callback"] = ev
+        evidence["classification"] = LIVE_CALLBACK_VERIFIED
+    elif evidence.get("subscription_called"):
+        evidence["classification"] = SUBSCRIPTION_ACCEPTED_NO_CALLBACK
+    else:
+        evidence["classification"] = ERROR
     return evidence
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="yuanta.spark_futures_quote_probe")
-    ap.add_argument("--profile", choices=["futures"], default="futures")
+    ap.add_argument("--profile", choices=["securities", "futures"], default="securities")
+    ap.add_argument("--method", choices=["watchlist_all", "watchlist"], default="watchlist_all",
+                    help="官方優先 SubscribeWatchlistAll；型別不可用時可選 SubscribeWatchlist")
     ap.add_argument("--seconds", type=float, default=MAX_SUBSCRIBE_SECONDS)
     args = ap.parse_args()
 
@@ -154,28 +198,35 @@ def main() -> int:
         print(f"UNAVAILABLE: {e}")
         return 1
     if cred is None:
-        print("no account preset in Windows Credential Manager.")
+        print(f"no {args.profile} account preset in Windows Credential Manager.")
         account = input(f"Enter {args.profile} account: ").strip()
     else:
         account = cred.username
 
     r = YuantaInstrumentResolver()
+    tfx = r.resolve("TAIFEX_TMF")
     ose = r.resolve("OSE_NIKKEI225_MICRO_FUTURES")
-    domestic = [r.resolve(name) for name in ("TAIFEX_TMF", "TAIFEX_TX", "TAIFEX_MTX")]
-    print("resolved OSE Micro :", ose.market_type, ose.spark_code, "verified=", ose.verified)
-    for d in domestic:
-        print("resolved domestic  :", d.logical_instrument, d.market_type, d.spark_code, "verified=", d.verified)
 
-    print("Account:", mask_account(account), "| Orders: DISABLED | Mode: QUOTE_ONLY")
-    password = getpass.getpass(f"Yuanta {args.profile} password: ")
+    print("Profile:", args.profile, "| Account:", mask_account(account),
+          "| Orders: DISABLED | Mode: QUOTE_ONLY | Method:", args.method)
+    print("TAIFEX target:", tfx.market_type, tfx.spark_code, "verified=", tfx.verified)
+    print("OSE target   :", ose.market_type, ose.spark_code, "verified=", ose.verified)
+
+    password = read_profile_password(args.profile)
+    if not password:
+        password = getpass.getpass(f"Yuanta {args.profile} password: ")
+        print("password source: getpass (WinCred secret not preset)")
+    else:
+        print("password source: Windows Credential Manager (normalized)")
 
     rt = SparkRuntime()
     outcome = None
     result: dict = {
-        "api_family": "SPARK_FUTURES", "mode": "QUOTE_ONLY", "orders": "DISABLED",
-        "account_masked": mask_account(account), "environment": "PROD",
-        "resolved": {"ose_micro": ose.model_dump(),
-                     "domestic": [d.model_dump() for d in domestic]},
+        "api_family": "SPARK", "mode": "QUOTE_ONLY", "orders": "DISABLED",
+        "account_profile": args.profile, "account_masked": mask_account(account),
+        "environment": "PROD", "subscription_method": args.method,
+        "levels": {"LOGIN_ACCEPTED": False, "SUBSCRIPTION_ACCEPTED": False,
+                   "LIVE_CALLBACK_RECEIVED": False},
         "login": None, "quote_probes": [],
         "verified_at": datetime.now(timezone.utc).isoformat(), "security": "PASS",
     }
@@ -184,49 +235,57 @@ def main() -> int:
         rt.open_prod()
         rt.wait_connected(timeout=15.0)
         time.sleep(1)
-        rt.login(account, password)   # bool accepted; 結果看 OnResponse
+        rt.login(account, password)   # bool accepted only; real result via OnResponse
         outcome = rt.wait_login(timeout=25.0)
     except Exception as e:
         print("LOGIN_FAILED: interop error:", type(e).__name__, str(e)[:200])
+        result["login"] = {"status": ERROR, "error": f"{type(e).__name__}: {str(e)[:150]}"}
     finally:
         del password
 
     if outcome is None or not outcome.received:
-        print("LOGIN: FAILED (no OnResponse callback within timeout)")
-        result["login"] = {"status": "LINK_FAIL_OR_TIMEOUT", "msg_code": None}
+        print("LOGIN: TIMEOUT (no OnResponse within timeout)")
+        result["login"] = result["login"] or {"status": TIMEOUT, "msg_code": None}
         rt.cleanup()
         _write_result(result)
         return 1
 
     code = outcome.msg_code
-    result["login"] = {"status": "CALLBACK_RECEIVED", "msg_code": code}
     if _is_success(code):
-        result["login"]["status"] = "SUCCESS"
-        print("LOGIN: SUCCESS | MsgCode:", code)
+        result["login"] = {"status": "LOGIN_ACCEPTED", "msg_code": code}
+        result["levels"]["LOGIN_ACCEPTED"] = True
+        print("LOGIN: ACCEPTED | MsgCode:", code)
     elif code in ABORT_CODES:
-        result["login"]["status"] = ("SPARK_FUTURES_NOT_ENTITLED" if code == "0112"
-                                     else "SPARK_ABORT_0102")
-        print("ABORT:", result["login"]["status"])
+        status = ACCOUNT_NOT_ENTITLED if code == "0112" else LOGIN_NOT_ENTITLED
+        result["login"] = {"status": status, "msg_code": code}
+        print("LOGIN:", status, "| MsgCode:", code, "(stop, no retry)")
         rt.cleanup()
         _write_result(result)
         return 1
     else:
-        result["login"]["status"] = "FAILED"
-        print("LOGIN: FAILED | MsgCode:", code)
+        result["login"] = {"status": SERVER_REJECTED, "msg_code": code}
+        print("LOGIN: SERVER_REJECTED | MsgCode:", code)
         rt.cleanup()
         _write_result(result)
         return 1
 
-    # quote probes (only after confirmed login)
+    # quote probes (only after confirmed login) — one login, bounded, no retry
     try:
-        if ose.verified:
-            result["quote_probes"].append(
-                _probe_subscription(rt, account, ose.market_type, ose.spark_code, args.seconds))
-        for d in domestic:
-            if d.verified:
-                result["quote_probes"].append(
-                    _probe_subscription(rt, account, d.market_type, d.spark_code, args.seconds))
-                break
+        for inst in (tfx, ose):
+            if not inst.verified:
+                result["quote_probes"].append({
+                    "market_no": inst.market_type, "instrument": "",
+                    "classification": NOT_TESTED, "note": "instrument unresolved"})
+                continue
+            probe = _probe_subscription(rt, account, inst.market_type, inst.spark_code,
+                                        args.seconds, args.method)
+            probe["logical"] = inst.logical_instrument
+            result["quote_probes"].append(probe)
+            if probe.get("classification") == LIVE_CALLBACK_VERIFIED:
+                result["levels"]["LIVE_CALLBACK_RECEIVED"] = True
+            if probe.get("subscription_called"):
+                result["levels"]["SUBSCRIPTION_ACCEPTED"] = True
+        result["callbacks"] = rt.callback_diagnostics()[:20]
     finally:
         rt.cleanup()
     _write_result(result)

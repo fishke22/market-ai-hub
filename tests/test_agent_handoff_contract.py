@@ -114,3 +114,50 @@ def test_legacy_quote_probe_uses_session_reqtype_and_official_update_mode():
     assert "LEGACY_SET_MAP_DEFAULT" in src
     assert "register_quote_symbol(args.symbol, update_mode, req_type)" in src
     assert not re.search(r"register_quote_symbol\(args\.symbol, \"1\"", src)
+
+
+# ── SPARK securities/futures market clarification (quote probe round) ──
+def test_handoff_states_spark_supports_securities_and_futures_markets():
+    text = HANDOFF.read_text(encoding="utf-8")
+    assert "SPARK API supports securities + futures MARKETS by official contract" in text
+    assert "API_SUPPORT != ACCOUNT_ENTITLEMENT" in text
+    assert "securities only" not in text.lower()
+    assert "account_profile" in text and "market=TAIFEX" in text and "market=OSE" in text
+
+
+def test_provider_status_spark_names_carry_account_profile_and_market():
+    from market_ai_hub.integrations.yuanta.capabilities import PROVIDER_STATUS
+
+    allowed = {
+        "LIVE_CALLBACK_VERIFIED", "SUBSCRIPTION_ACCEPTED_NO_CALLBACK", "ACCOUNT_NOT_ENTITLED",
+        "LOGIN_NOT_ENTITLED", "SERVER_REJECTED", "TIMEOUT", "ERROR", "NOT_TESTED",
+        "NOT_AVAILABLE", "NOT_AVAILABLE_UNTIL_CALLBACK", "VERIFIED",
+        "AUTH_VERIFIED_REGISTRATION_UNRESOLVED", "SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED",
+    }
+    for k, v in PROVIDER_STATUS.items():
+        assert v in allowed, (k, v)
+    assert PROVIDER_STATUS["spark_securities_taifex_quote"] == "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
+    assert PROVIDER_STATUS["spark_securities_ose_quote"] == "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
+    assert PROVIDER_STATUS["spark_futures"] == "SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED"
+    # a SPARK securities result must never read as a verified futures account/quote
+    assert not any("spark" in k and v in ("VERIFIED", "LIVE_CALLBACK_VERIFIED")
+                   for k, v in PROVIDER_STATUS.items())
+
+
+def test_spark_probe_supports_both_profiles_and_three_levels():
+    src = (ROOT / "src" / "market_ai_hub" / "integrations" / "yuanta"
+           / "spark_futures_quote_probe.py").read_text(encoding="utf-8")
+    assert 'choices=["securities", "futures"]' in src
+    for level in ("LOGIN_ACCEPTED", "SUBSCRIPTION_ACCEPTED", "LIVE_CALLBACK_RECEIVED"):
+        assert level in src, level
+    assert "read_profile_password" in src and "read_profile_credential" in src
+    assert "OrderApiExposureGuard" in src
+    assert "SubscribeWatchlistAll" in src and "SubscribeWatchlist" in src
+    assert "UnSubscribe" in src
+    # quote-only probe: no order / balance / position surface
+    for forbidden in ("InsertOrder", "CancelOrder", "ReduceOrder", "ModifyOrder",
+                      "PlaceOrder", "QueryBalance", "QueryPosition", "GetPosition",
+                      "LoginAcnoTrade"):
+        assert forbidden not in src, forbidden
+    # secret must never be printed
+    assert "print(password" not in src and "print(f\"password" not in src

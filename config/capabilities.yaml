@@ -51,9 +51,24 @@ yuanta_securities_auth:
   api_family: SPARK
 
 yuanta_spark_futures:
-  status: EXTERNAL_ENTITLEMENT_RETEST_REQUIRED
+  status: SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED
   api_family: SPARK
   note: "historical server result = 0112（PERMISSION_UNAVAILABLE）；需重新收到 server callback 才可改判"
+
+yuanta_spark_securities_taifex_quote:
+  status: SUBSCRIPTION_ACCEPTED_NO_CALLBACK
+  api_family: SPARK
+  account_profile: SECURITIES
+  market: TAIFEX
+  note: "securities login ACCEPTED MsgCode=0001；SubscribeWatchlist/SubscribeWatchlistAll 接受，10s 內無 callback；市場權益未證明"
+
+yuanta_spark_securities_ose_quote:
+  status: SUBSCRIPTION_ACCEPTED_NO_CALLBACK
+  api_family: SPARK
+  account_profile: SECURITIES
+  market: OSE
+  market_no: 207
+  note: "securities login ACCEPTED MsgCode=0001；JNU2612 訂閱接受，10s 內無 callback；市場權益未證明"
 
 yuanta_futures_auth:
   status: VERIFIED
