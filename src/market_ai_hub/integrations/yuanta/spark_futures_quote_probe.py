@@ -102,6 +102,15 @@ def _extract_quote(obj) -> dict | None:
         return None
 
 
+def _matches_requested_quote(payload: dict | None, market_no: int, stk_code: str) -> bool:
+    """Only an exact market+instrument callback proves the requested subscription."""
+    return bool(
+        payload
+        and str(payload.get("instrument_code", "")) == stk_code
+        and payload.get("market_no") == market_no
+    )
+
+
 def _probe_subscription(rt: SparkRuntime, login_acno: str, market_no: int, stk_code: str,
                         seconds: float, method: str) -> dict:
     """單一商品短訂閱：Subscribe* → bounded wait → UnSubscribe*。"""
@@ -150,8 +159,11 @@ def _probe_subscription(rt: SparkRuntime, login_acno: str, market_no: int, stk_c
         evidence["subscription_error"] = f"{type(e).__name__}: {str(e)[:150]}"
         return evidence
 
+    def _has_matching_quote() -> bool:
+        return any(_matches_requested_quote(r["payload"], market_no, stk_code) for r in received)
+
     deadline = time.time() + seconds
-    while time.time() < deadline and not any(r["payload"] for r in received):
+    while time.time() < deadline and not _has_matching_quote():
         rt.pump(0.2)
     try:
         unsubscribe()
@@ -160,8 +172,10 @@ def _probe_subscription(rt: SparkRuntime, login_acno: str, market_no: int, stk_c
         evidence["unsubscribed"] = False
     rt.on_quote_callback = None
 
-    quotes = [r for r in received if r["payload"]]
+    all_quotes = [r for r in received if r["payload"]]
+    quotes = [r for r in all_quotes if _matches_requested_quote(r["payload"], market_no, stk_code)]
     evidence["callback_count"] = len(quotes)
+    evidence["unmatched_callback_count"] = len(all_quotes) - len(quotes)
     evidence["callback_types"] = sorted({str(r["callback_type"]) for r in received})
     if quotes:
         q = quotes[0]

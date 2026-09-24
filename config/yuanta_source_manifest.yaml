@@ -1,0 +1,115 @@
+version: "2026-09-24"
+purpose: "AI-readable authoritative source manifest for rebuilding Yuanta quote integration."
+security:
+  never_commit:
+    - full_account
+    - identity_document_number
+    - password
+    - pfx_password
+    - certificate_private_key
+    - data/live/
+  credential_backend: WINDOWS_CREDENTIAL_MANAGER_ONLY
+
+official_sources:
+  spark_landing:
+    url: "https://www.yuanta.com.tw/file-repository/content/API/page/index.html"
+    role: "SPARK official landing/download/permission FAQ"
+  spark_docs:
+    url: "https://www.yuanta.com.tw/file-repository/content/sparkapi_docs/index.html"
+    role: "SPARK official API contract"
+  spark_python_windows_docs:
+    url: "https://www.yuanta.com.tw/file-repository/content/sparkapi_docs/2.Python%E8%A8%AD%E5%AE%9A/Windows%E3%80%81Mac%E7%B3%BB%E7%B5%B1/index.html"
+    role: "Python/.NET8/pythonnet/certificate setup"
+  spark_login_docs:
+    url: "https://www.yuanta.com.tw/file-repository/content/sparkapi_docs/%E5%9F%BA%E7%A4%8E/%E7%99%BB%E5%85%A5/index.html"
+    role: "Login account format and MsgCode"
+  spark_quote_docs:
+    url: "https://www.yuanta.com.tw/file-repository/content/sparkapi_docs/%E8%A1%8C%E6%83%85/%E8%A1%8C%E6%83%85%E5%A0%B1%E5%83%B9%E8%A1%A8%E8%A8%82%E9%96%B1/index.html"
+    role: "SubscribeWatchlistAll contract"
+  spark_market_enum_docs:
+    url: "https://www.yuanta.com.tw/file-repository/content/sparkapi_docs/%E5%9F%BA%E7%A4%8E/%E5%88%97%E8%88%89%E7%89%A9%E4%BB%B6/index.html"
+    role: "enumMarketType/enumQuoteType"
+  spark_usage_limits:
+    url: "https://www.yuanta.com.tw/file-repository/content/0918_TEST/1.%E5%89%8D%E8%A8%80/3.%E4%BD%BF%E7%94%A8%E9%99%90%E5%88%B6%E8%AA%AA%E6%98%8E/index.html"
+    role: "subscription/login/rate limits"
+  spark_history:
+    url: "https://ys.yuanta.com.tw/quartet/api/YuantaApiHis.pdf"
+    role: "official component/version history"
+  spark_python_win_x64:
+    url: "https://ys.yuanta.com.tw/quartet/api/YuantaSparkAPI_win-x64_Python.zip"
+    role: "official current Windows x64 Python component/sample package"
+  spark_python_win_x86:
+    url: "https://ys.yuanta.com.tw/quartet/api/YuantaSparkAPI_win-x86_Python.zip"
+    role: "official current Windows x86 Python component/sample package"
+  spark_csharp:
+    url: "https://ys.yuanta.com.tw/quartet/api/YuantaSparkAPI_CSharp.zip"
+    role: "official C# component/sample package"
+  spark_uat_certificate:
+    url: "https://ys.yuanta.com.tw/quartet/api/B110000005_TWCA.zip"
+    role: "official UAT test certificate package; test certificate password is documented by Yuanta"
+  futures_api_download_page:
+    url: "https://www.yuantafutures.com.tw/ytf/easywin/api/download.html"
+    role: "authoritative futures trading/quote API download page"
+  futures_quote_component:
+    url: "https://www.yuantafutures.com.tw/ytf/easywin/download/行情API元件及說明文件.zip"
+    role: "official Legacy Futures Quote component/manual package"
+  futures_trading_component:
+    url: "https://www.yuantafutures.com.tw/ytf/easywin/download/交易API元件及說明文件.zip"
+    role: "official Futures Trading API component/manual package; not loaded by quote runtime"
+  futures_quote_python_sample:
+    url: "https://www.yuantafutures.com.tw/ytf/easywin/download/YuantaQuoteAPI_py.zip"
+    role: "official Legacy Futures Quote Python sample"
+  futures_quote_csharp_sample:
+    url: "https://www.yuantafutures.com.tw/ytf/easywin/download/API_Yuanta2.1.2.7.zip"
+    role: "official Legacy Futures Quote C# sample"
+  futures_trading_python_sample:
+    url: "https://www.yuantafutures.com.tw/ytf/easywin/download/YuantaOrdAPI_py.zip"
+    role: "official Futures Trading API Python sample; not loaded by quote runtime"
+  futures_certificate_center:
+    url: "https://www.yuantafutures.com.tw/certificate"
+    role: "official production certificate center"
+  futures_certificate_tutorial:
+    url: "https://www.yuantafutures.com.tw/newcomer_03"
+    role: "official certificate request/install/export tutorial"
+  futures_contact:
+    url: "https://www.yuantafutures.com.tw/ContectUs"
+    role: "official support contact"
+
+secondary_references:
+  itrader_preparation:
+    url: "https://itrader.com.tw/%E5%85%83%E5%A4%A7%E6%9C%9F%E8%B2%A8api%E9%96%8B%E7%99%BC%E5%89%8D%E6%BA%96%E5%82%99/"
+    trust: "SECONDARY"
+  ithome_legacy_quote_article:
+    url: "https://ithelp.ithome.com.tw/articles/10222522"
+    trust: "SECONDARY"
+
+local_sources:
+  spark_vendor_root: "vendor/yuanta_spark/2.2026.0918.0/YuantaSparkAPI_win-x64_Python"
+  spark_function_list: "vendor/yuanta_spark/2.2026.0918.0/YuantaSparkAPI_win-x64_Python/IO_Doc/FunctionList.xlsx"
+  operator_original_spark_folder: "C:/Users/fishk/Documents/元大憑證/YuantaSparkAPI_win-x64_Python"
+  operator_original_futures_folder: "C:/Users/fishk/Documents/元大期貨API"
+  legacy_taifex_table: "C:/Yuanta/yeswin/AGENT/YSTrader/Data/List/M.TFX.TXT"
+  legacy_overseas_table: "C:/Yuanta/yeswin/AGENT/YSTrader/Data/List/M.FFX.TXT"
+
+product_code_authority:
+  spark:
+    source: "FunctionList.xlsx"
+    quote_code_field: "code/StkCode"
+    order_code_field: "order_code"
+    rule: "quote code and order code are distinct identities; never substitute one for the other"
+  legacy_quote:
+    taifex_source: "M.TFX.TXT"
+    overseas_reference: "M.FFX.TXT"
+    rule: "AddMktReg uses canonical base quote symbol; T/T+1 selected by ReqType"
+
+market_numbers:
+  TWSE: 1
+  TWOTC: 2
+  TAIFEX: 3
+  SGX: 202
+  CME: 203
+  CBOT: 204
+  OSE: 207
+  HKFE: 208
+  NYBOT: 209
+  CBOE: 215

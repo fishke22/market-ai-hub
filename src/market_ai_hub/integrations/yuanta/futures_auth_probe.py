@@ -96,13 +96,14 @@ def main() -> int:
     print("Mode:       QUOTE_ONLY")
     print("=" * 40)
 
-    # 密碼來源：Windows Credential Manager futures secret（normalized）→ 無則 getpass fallback
-    password = read_profile_password("futures")
+    # 2026-09-24 PROD measured canonical path：身分登入ID + securities 電子密碼。
+    # Legacy Quote 與 SPARK/交易 API 是不同 API family；此處不得拿期貨帳號當 SetMktLogon user。
+    password = read_profile_password("securities")
     if not password:
         password = getpass.getpass("Password: ")
-        print("password source: getpass (WinCred futures secret not preset)")
+        print("password source: getpass (WinCred securities secret not preset)")
     else:
-        print("password source: Windows Credential Manager (futures secret, normalized)")
+        print("password source: Windows Credential Manager (securities secret, normalized)")
 
     client = YuantaFuturesQuoteClient()
     state = None

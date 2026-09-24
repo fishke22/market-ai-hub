@@ -1,0 +1,148 @@
+version: "2026-09-24"
+enabled: true
+provider: SPARK_SECURITIES_PROFILE
+mode: QUOTE_ONLY_PERSISTENT
+recording:
+  raw_jsonl: false
+  normalized_parquet: true
+  parquet_flush_seconds: 30
+  latest_snapshot_seconds: 1
+  max_dynamic_subscriptions: 200
+  keep_connection_until_process_exit: true
+  logout_after_agent_use: false
+  secret_backend: WINDOWS_CREDENTIAL_MANAGER_ONLY
+storage:
+  root: live/yuanta
+  latest_file: latest.json
+  status_file: status.json
+dynamic_requests:
+  enabled: true
+  inbox: control/inbox
+  processed: control/processed
+  failed: control/failed
+  allowed_markets: [1, 2, 3, 202, 203, 204, 207, 209, 215]
+subscriptions:
+  - key: taifex_tmf
+    factor: TW_INDEX
+    representation: TMF_FUTURES
+    market_no: 3
+    order_root: FITM
+    code_prefix: TMF
+    session_variant: BOTH
+    contracts: 2
+  - key: ose_micro
+    factor: JP_EQUITY
+    representation: OSE_MICRO_FUTURES
+    market_no: 207
+    order_root: JNU
+    code_prefix: JNU
+    session_variant: BOTH
+    contracts: 2
+  - key: cme_nq
+    factor: US_TECH_RISK
+    representation: NQ_FUTURES
+    market_no: 203
+    order_root: NQ
+    code_prefix: NQ_
+    contracts: 2
+  - key: cme_mnq
+    factor: US_TECH_RISK
+    representation: MNQ_FUTURES
+    market_no: 203
+    order_root: MNQ
+    code_prefix: MNQ
+    contracts: 2
+  - key: cme_es
+    factor: US_BROAD_RISK
+    representation: ES_FUTURES
+    market_no: 203
+    order_root: ES
+    code_prefix: ES_
+    contracts: 2
+  - key: cboe_vx
+    factor: US_VOLATILITY
+    representation: VX_FUTURES
+    market_no: 215
+    order_root: VX
+    code_prefix: VX
+    contracts: 2
+  - key: cme_jpy
+    factor: JPY_FX
+    representation: JPY_FUTURES
+    market_no: 203
+    order_root: JY
+    code_prefix: JY_
+    contracts: 2
+  - key: cbot_us5y
+    factor: US_RATES
+    representation: US5Y_FUTURES
+    market_no: 204
+    order_root: FV
+    code_prefix: ZF
+    contracts: 2
+  - key: cbot_us10y
+    factor: US_RATES
+    representation: US10Y_FUTURES
+    market_no: 204
+    order_root: TY
+    code_prefix: ZN
+    contracts: 2
+  - key: cme_gold
+    factor: GOLD
+    representation: GOLD_FUTURES
+    market_no: 203
+    order_root: GC
+    code_prefix: GC
+    contracts: 2
+  - key: cme_wti
+    factor: WTI_OIL
+    representation: WTI_FUTURES
+    market_no: 203
+    order_root: CL
+    code_prefix: CL
+    contracts: 2
+  - key: nybot_dxy
+    factor: USD_BROAD
+    representation: DXY_FUTURES
+    market_no: 209
+    order_root: DX
+    code_prefix: DOLINDX
+    contracts: 2
+
+daytime_context:
+  - key: taiex_cash
+    factor: TW_INDEX
+    representation: TAIEX_CASH
+    market_no: 1
+    symbol: IX0001
+    session_only: XTAI
+  - key: tsmc
+    factor: TW_EQUITY_CONTEXT
+    representation: TSMC_CASH
+    market_no: 1
+    symbol: "2330"
+    session_only: XTAI
+  - key: taifex_tx
+    factor: TW_INDEX
+    representation: TX_FUTURES
+    market_no: 3
+    order_root: FITX
+    code_prefix: TXF
+    session_variant: BOTH
+    contracts: 2
+  - key: taifex_mtx
+    factor: TW_INDEX
+    representation: MTX_FUTURES
+    market_no: 3
+    order_root: FIMTX
+    code_prefix: MXF
+    session_variant: BOTH
+    contracts: 2
+  - key: taifex_unf
+    factor: US_TECH_RISK
+    representation: TAIFEX_UNF
+    market_no: 3
+    order_root: FIUN
+    code_prefix: UNF
+    session_variant: BOTH
+    contracts: 2

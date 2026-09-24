@@ -56,21 +56,23 @@ def test_normalize_credential_secret_never_mutates_input():
 
 
 # ── login wiring: user / password sources ──
-def test_legacy_auth_probe_uses_login_id_and_futures_secret():
+def test_legacy_auth_probe_uses_login_id_and_securities_secret():
     from market_ai_hub.integrations.yuanta import futures_auth_probe
 
     src = inspect.getsource(futures_auth_probe)
     assert 'read_profile_credential("legacy_login_id")' in src       # user = legacy login ID
-    assert 'read_profile_password("futures")' in src                 # password = futures secret
+    assert 'read_profile_password("securities")' in src              # measured canonical password source
+    assert 'read_profile_password("futures")' not in src
     assert 'read_profile_credential("futures")' not in src
 
 
-def test_legacy_quote_probe_uses_login_id_and_futures_secret():
+def test_legacy_quote_probe_uses_login_id_and_securities_secret():
     from market_ai_hub.integrations.yuanta import futures_quote_probe
 
     src = inspect.getsource(futures_quote_probe)
     assert 'read_profile_credential("legacy_login_id")' in src
-    assert 'read_profile_password("futures")' in src
+    assert 'read_profile_password("securities")' in src
+    assert 'read_profile_password("futures")' not in src
     assert 'read_profile_credential("futures")' not in src
 
 
@@ -191,11 +193,10 @@ def test_spark_resolver_unchanged_by_legacy_resolver():
 # ── machine-readable provider status ──
 def test_provider_status_machine_readable():
     assert PROVIDER_STATUS["legacy_futures_auth"] == "VERIFIED"
-    assert PROVIDER_STATUS["legacy_domestic_quote"] == "AUTH_VERIFIED_REGISTRATION_UNRESOLVED"
-    # SPARK securities login accepted (0001); TAIFEX/OSE subscriptions accepted, no callback.
-    assert PROVIDER_STATUS["spark_securities_taifex_quote"] == "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
-    assert PROVIDER_STATUS["spark_securities_ose_quote"] == "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
+    assert PROVIDER_STATUS["legacy_domestic_quote"] == "LIVE_CALLBACK_VERIFIED"
+    assert PROVIDER_STATUS["spark_securities_taifex_quote"] == "LIVE_CALLBACK_VERIFIED"
+    assert PROVIDER_STATUS["spark_securities_ose_quote"] == "LIVE_CALLBACK_VERIFIED"
     # futures-profile SPARK login measured 0112 -> entitlement blocked, no retry.
     assert PROVIDER_STATUS["spark_futures"] == "SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED"
-    assert PROVIDER_STATUS["ose_micro_live"] == "NOT_AVAILABLE"
-    assert PROVIDER_STATUS["taifex_live"] == "NOT_AVAILABLE_UNTIL_CALLBACK"
+    assert PROVIDER_STATUS["ose_micro_live"] == "LIVE_CALLBACK_VERIFIED_SPARK_SECURITIES"
+    assert PROVIDER_STATUS["taifex_live"] == "LIVE_CALLBACK_VERIFIED_SPARK_AND_LEGACY"

@@ -34,5 +34,10 @@ Write-Host "=== read next ==="
   "docs/development/AGENT_HANDOFF.md",
   "docs/development/project-status.md",
   "docs/architecture/v2-prediction-audit-contract.md",
-  "docs/architecture/v2-session-factor-routing-contract.md"
+  "docs/architecture/v2-session-factor-routing-contract.md",
+  "docs/integrations/yuanta/YUANTA_LIVE_MULTIFACTOR_GUIDE_ZH_TW.md",
+  "docs/integrations/yuanta/YUANTA_FROM_SCRATCH_SETUP_ZH_TW.md",
+  "docs/integrations/yuanta/YUANTA_PRODUCT_CODE_AND_SESSION_RULES_ZH_TW.md",
+  "config/yuanta_source_manifest.yaml",
+  "config/yuanta_live_factor_matrix.yaml"
 ) | ForEach-Object { Show "read" $_ }
