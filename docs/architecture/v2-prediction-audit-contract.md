@@ -1,6 +1,6 @@
 # V2 Prediction Audit Contract
 
-- **Schema**: `V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.2"`
+- **Schema**: `V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"`
   (module `src/market_ai_hub/research/v2/prediction_audit.py`)
 - **Store**: `data/audit/prediction_audit.duckdb` — **LOCAL_ONLY** (no remote, no sync).
 - Independent of `2A.2` / `2B.1` / `2C.2` / `2D.4` / `2E.3` / `2F.3` / `2G.2` / `3A.2.3`.
@@ -48,9 +48,28 @@ be type/scope compatible: `TOUCH` probability cannot pair with a `TERMINAL` outc
 `forecast_artifact <-> outcome` evaluation pairs.
 
 ### Temporal gates (added to all 2H.1 gates)
-`generated_at <= forecast_origin` (`BLOCKED_ARTIFACT_TEMPORAL`) and
-`outcome available_at >= forecast_origin` (`BLOCKED_OUTCOME_TEMPORAL`); future artifacts are refused.
+`generated_at <= forecast_origin` (`BLOCKED_ARTIFACT_TEMPORAL`) and the legacy floor
+`outcome available_at >= forecast_origin` (`BLOCKED_OUTCOME_TEMPORAL`). For sealed 2H.3 label windows,
+`outcome available_at >= label_window_end` (`BLOCKED_OUTCOME_IMMATURE`) and
+`target_period == label_window_id` (`BLOCKED_OUTCOME_SCOPE`) are additionally mandatory.
 
+
+## 2H.3 / W3.1 addition — sealed outcome maturity
+
+2H.3 keeps the 2H.2 artifact contract and adds immutable prediction-time governance fields:
+`sample_origin ∈ {FORWARD_PRECOMMITTED, RETROSPECTIVE_REPLAY, UNKNOWN}`,
+`label_window_id`, `label_window_start`, and `label_window_end`. These fields are part of the
+prediction payload and therefore change `prediction_id`; they cannot be attached after results are known.
+
+When a prediction seals a label window, `append_outcome()` requires
+`outcome.available_at >= label_window_end` and `outcome.target_period == label_window_id`.
+A result that merely appears after `forecast_origin` is not enough. Existing 2H.2-style records remain
+readable with the default `sample_origin=UNKNOWN` / no sealed window, but W3.1 governed evaluation
+excludes them from governed forward/calibration evidence.
+
+The default audit DB path follows the canonical `MARKET_AI_DATA_ROOT` resolver. Identical forecast
+artifact identities cannot silently bind to two different predictions; the second binding is a typed
+`BLOCKED_ARTIFACT_PREDICTION_MISMATCH`, not a raw database constraint failure.
 
 ## Purpose
 
@@ -74,7 +93,7 @@ prediction / outcome / lineage payloads hash in separate namespaces
 ## Prediction record
 
 `prediction_id` (content-addressed `v2h_pred_…`), target identity/role/calendar/frequency/horizon,
-`forecast_origin`, `feature_cutoff_timestamp`, `build_id`, `model`, `model_version`,
+`sample_origin`, `label_window_id/start/end`, `forecast_origin`, `feature_cutoff_timestamp`, `build_id`, `model`, `model_version`,
 `v2_schema_versions` (assembled from the live modules via `v2_schema_versions()`), `state_snapshot_id`,
 `sequence_id`, `source_snapshot_ids`, `factor_lineage_digest`, `status ∈ {PENDING, SUPERSEDED, VOID}`,
 `supersedes_id`, plus DB-side `created_at`. `prediction_id`/`created_at` are excluded from the payload.

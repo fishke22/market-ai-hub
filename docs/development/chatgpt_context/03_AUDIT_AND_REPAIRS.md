@@ -68,12 +68,22 @@
 - W2 offline engineering path 標 `W2_OFFLINE_CONTRACT_PASS`，但 live recorder adoption、bar aggregation、DATA READY 仍未成立。
 - regression：117 passed/1 deselected；76 passed/1 deselected；146 passed；default 1735 passed/23 deselected/132 warnings，141.75s，exit 0。
 
+## 2026-09-25 W3.1 outcome / evaluation governance
+
+- 實作 commit：`95289de6722c1477c5183e172384a3fd196050fd`；runtime build_id `98fe354dcc4fb275`。
+- Prediction Audit 升為 2H.3；`sample_origin`、`label_window_id/start/end` 可在 prediction time 綁入 identity。有 sealed window 時，outcome 未到 `label_window_end` 或 `target_period` 不符會直接拒絕。
+- 新 W3.1 governance 要求 timezone-aware `evaluation_as_of`，以及 target/instrument/horizon/model/model-version/artifact/label/sample-origin/event 的 homogeneous scope。`FORWARD_PRECOMMITTED` 與 `RETROSPECTIVE_REPLAY` 不混用，duplicate logical sample / superseded selection fail closed。
+- W3.1 通過後才呼叫既有 2I.1 metrics；沒有改 Brier/log-loss/reliability 等公式，也沒有 calibration fitting。readiness 保持 `CALIBRATED=false`。
+- audit DB default path 改走 canonical `MARKET_AI_DATA_ROOT`；相同 artifact identity 跨 prediction 綁定改為 typed reject，不讓 raw DuckDB constraint 冒出。
+- 驗證：focused 85 passed；broader 236 passed/1 deselected；audit path/build 74 passed；final default 1749 passed/23 deselected/132 warnings，172.00s，exit 0；changed implementation/test secret scan 0 hits；diff check PASS。
+- 上述 W3 測試使用 synthetic temporary DB，只算 ENGINE/GOVERNANCE PASS；真實 forward predictive evidence 仍未建立。
+
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
 2. 自動 reconnect、授權拒絕後生命週期、session/contract 自動 roll、durable spool/WAL 尚未實作。新 status 保守標 NOT_CONTINUOUSLY_VERIFIED、MANUAL_SINGLE_OWNER、BUFFERED_NOT_ZERO_LOSS；跨 UTC 日提示 CONTRACT_REVALIDATION_REQUIRED。這些是下一工作包，不能把 flags 當已實現。
 3. recorder→V2-A.2→V2-H→Feature Store→packet→model-input boundary 已完成離線契約；但 broker TICK 仍不相容現有 1d models，沒有 validated bar aggregation，所以 DATA READY / broker-driven inference 仍不成立。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。
-4. Outcome horizon maturity / evaluation_as_of / homogeneous model-version-event scope 的端到端契約仍需 W3 補足。2I.1 描述性 pooled metrics 不可當 production calibration；公開 audit helper 已關閉，維持 fitting NOT STARTED。
+4. Outcome horizon maturity / evaluation_as_of / homogeneous model-version-event scope 的 W3.1 工程契約已補足；**但真實 precommitted forward predictions/outcomes 尚未自然累積成證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
 5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。ENGINE PASS ≠ CALIBRATED ≠ EDGE。
 6. 新 Windows、重建 venv、WinCred/COM/合法 SDK/模型權重重新配置與恢復演練仍需 W7；不能整包複製就保證即用。
 
@@ -83,4 +93,4 @@
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W2 離線契約已關閉；優先進 W3：outcome horizon maturity、evaluation_as_of、homogeneous model/version/event scope uniqueness。若使用者另提供維護窗口，再按資料尾端/回復路徑/單一 owner 核對後受控交接舊 recorder。W3 必須在 calibration fitting 之前。長期 Price/Probability Map 設計見 02_ROADMAP.md。
+下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W2 離線契約與 W3.1 governance engine 已關閉；下一個無需 broker 維護窗口的工作是把最小 `FORWARD_PRECOMMITTED` prediction/outcome cycle 接到 2H.3/W3.1，開始累積真實可稽核樣本。若使用者另提供維護窗口，可先受控交接舊 recorder。W4 calibration fitting 只能在真實成熟樣本足夠後啟動。長期 Price/Probability Map 設計見 02_ROADMAP.md。

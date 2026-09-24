@@ -2,15 +2,15 @@
 
 - Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
 - Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
-- build_id：**bed003b51f6d1f8b**（W2 gated model-input contract；fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
+- build_id：**98fe354dcc4fb275**（W3.1 outcome/evaluation governance；fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
 - Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets; see Yuanta guide. This is historical capability evidence. Current live recorder remains **RUNTIME_ADOPTION_PENDING** because its status/latest files still expose the old schema; offline W2 reader PASS is not live deployment.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
-- V2-H：**FORECAST_ARTIFACT_PASS**
+- V2-H：**2H.3 OUTCOME_MATURITY_PASS**；W3.1：**OUTCOME_EVALUATION_GOVERNANCE_PASS**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
@@ -58,6 +58,16 @@ Automatic reconnect/roll, durable crash spool, validated TICK→daily aggregatio
 - Current broker features are `TICK`, while Chronos/TimesFM/classifiers are `1d`; Osaka direct readiness therefore reports `INCOMPATIBLE_FREQUENCY` rather than fake resampling. Taiwan index is checked per futures representation; Taiwan stock has no broker direct-target model-input mapping.
 - Offline W2 engineering path = **W2_OFFLINE_CONTRACT_PASS**. This is not DATA READY: live recorder adoption is pending and there is no validated TICK→daily aggregation for the current daily models.
 - Validation: focused `117 passed, 1 deselected`; packet regression `76 passed, 1 deselected`; V2 regression `146 passed`; final default suite `1735 passed, 23 deselected, 132 warnings` in 141.75s, exit 0. Changed-file secret scan 0 hits; `git diff --check` PASS.
+
+## 2026-09-25 W3.1 outcome / evaluation governance
+
+- Implementation commit: `95289de6722c1477c5183e172384a3fd196050fd`; build_id `98fe354dcc4fb275`.
+- Prediction Audit advances to 2H.3. New predictions can seal `sample_origin`, `label_window_id`, `label_window_start`, and `label_window_end` into immutable identity. For a sealed window, outcomes before horizon maturity or with a mismatched target period are rejected at append time.
+- New W3.1 governed evaluation requires timezone-aware `evaluation_as_of` and an exact target/instrument/horizon/model/model-version/artifact/label/sample-origin/event scope. Forward-precommitted and retrospective replay samples cannot mix; duplicate logical samples and selected superseded samples fail closed.
+- W3.1 exposes coverage/missing-outcome/event/missing-day/overlapping-horizon metadata and only then delegates metrics to the unchanged 2I.1 engine. `READY_FOR_EVALUATION != CALIBRATED`; fitting remains NOT_STARTED.
+- Default prediction-audit DB now follows canonical `MARKET_AI_DATA_ROOT`. Cross-prediction reuse of the same artifact identity is a typed binding rejection rather than a raw DuckDB constraint error.
+- Validation: W3/V2-H/V2-I focused `85 passed`; W3 + PPM/packet broader `236 passed, 1 deselected`; final code/test default suite `1749 passed, 23 deselected, 132 warnings` in 172.00s, exit 0. Changed implementation/test secret scan: 0 hits; `git diff --check` PASS.
+- Evidence boundary: the new W3 regression samples are synthetic temporary DB records and are **not** market predictive evidence. Real precommitted forward sample accumulation is still pending.
 
 ## Phase 2 全歷程 Gate
 

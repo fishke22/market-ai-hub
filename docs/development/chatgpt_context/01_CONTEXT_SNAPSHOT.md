@@ -10,15 +10,17 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-25 W2 受限工作包交接：
+2026-09-25 W3.1 治理工作包交接：
 
-W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。W2 reader/replay commit `825c19e7c67922eb7779d768ccd8b4207aae98cf`；Feature Store / packet provenance commit `5fe8906bd1237f7f89cd96dbbfa9383b8763281f`；model-input contract commit `9a11ce309ef5159545cb64e4ed8fa81ca0bbacfd`。工作分支仍為 `codex/quote-hub-correctness`，PR #55 仍 OPEN、main 仍以 `eb9202a` 為基準。runtime build_id = `bed003b51f6d1f8b`。本快照後續純文件 commit/remote SHA 以 handoff 與 PR 為準。
+W1/W2 已完成的修補與離線資料鏈不重做。W3.1 implementation commit 為 `95289de6722c1477c5183e172384a3fd196050fd`；工作分支仍為 `codex/quote-hub-correctness`。runtime build_id = `98fe354dcc4fb275`。PR/remote/CI 的最終發布狀態以 handoff 與本次回報為準。
 
-本輪沒有重做 W1。新增 `quote_reader.py` 將 Yuanta persisted quote 的 trade/bid/ask 各自按 `field_provenance` 接到既有 V2-A.2 `FactorRepresentationObservation`，並驗證 V2-H lineage/source IDs；錯 market/contract/SPARK 日夜盤、亂序、缺欄位時間、partial file、persistence error/overflow、unknown/unsupported representation 皆 fail closed。沒有 fitting、沒有新模型、沒有交易。
+V2-H 已升到 2H.3：prediction identity 可在結果出現前封存 `sample_origin` 與 label window；有封存 window 時，outcome 未到期或 target_period 不符會在寫入邊界直接拒絕。W3.1 再要求明確 `evaluation_as_of` 與同 target/model/version/event/label/sample-origin scope，forward precommitted 與 retrospective replay 不得混算，duplicate logical sample / superseded selection fail closed；通過後才交給既有 2I.1 指標引擎。
 
-最新本機驗證：W2 model-input focused 117 passed、1 deselected；packet regression 76 passed、1 deselected；V2 regression 146 passed；default suite 1735 passed、23 deselected、132 warnings，141.75s，exit 0。secret scanner 在本輪程式/測試變更 0 命中；repo 既有歷史命中另保留。
+最新 code/test 驗證：W3/V2-H/V2-I focused 85 passed；W3 + PPM/packet broader 236 passed、1 deselected；audit path/build 74 passed；default suite 1749 passed、23 deselected、132 warnings，172.00s，exit 0。本輪 implementation/test secret scan 0 命中，`git diff --check` PASS。
 
-**現場 recorder 仍是舊程序，明確為 RUNTIME_ADOPTION_PENDING。** 只讀 `status.json` 顯示舊 health 欄位；`latest.json` 22/22 quotes 都沒有 `field_provenance` / `freshness_semantics`。沒有新 broker login/訂閱/登出/重啟/下單/帳務操作，也不能以新 import 的 build_id 冒充執行中程序版本。舊 Parquet 可離線部分 replay：最近檔 934 rows / OSE 76 rows，5 筆有效成交可轉成 legacy receipt-only/delayed V2-A.2 observation，71 筆非有效成交 callback 拒用；未把私有行情值提交 repo。
+**這仍不是 CALIBRATED。** W3.1 測試樣本是 temporary synthetic audit records，只證明 governance/leakage engine。真實 `FORWARD_PRECOMMITTED` 預測仍需在結果前實際封存並等 horizon 自然到期；W4 fitting 必須等足夠真實、同 scope 的成熟樣本。
+
+**現場 recorder 仍明確為 RUNTIME_ADOPTION_PENDING。** 本棒沒有 broker login/訂閱/登出/重啟/下單/帳務操作；受控重啟仍需使用者明確維護窗口授權。
 
 ## 2. 查核深度與限制
 
@@ -40,7 +42,7 @@ W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。W2 reader/rep
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。目前 W2 離線鏈已接到 read-only model-input boundary，且保留 cutoff/lineage/contract/frequency gate。現有 broker `TICK` 對現有 `1d` 模型明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。現場 recorder 尚未 adoption；packet 的部分 forecast summaries 仍是研究狀態描述。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。現場 recorder 尚未 adoption；真實 forward 樣本與 calibration fitting 也尚未成立。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -68,7 +70,8 @@ W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。W2 reader/rep
 | extension/exhaustion | 2E.3 |
 | catalyst response | 2F.3 |
 | sequential updating | 2G.2 |
-| prediction audit DB | 2H.2 |
+| prediction audit DB | 2H.3 |
+| evaluation governance | W3.1 |
 | calibration evaluation | 2I.1 |
 | Price/Probability Map | 3A.2.3 |
 
@@ -106,4 +109,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 PR #55/HEAD/dirty/remote SHA 與現場 recorder。field-aware reader→V2-A.2/V2-H 離線接線已完成，不要重做；若使用者提供維護窗口，按尾端落盤/rollback/單一 owner 步驟受控交接 recorder，否則繼續 W2 feature-store/public-packet 的離線接線。W3 到期與 scope gate 必須先於 calibration fitting；不因離線 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。
+先核對 PR #55/HEAD/dirty/remote SHA 與現場 recorder。W2 離線鏈與 W3.1 governance engine 已完成，不要重做。下一個不需維護窗口的工作是把真正的 precommitted forward prediction/outcome cycle 接到 2H.3/W3.1 並開始累積可稽核樣本；若使用者提供維護窗口，則可先按尾端落盤/rollback/單一 owner 步驟受控交接 recorder。W4 fitting 仍須等足夠真實成熟樣本；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。

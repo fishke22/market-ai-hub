@@ -50,13 +50,15 @@ W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊�
 
 ### W3：真實預測、到期結算與前向樣本
 
+**2026-09-25 狀態：W3.1 governance engine PASS；真實 forward sample accumulation 仍待實際時間/資料。** 2H.3 已把 sample origin + label window 綁入 prediction identity，W3.1 已有 evaluation_as_of / scope / duplicate / supersession gate；這不等於已有 predictive evidence。
+
 建立最小的可運作研究循環，先一個直接商品、一個 horizon、一個簡單 baseline，再依同一契約擴展到各市場族群。不能把每個 callback 當獨立預測樣本。
 
 forecast origin 前封存 prediction、model/version、完整參數、feature cutoff、source IDs、forecast artifact、event/zone policy；horizon 到期後另存 outcome。預測 horizon 必須能解析實際 label window；`outcome.available_at >= forecast_origin` 單獨不足以證明到期合法。修訂用 supersedes，新版與原版都可追溯。
 
-2I.1 評估仍只吃 2H.2 DB。歷史來源可經合法 ingestion/replay 建立 audit artifact，不能讓 evaluator 直接補 CSV。歷史 replay 標為 retrospective，與真正預先封存的 forward 分開；基礎模型訓練 cutoff 不明時揭露預訓練重疊風險。
+2I.1 指標引擎仍只吃 audit DB，現在由 2H.3 + W3.1 governance 先決定 eligible samples；evaluator 仍不能直接補 CSV。歷史來源可經合法 ingestion/replay 建立 audit artifact，但標為 `RETROSPECTIVE_REPLAY`，與真正預先封存的 `FORWARD_PRECOMMITTED` 分開；基礎模型訓練 cutoff 不明時揭露預訓練重疊風險。
 
-验收：過期/未到期/未知來源/重複樣本/跨 horizon/錯 artifact pairing 被拒；樣本數可回查 IDs；沒有資料正常回 INSUFFICIENT_EVIDENCE。可靠度清單顯示 coverage、缺失天数、missing outcome、每類事件 count、重疊 horizon 與有效樣本數。
+工程驗收已通過：未到期、evaluation_as_of 後才可得 outcome、未知來源、重複樣本、錯 model/version/event/label scope、錯 artifact pairing / superseded selection 會拒絕或排除；樣本數可回查 IDs。可靠度清單可顯示 coverage、missing outcome、事件 count、可判定時的 missing days、重疊 horizon 與有效樣本數。**尚未完成的是實際 forward 樣本自然累積，不得用 synthetic 測試代替。**
 
 ### W4：校準與外樣本治理
 
