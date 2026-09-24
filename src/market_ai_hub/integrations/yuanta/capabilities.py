@@ -21,10 +21,18 @@ CAPABILITIES = [
 
 # 只有真的收到有效 callback/result 才可標 SUPPORTED_BY_ACCOUNT
 # 2Y-G.3: measured provider status (machine-readable). Login success != quote success.
+# SPARK API supports securities + futures markets by official contract
+# (SubscribeWatchlist/SubscribeWatchlistAll LoginAcno accepts either account type;
+# enumMarketType TAIFEX=3 / CME=203 / OSE=207). API_SUPPORT != ACCOUNT_ENTITLEMENT:
+# a securities login measured ACCEPTED (MsgCode 0001) and its TAIFEX/OSE subscriptions
+# were ACCEPTED, but no market callback arrived (per-market entitlement unproven).
+# Names carry account_profile + market; never read as a verified futures account.
 PROVIDER_STATUS = {
     "legacy_futures_auth": "VERIFIED",                     # ReqType=1/2 measured Status=2 LogonOK code=0
     "legacy_domestic_quote": "AUTH_VERIFIED_REGISTRATION_UNRESOLVED",
-    "spark_futures": "EXTERNAL_ENTITLEMENT_RETEST_REQUIRED",
+    "spark_securities_taifex_quote": "SUBSCRIPTION_ACCEPTED_NO_CALLBACK",  # account_profile=SECURITIES, market=TAIFEX
+    "spark_securities_ose_quote": "SUBSCRIPTION_ACCEPTED_NO_CALLBACK",     # account_profile=SECURITIES, market=OSE (207)
+    "spark_futures": "SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED",          # measured 0112 API_PERMISSION_UNAVAILABLE, no retry
     "ose_micro_live": "NOT_AVAILABLE",
     "taifex_live": "NOT_AVAILABLE_UNTIL_CALLBACK",
 }

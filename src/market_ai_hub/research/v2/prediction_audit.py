@@ -812,8 +812,9 @@ class PredictionAuditDB:
 def v2_schema_versions() -> dict[str, str]:
     """Assemble the actual V2 schema versions (no hardcoding)."""
     from market_ai_hub.research.v2 import (
-        asof, catalyst_response, extension_exhaustion, factor_representation,
-        gap_session, labels, sequential_update, session_truth, state_machine,
+        asof, calibration_evaluation, catalyst_response, extension_exhaustion,
+        factor_representation, gap_session, labels, sequential_update, session_truth,
+        state_machine,
     )
     return {
         "asof": asof.V2_ASOF_SCHEMA_VERSION,
@@ -826,4 +827,5 @@ def v2_schema_versions() -> dict[str, str]:
         "catalyst_response": catalyst_response.V2_CATALYST_RESPONSE_SCHEMA_VERSION,
         "sequential_update": sequential_update.V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION,
         "prediction_audit": V2_PREDICTION_AUDIT_SCHEMA_VERSION,
+        "calibration_evaluation": calibration_evaluation.V2_CALIBRATION_EVALUATION_SCHEMA_VERSION,
     }

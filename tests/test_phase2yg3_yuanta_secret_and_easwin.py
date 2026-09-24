@@ -192,6 +192,10 @@ def test_spark_resolver_unchanged_by_legacy_resolver():
 def test_provider_status_machine_readable():
     assert PROVIDER_STATUS["legacy_futures_auth"] == "VERIFIED"
     assert PROVIDER_STATUS["legacy_domestic_quote"] == "AUTH_VERIFIED_REGISTRATION_UNRESOLVED"
-    assert PROVIDER_STATUS["spark_futures"] == "EXTERNAL_ENTITLEMENT_RETEST_REQUIRED"
+    # SPARK securities login accepted (0001); TAIFEX/OSE subscriptions accepted, no callback.
+    assert PROVIDER_STATUS["spark_securities_taifex_quote"] == "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
+    assert PROVIDER_STATUS["spark_securities_ose_quote"] == "SUBSCRIPTION_ACCEPTED_NO_CALLBACK"
+    # futures-profile SPARK login measured 0112 -> entitlement blocked, no retry.
+    assert PROVIDER_STATUS["spark_futures"] == "SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED"
     assert PROVIDER_STATUS["ose_micro_live"] == "NOT_AVAILABLE"
     assert PROVIDER_STATUS["taifex_live"] == "NOT_AVAILABLE_UNTIL_CALLBACK"

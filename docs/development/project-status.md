@@ -1,9 +1,9 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-H（Prediction Audit DB — Forecast Artifact Closure）**
-- Gate: **PHASEV2H_PREDICTION_AUDIT_DB_FORECAST_ARTIFACT_PASS** + **V2H_UPSTREAM_FACTOR_LINEAGE_READY**
-- build_id：**9c036eae6c83a934**（fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**
+- Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
+- Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
+- build_id：**（本棒合併後以 `scripts/agent_bootstrap.ps1` 實測為準）**（fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
 - Actual live readiness：OSE Micro / TX / MTX / TMF / NQ / ES live = **NOT_AVAILABLE**
@@ -14,6 +14,10 @@
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
+- V2-I：**EVALUATION_FOUNDATION_PASS**（evaluation engine only；CALIBRATION FITTING NOT STARTED）
+- Yuanta SPARK securities profile：login ACCEPTED（0001）；TAIFEX/OSE subscription ACCEPTED，**無 callback** →
+  `spark_securities_taifex_quote` / `spark_securities_ose_quote` = `SUBSCRIPTION_ACCEPTED_NO_CALLBACK`
+- Yuanta SPARK futures profile：0112 → **SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED**（不 retry）
 
 ## Phase 2 全歷程 Gate
 

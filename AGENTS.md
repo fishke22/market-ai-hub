@@ -10,7 +10,8 @@ Read this before doing anything. Do not trust stale chat memory (old HEAD / test
 5. **Do not redo a CLOSED/PASS phase.** V2-A.2, V2-B.1, V2-C.2, V2-D.4, V2-E.3, V2-F.3, V2-G.2,
    V2-H 2H.2 are closed; Yuanta rounds are provider hardening, not a redesign.
 6. **A provider being unavailable must not block core architecture.** Record it as truthful status
-   (e.g. `NOT_AVAILABLE`, `EXTERNAL_ENTITLEMENT_RETEST_REQUIRED`) and continue.
+   (e.g. `NOT_AVAILABLE`, `SUBSCRIPTION_ACCEPTED_NO_CALLBACK`,
+   `SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED`) and continue.
 7. **Never conflate** `ENGINE PASS` / `DATA READY` / `CALIBRATED` / `EDGE`. They are different claims.
 
 Also: quote-only for Yuanta (NO ORDER / NO TRADING), never persist secrets, keep reports honest
