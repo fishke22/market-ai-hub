@@ -21,7 +21,14 @@ Machine-enforced principles:
 No persistence DB (V2-H), no calibration (V2-I), no trading. All state categories are categorical:
 no ordinal arithmetic (STRONG_BEAR=-2 … STRONG_BULL=+2) is performed.
 
-Schema: V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION = "2G.1"  (independent of 2A.1/2B.1/2C.2/2D.4/2E.3/2F.3/3A.2.3)
+Schema: V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION = "2G.2"  (independent of 2A.1/2B.1/2C.2/2D.4/2E.3/2F.3/3A.2.3)
+
+2G.2 blocked-artifact audit-lineage closure:
+- BLOCKED artifacts retain the full candidate/input audit lineage (declared vs recomputed identity,
+  state stream, ASOF, source lineage) instead of only a hash + reason.
+- sequence_identity(artifact) == artifact.sequence_id holds for BOTH SEQUENCE_AVAILABLE and BLOCKED
+  (self-verifiable identity); only the empty NOT_AVAILABLE sequence keeps sequence_id == "".
+- append failure preserves the existing sequence declared/recomputed identity and new-input lineage.
 """
 from __future__ import annotations
 
@@ -44,7 +51,7 @@ from market_ai_hub.research.v2.state_machine import (
     _least_verified_asof,
 )
 
-V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION = "2G.1"
+V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION = "2G.2"
 
 # ── capability registry (machine-readable) ──
 V2G_CAPABILITIES = {
@@ -74,6 +81,7 @@ BLOCKED_TRANSITION_INTEGRITY_MISMATCH = "BLOCKED_TRANSITION_INTEGRITY_MISMATCH"
 BLOCKED_TRANSITION_ID_COLLISION = "BLOCKED_TRANSITION_ID_COLLISION"
 BLOCKED_ORPHAN_TRANSITION = "BLOCKED_ORPHAN_TRANSITION"
 BLOCKED_SEQUENCE_INTEGRITY_MISMATCH = "BLOCKED_SEQUENCE_INTEGRITY_MISMATCH"
+BLOCKED_EXISTING_SEQUENCE_NOT_APPENDABLE = "BLOCKED_EXISTING_SEQUENCE_NOT_APPENDABLE"
 
 
 def _canonical(xs: list[str]) -> list[str]:
@@ -121,15 +129,29 @@ def _strip_created(s: StateSnapshot) -> StateSnapshot:
     return c
 
 
-# ── policy ──
-@dataclass
+# ── policy (frozen: canonical statuses are not caller-settable) ──
+@dataclass(frozen=True)
 class SequentialUpdatePolicy:
-    version: str = "2G.1"
+    version: str = "2G.2"
     mode: str = "DESCRIPTIVE_STATE_SEQUENCE"
     persistence_policy: str = "NOT_CONFIGURED"
     probability_status: str = "NOT_AVAILABLE_UPSTREAM_UNCALIBRATED"
     change_point_status: str = "RESEARCH_CHALLENGER_NOT_IMPLEMENTED"
     validation_status: str = "HYPOTHESIS_ONLY"
+
+    def __post_init__(self):
+        if self.version != "2G.2":
+            raise ValueError("SequentialUpdatePolicy.version is frozen to 2G.2")
+        if self.mode != "DESCRIPTIVE_STATE_SEQUENCE":
+            raise ValueError("SequentialUpdatePolicy.mode is frozen to DESCRIPTIVE_STATE_SEQUENCE")
+        if self.persistence_policy != "NOT_CONFIGURED":
+            raise ValueError("SequentialUpdatePolicy.persistence_policy is frozen to NOT_CONFIGURED")
+        if self.probability_status != "NOT_AVAILABLE_UPSTREAM_UNCALIBRATED":
+            raise ValueError("probability_status is frozen to NOT_AVAILABLE_UPSTREAM_UNCALIBRATED")
+        if self.change_point_status != "RESEARCH_CHALLENGER_NOT_IMPLEMENTED":
+            raise ValueError("change_point_status is frozen to RESEARCH_CHALLENGER_NOT_IMPLEMENTED")
+        if self.validation_status != "HYPOTHESIS_ONLY":
+            raise ValueError("validation_status is frozen to HYPOTHESIS_ONLY")
 
     def model_dump(self) -> dict:
         return asdict(self)
@@ -188,6 +210,88 @@ class StateSequenceStep:
         return asdict(self)
 
 
+# ── candidate audit entries (blocked-artifact lineage) ──
+@dataclass
+class SequenceCandidateSnapshotAudit:
+    declared_snapshot_id: str = ""
+    recomputed_snapshot_id: str = ""
+    instrument: str = ""
+    target_family: str = ""
+    instrument_role: str = "DIRECT"
+    calendar_id: str = ""
+    frequency: str = "DAILY"
+    horizon: str = "1d"
+    feature_cutoff_timestamp: datetime | None = None
+    state_origin: datetime | None = None
+    state_schema_version: str = ""
+    snapshot_status: str = ""
+    source_snapshot_ids: list[str] = dfield(default_factory=list)
+    derived_asof_status: str = ""
+
+    def model_dump(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class SequenceCandidateTransitionAudit:
+    declared_transition_id: str = ""
+    recomputed_transition_fingerprint: str = ""
+    previous_snapshot_id: str = ""
+    new_snapshot_id: str = ""
+    transition_timestamp: datetime | None = None
+    schema_version: str = ""
+    trigger_evidence_ids: list[str] = dfield(default_factory=list)
+    source_snapshot_ids: list[str] = dfield(default_factory=list)
+
+    def model_dump(self) -> dict:
+        return asdict(self)
+
+
+def _render_target_identity(instrument: str, target_family: str, instrument_role: str,
+                            calendar_id: str, frequency: str, horizon: str) -> str:
+    return "|".join([instrument, target_family, instrument_role, calendar_id, frequency, horizon])
+
+
+def _render_state_stream(audit: "SequenceCandidateSnapshotAudit") -> str:
+    return "|".join([audit.instrument, audit.target_family, audit.instrument_role, audit.calendar_id,
+                     audit.frequency, audit.horizon, _dt_iso(audit.feature_cutoff_timestamp),
+                     _dt_iso(audit.state_origin)])
+
+
+def _snapshot_audit(s: StateSnapshot) -> SequenceCandidateSnapshotAudit:
+    try:
+        recomputed = snapshot_identity(s)
+    except Exception:
+        recomputed = ""
+    return SequenceCandidateSnapshotAudit(
+        declared_snapshot_id=s.snapshot_id, recomputed_snapshot_id=recomputed,
+        instrument=normalize_instrument(s.instrument), target_family=normalize_family(s.target_family),
+        instrument_role=s.instrument_role, calendar_id=s.calendar_id,
+        frequency=s.frequency, horizon=s.horizon,
+        feature_cutoff_timestamp=s.feature_cutoff_timestamp, state_origin=s.state_origin,
+        state_schema_version=s.state_schema_version, snapshot_status=s.snapshot_status,
+        source_snapshot_ids=_canonical(s.source_snapshot_ids), derived_asof_status=s.derived_asof_status,
+    )
+
+
+def _transition_audit(t: StateTransitionRecord) -> SequenceCandidateTransitionAudit:
+    return SequenceCandidateTransitionAudit(
+        declared_transition_id=t.transition_id, recomputed_transition_fingerprint=_transition_key(t),
+        previous_snapshot_id=t.previous_snapshot_id, new_snapshot_id=t.new_snapshot_id,
+        transition_timestamp=t.transition_timestamp, schema_version=t.schema_version,
+        trigger_evidence_ids=_canonical(t.trigger_evidence_ids),
+        source_snapshot_ids=_canonical(t.source_snapshot_ids),
+    )
+
+
+def _snapshot_audit_sort_key(x: SequenceCandidateSnapshotAudit):
+    return (_dt_iso(x.state_origin), x.declared_snapshot_id, x.recomputed_snapshot_id)
+
+
+def _transition_audit_sort_key(x: SequenceCandidateTransitionAudit):
+    return (x.previous_snapshot_id, x.new_snapshot_id, x.declared_transition_id)
+
+
 @dataclass
 class StateSequenceArtifact:
     sequence_id: str = ""
@@ -220,8 +324,25 @@ class StateSequenceArtifact:
     change_point_score: float | None = None
     sequence_status: str = "NOT_AVAILABLE"
     block_reason_codes: list[str] = dfield(default_factory=list)
+    candidate_snapshot_audits: list[SequenceCandidateSnapshotAudit] = dfield(default_factory=list)
+    candidate_transition_audits: list[SequenceCandidateTransitionAudit] = dfield(default_factory=list)
+    candidate_snapshot_ids: list[str] = dfield(default_factory=list)
+    candidate_snapshot_fingerprints: list[str] = dfield(default_factory=list)
+    candidate_transition_ids: list[str] = dfield(default_factory=list)
+    candidate_transition_fingerprints: list[str] = dfield(default_factory=list)
+    candidate_target_identities: list[str] = dfield(default_factory=list)
+    candidate_state_stream_ids: list[str] = dfield(default_factory=list)
+    candidate_snapshot_schema_versions: list[str] = dfield(default_factory=list)
+    candidate_snapshot_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    candidate_transition_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    candidate_source_snapshot_ids: list[str] = dfield(default_factory=list)
+    candidate_snapshot_asof_by_id: dict[str, str] = dfield(default_factory=dict)
+    blocked_input_count: int = 0
+    parent_sequence_id: str = ""
+    existing_sequence_declared_id: str = ""
+    existing_sequence_recomputed_id: str = ""
     schema_version: str = V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION
-    policy_version: str = "2G.1"
+    policy_version: str = "2G.2"
 
     def semantic_dump(self) -> dict:
         return asdict(self)
@@ -265,30 +386,95 @@ def sequence_identity(a: StateSequenceArtifact) -> str:
         "change_point_score": a.change_point_score,
         "sequence_status": a.sequence_status,
         "block_reason_codes": _canonical(a.block_reason_codes),
+        "candidate_snapshot_audits": [asdict(x) for x in a.candidate_snapshot_audits],
+        "candidate_transition_audits": [asdict(x) for x in a.candidate_transition_audits],
+        "candidate_snapshot_ids": list(a.candidate_snapshot_ids),
+        "candidate_snapshot_fingerprints": list(a.candidate_snapshot_fingerprints),
+        "candidate_transition_ids": list(a.candidate_transition_ids),
+        "candidate_transition_fingerprints": list(a.candidate_transition_fingerprints),
+        "candidate_target_identities": list(a.candidate_target_identities),
+        "candidate_state_stream_ids": list(a.candidate_state_stream_ids),
+        "candidate_snapshot_schema_versions": list(a.candidate_snapshot_schema_versions),
+        "candidate_snapshot_source_snapshot_ids": list(a.candidate_snapshot_source_snapshot_ids),
+        "candidate_transition_source_snapshot_ids": list(a.candidate_transition_source_snapshot_ids),
+        "candidate_source_snapshot_ids": list(a.candidate_source_snapshot_ids),
+        "candidate_snapshot_asof_by_id": dict(sorted(a.candidate_snapshot_asof_by_id.items())),
+        "blocked_input_count": a.blocked_input_count,
+        "parent_sequence_id": a.parent_sequence_id,
+        "existing_sequence_declared_id": a.existing_sequence_declared_id,
+        "existing_sequence_recomputed_id": a.existing_sequence_recomputed_id,
         "schema_version": a.schema_version,
         "policy_version": a.policy_version,
     }
     return _hash_payload(payload)
 
 
-def _blocked_sequence_identity(snapshots: list[StateSnapshot], transitions: list[StateTransitionRecord],
-                               reason: str) -> str:
-    snap_keys = sorted(snapshot_identity(s) for s in snapshots)
-    trans_keys = sorted(_transition_key(t) for t in transitions)
-    return _hash_payload({
-        "BLOCKED": reason,
-        "snapshot_fingerprints": snap_keys,
-        "transition_fingerprints": trans_keys,
-        "schema": V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION,
-    })
+def _blocked_artifact_from_audits(
+        snapshot_audits: list[SequenceCandidateSnapshotAudit],
+        transition_audits: list[SequenceCandidateTransitionAudit],
+        reason: str, *, parent_sequence_id: str = "",
+        existing_sequence_declared_id: str = "", existing_sequence_recomputed_id: str = "",
+) -> StateSequenceArtifact:
+    """Build a BLOCKED artifact that preserves full candidate/input audit lineage and whose
+    sequence_id is recomputable from the returned artifact itself."""
+    snap_audits = sorted(snapshot_audits, key=_snapshot_audit_sort_key)
+    trans_audits = sorted(transition_audits, key=_transition_audit_sort_key)
+
+    snapshot_source = _canonical([sid for x in snap_audits for sid in x.source_snapshot_ids])
+    transition_source = _canonical([sid for x in trans_audits for sid in x.source_snapshot_ids])
+    identities = sorted({_render_target_identity(x.instrument, x.target_family, x.instrument_role,
+                                                 x.calendar_id, x.frequency, x.horizon)
+                         for x in snap_audits})
+    streams = sorted({_render_state_stream(x) for x in snap_audits})
+    origins = [x.state_origin for x in snap_audits if x.state_origin is not None]
+    cutoffs = [x.feature_cutoff_timestamp for x in snap_audits if x.feature_cutoff_timestamp is not None]
+
+    artifact = StateSequenceArtifact(
+        sequence_id="",
+        sequence_status="BLOCKED",
+        block_reason_codes=[reason],
+        candidate_snapshot_audits=snap_audits,
+        candidate_transition_audits=trans_audits,
+        candidate_snapshot_ids=[x.declared_snapshot_id for x in snap_audits],
+        candidate_snapshot_fingerprints=[x.recomputed_snapshot_id for x in snap_audits],
+        candidate_transition_ids=[x.declared_transition_id for x in trans_audits],
+        candidate_transition_fingerprints=[x.recomputed_transition_fingerprint for x in trans_audits],
+        candidate_target_identities=identities,
+        candidate_state_stream_ids=streams,
+        candidate_snapshot_schema_versions=sorted({x.state_schema_version for x in snap_audits if x.state_schema_version}),
+        candidate_snapshot_source_snapshot_ids=snapshot_source,
+        candidate_transition_source_snapshot_ids=transition_source,
+        candidate_source_snapshot_ids=_canonical(snapshot_source + transition_source),
+        candidate_snapshot_asof_by_id={x.declared_snapshot_id: x.derived_asof_status for x in snap_audits},
+        blocked_input_count=len(snap_audits) + len(trans_audits),
+        first_state_origin=min(origins) if origins else None,
+        last_state_origin=max(origins) if origins else None,
+        first_feature_cutoff=min(cutoffs) if cutoffs else None,
+        last_feature_cutoff=max(cutoffs) if cutoffs else None,
+        derived_asof_status=_least_verified_asof([x.derived_asof_status for x in snap_audits]),
+        parent_sequence_id=parent_sequence_id,
+        existing_sequence_declared_id=existing_sequence_declared_id,
+        existing_sequence_recomputed_id=existing_sequence_recomputed_id,
+    )
+    # common identity only when every candidate agrees; never first-item authority (§12)
+    if len(identities) == 1 and snap_audits:
+        x = snap_audits[0]
+        artifact.instrument = x.instrument
+        artifact.target_family = x.target_family
+        artifact.instrument_role = x.instrument_role
+        artifact.calendar_id = x.calendar_id
+        artifact.frequency = x.frequency
+        artifact.horizon = x.horizon
+    artifact.sequence_id = sequence_identity(artifact)
+    return artifact
 
 
 def _blocked_artifact(snapshots: list[StateSnapshot], transitions: list[StateTransitionRecord],
                       reason: str) -> StateSequenceArtifact:
-    return StateSequenceArtifact(
-        sequence_id=_blocked_sequence_identity(snapshots, transitions, reason),
-        sequence_status="BLOCKED",
-        block_reason_codes=[reason],
+    return _blocked_artifact_from_audits(
+        [_snapshot_audit(s) for s in snapshots],
+        [_transition_audit(t) for t in transitions],
+        reason,
     )
 
 
@@ -516,10 +702,28 @@ def append_state_update(existing: StateSequenceArtifact,
                         transition: StateTransitionRecord | None = None) -> StateSequenceArtifact:
     if existing.sequence_status == "NOT_AVAILABLE":
         return build_state_sequence([new_snapshot], [transition] if transition is not None else None)
-    if existing.sequence_status != "SEQUENCE_AVAILABLE":
-        return _blocked_artifact([], [], BLOCKED_SEQUENCE_INTEGRITY_MISMATCH)
-    if sequence_identity(existing) != existing.sequence_id:
-        return _blocked_artifact([], [], BLOCKED_SEQUENCE_INTEGRITY_MISMATCH)
-    snapshots = list(existing.snapshots) + [new_snapshot]
-    transitions = list(existing.transitions) + ([transition] if transition is not None else [])
-    return build_state_sequence(snapshots, transitions)
+
+    declared_existing = existing.sequence_id
+    recomputed_existing = sequence_identity(existing)
+
+    if existing.sequence_status == "SEQUENCE_AVAILABLE" and recomputed_existing == existing.sequence_id:
+        snapshots = list(existing.snapshots) + [new_snapshot]
+        transitions = list(existing.transitions) + ([transition] if transition is not None else [])
+        return build_state_sequence(snapshots, transitions)
+
+    new_transitions = [transition] if transition is not None else []
+    if existing.sequence_status == "BLOCKED":
+        reason = BLOCKED_EXISTING_SEQUENCE_NOT_APPENDABLE
+        snap_audits = list(existing.candidate_snapshot_audits) + [_snapshot_audit(new_snapshot)]
+        trans_audits = list(existing.candidate_transition_audits) + [_transition_audit(t) for t in new_transitions]
+    else:  # SEQUENCE_AVAILABLE but corrupted (declared != recomputed)
+        reason = BLOCKED_SEQUENCE_INTEGRITY_MISMATCH
+        snap_audits = [_snapshot_audit(s) for s in existing.snapshots] + [_snapshot_audit(new_snapshot)]
+        trans_audits = [_transition_audit(t) for t in existing.transitions] + [_transition_audit(t) for t in new_transitions]
+
+    return _blocked_artifact_from_audits(
+        snap_audits, trans_audits, reason,
+        parent_sequence_id=declared_existing,
+        existing_sequence_declared_id=declared_existing,
+        existing_sequence_recomputed_id=recomputed_existing,
+    )

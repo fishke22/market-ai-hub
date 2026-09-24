@@ -1,9 +1,9 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-G（Sequential Updating Scaffold）**
-- Gate: **PHASEV2G_SEQUENTIAL_UPDATING_SCAFFOLD_PASS**（前置 PHASEV2D_DYNAMIC_STATE_MACHINE_SCAFFOLD_PASS）
-- build_id：**94265112f084bfe5**（fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.1**
+- Current phase: **Phase V2-G（Sequential Updating Scaffold — Blocked-Artifact Audit-Lineage Closure）**
+- Gate: **PHASEV2G_SEQUENTIAL_UPDATING_SCAFFOLD_PASS** + **V2H_UPSTREAM_AUDIT_ARTIFACT_READY**（前置 PHASEV2D_DYNAMIC_STATE_MACHINE_SCAFFOLD_PASS）
+- build_id：**68a2f27efc35521a**（fingerprint 全部 runtime source + config）
+- Schemas：PPM **3A.2.3**；V2 as-of **2A.1**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**

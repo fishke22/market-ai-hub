@@ -1,6 +1,6 @@
 # V2 Sequential Update Contract
 
-- **Schema**: `V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION = "2G.1"` (module
+- **Schema**: `V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION = "2G.2"` (module
   `src/market_ai_hub/research/v2/sequential_update.py`)
 - Independent from `2A.1` / `2B.1` / `2C.2` / `2D.4` / `2E.3` / `2F.3` / `3A.2.3`.
 
@@ -109,12 +109,43 @@ derived ASOF, probability/change-point status, and sequence/block status — exc
 Blocked sequences get a deterministic order-independent `sequence_id` from the canonical input set +
 reason + schema.
 
+**Self-verifiable identity (2G.2):** for every non-empty artifact (both `SEQUENCE_AVAILABLE` and
+`BLOCKED`), `sequence_identity(artifact) == artifact.sequence_id`. Only the empty `NOT_AVAILABLE`
+sequence keeps `sequence_id == ""`. There is no separate private blocked hash computed from external
+raw inputs.
+
+## Blocked Artifact Auditability
+
+A blocked artifact does **not** store only a hash + reason. It preserves the full candidate/input
+audit lineage (`candidate_snapshot_audits` / `candidate_transition_audits` typed entries), so V2-H can
+answer: which snapshot/transition caused the block, the caller-declared id, the recomputed
+fingerprint, the source lineage, the target/context and ASOF state.
+
+- **Declared vs recomputed identity** are kept separately per candidate: `declared_snapshot_id`
+  (the caller's claim) and `recomputed_snapshot_id` (`snapshot_identity(snapshot)`). An integrity
+  failure is exactly `declared != recomputed`.
+- **Candidate order is canonical** (snapshot: state_origin → declared id → recomputed id; transition:
+  previous → new → declared id); input reorder never changes the blocked `sequence_id` or dump.
+- **Candidate source lineage** (`candidate_snapshot_source_snapshot_ids`,
+  `candidate_transition_source_snapshot_ids`, `candidate_source_snapshot_ids`) and **state stream**
+  (`candidate_state_stream_ids`) and **ASOF** (`candidate_snapshot_asof_by_id`, artifact
+  `derived_asof_status = least_verified(candidates)`) are preserved — never blanket-defaulted.
+- **Common main identity** is filled only when every candidate agrees; mixed identity keeps the main
+  identity fields empty and lists the full set in `candidate_target_identities` (never first-item
+  authority).
+- **Append failure** preserves the existing sequence declared/recomputed identity
+  (`existing_sequence_declared_id`, `existing_sequence_recomputed_id`, `parent_sequence_id`) plus the
+  new-snapshot candidate lineage. Appending to an already-`BLOCKED` sequence →
+  `BLOCKED_EXISTING_SEQUENCE_NOT_APPENDABLE` (audit context carried forward); appending to a
+  corrupted `SEQUENCE_AVAILABLE` sequence → `BLOCKED_SEQUENCE_INTEGRITY_MISMATCH`.
+
 ## Append purity
 
 `append_state_update(existing, new_snapshot, transition=None)` is a pure in-memory transformation: it
 verifies `sequence_identity(existing) == existing.sequence_id` (else
 `BLOCKED_SEQUENCE_INTEGRITY_MISMATCH`), deep-copies the new snapshot, never mutates `existing`, and
 returns a freshly content-addressed artifact. `build([S0,S1,S2]) == append(append(build([S0]),S1),S2)`.
+On failure it returns a self-verifiable BLOCKED artifact with full audit lineage (never an empty stub).
 
 ## Limits (explicit)
 
