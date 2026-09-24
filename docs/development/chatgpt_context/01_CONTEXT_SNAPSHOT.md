@@ -12,11 +12,11 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 2026-09-25 W2 受限工作包交接：
 
-W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。本輪新增 field-aware reader/replay 實作 commit：`825c19e7c67922eb7779d768ccd8b4207aae98cf`；工作分支仍為 `codex/quote-hub-correctness`，PR #55 仍 OPEN、main 仍以 `eb9202a` 為基準。runtime build_id = `52837b5fc6444e3f`。本快照後續純文件 commit/remote SHA 以 handoff 與 PR 為準。
+W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。W2 reader/replay 實作 commit 為 `825c19e7c67922eb7779d768ccd8b4207aae98cf`；其後 Feature Store / packet provenance 接線 commit 為 `5fe8906bd1237f7f89cd96dbbfa9383b8763281f`。工作分支仍為 `codex/quote-hub-correctness`，PR #55 仍 OPEN、main 仍以 `eb9202a` 為基準。runtime build_id = `f09ff80765f94687`。本快照後續純文件 commit/remote SHA 以 handoff 與 PR 為準。
 
 本輪沒有重做 W1。新增 `quote_reader.py` 將 Yuanta persisted quote 的 trade/bid/ask 各自按 `field_provenance` 接到既有 V2-A.2 `FactorRepresentationObservation`，並驗證 V2-H lineage/source IDs；錯 market/contract/SPARK 日夜盤、亂序、缺欄位時間、partial file、persistence error/overflow、unknown/unsupported representation 皆 fail closed。沒有 fitting、沒有新模型、沒有交易。
 
-最終本機驗證：focused V2/Yuanta regression 153 passed、1 deselected；default suite 1717 passed、23 deselected、132 warnings，135.55s，exit 0。secret scanner 在本輪程式/測試變更 0 命中；repo 既有歷史命中另保留。
+最新本機驗證：W2 Feature Store/packet focused integration 155 passed、1 deselected；broader contract regression 265 passed、2 deselected；default suite 1726 passed、23 deselected、132 warnings，150.34s，exit 0。secret scanner 在本輪程式/測試變更 0 命中；repo 既有歷史命中另保留。
 
 **現場 recorder 仍是舊程序，明確為 RUNTIME_ADOPTION_PENDING。** 只讀 `status.json` 顯示舊 health 欄位；`latest.json` 22/22 quotes 都沒有 `field_provenance` / `freshness_semantics`。沒有新 broker login/訂閱/登出/重啟/下單/帳務操作，也不能以新 import 的 build_id 冒充執行中程序版本。舊 Parquet 可離線部分 replay：最近檔 934 rows / OSE 76 rows，5 筆有效成交可轉成 legacy receipt-only/delayed V2-A.2 observation，71 筆非有效成交 callback 拒用；未把私有行情值提交 repo。
 
@@ -40,7 +40,7 @@ W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。本輪新增 
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。目前已完成 persisted quote → field-aware reader → V2-A.2 observation → V2-H lineage 的離線接線；feature store/models/public packet 仍未完成端到端驗證，現場 recorder 也尚未 adoption。packet 的部分 forecast summaries 仍是研究狀態描述。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。目前已完成 persisted quote → field-aware reader → V2-A.2 observation → V2-H lineage → canonical Feature Store provenance/model-feature gate → public packet provenance context 的離線接線。**模型端是否實際消費這些 gated feature rows 尚待下一工作包驗證/接線**，現場 recorder 也尚未 adoption。packet 的部分 forecast summaries 仍是研究狀態描述。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 

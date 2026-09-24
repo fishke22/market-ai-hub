@@ -4,7 +4,7 @@
 
 ## 本輪完成狀態
 
-W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊稽核重做。2026-09-25 已完成 W2 的**受限子工作包**：field-aware quote reader/replay → V2-A.2 observation + V2-H lineage 離線接線；不代表整個 W2 已完成。現場 recorder 仍為 RUNTIME_ADOPTION_PENDING，W1 的自動 reconnect/roll、crash durability 與長期壓測仍未驗；W2 的 feature store/model/public packet 端到端接線仍待完成。下面是完整最終驗收目標，不能誤讀成全部已完成。W3 的到期/scope/as-of gate 必須先於 W4 fitting。
+W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊稽核重做。2026-09-25 W2 已完成兩個受限子工作包：① field-aware quote reader/replay → V2-A.2 observation + V2-H lineage；② V2-A.2 → canonical Feature Store provenance/model-feature gate → public packet provenance context。這仍不代表整個 W2 已完成：**模型實際輸入消費與 cutoff/lineage 證明仍待完成**。現場 recorder 仍為 RUNTIME_ADOPTION_PENDING；W1 的自動 reconnect/roll、crash durability 與長期壓測仍未驗。下面是完整最終驗收目標，不能誤讀成全部已完成。W3 的到期/scope/as-of gate 必須先於 W4 fitting。
 
 ## 1. 成功如何衡量
 

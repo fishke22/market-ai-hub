@@ -2,7 +2,7 @@
 
 - Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
 - Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
-- build_id：**52837b5fc6444e3f**（W2 field-aware reader source；fingerprint 全部 runtime source + config）
+- build_id：**f09ff80765f94687**（W2 Feature Store / packet provenance wiring；fingerprint 全部 runtime source + config）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -27,7 +27,7 @@ offline CI markers, complete runtime-config fingerprint. See
 `research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md` for validation/publication state.
 The previously running recorder has not been restarted by this repair; disk source
 PASS does not mean that process loaded the new implementation.
-Automatic reconnect/roll, durable crash spool, full feature-store/model/public-packet integration and calibration fitting remain future work. The bounded reader → V2-A.2/V2-H lineage adapter is now offline-verified; research-only boundaries are unchanged.
+Automatic reconnect/roll, durable crash spool, actual model-consumption wiring and calibration fitting remain future work. Reader → V2-A.2/V2-H lineage → canonical Feature Store provenance → packet source/quality context is now offline-verified; research-only boundaries are unchanged.
 
 ## 2026-09-25 W2 field-aware reader/replay
 
@@ -38,6 +38,17 @@ Automatic reconnect/roll, durable crash spool, full feature-store/model/public-p
 - Read-only live inspection: running PID/status uses the old health schema and 0/22 latest quotes carry `field_provenance`; state = **RUNTIME_ADOPTION_PENDING**. Recorder was not stopped or restarted.
 - Local validation: focused V2/Yuanta regression `153 passed, 1 deselected`; final default suite `1717 passed, 23 deselected, 132 warnings` in 135.55s, exit 0. Existing private Parquet read-only sample: 934 rows, 76 OSE rows; 5 valid trade observations adapted and explicitly degraded, 71 non-valid trade callbacks rejected. No raw private quote values were added to the repo.
 - W2 is only partially complete: feature store/model/public packet end-to-end ingestion remains pending, as do reconnect/roll/WAL and controlled runtime adoption.
+
+## 2026-09-25 W2 Feature Store / packet provenance wiring
+
+- Implementation commit: `5fe8906bd1237f7f89cd96dbbfa9383b8763281f`; build_id `f09ff80765f94687`.
+- Feature Store schema advances non-destructively from v1 to v2. Existing Phase-2C feature rows remain readable; V2-A.2 observation snapshots preserve V2-H lineage ID, venue/session/trading date, timestamp precision, quality, contract/roll semantics and source snapshot IDs.
+- Quote features materialize only when the observation is AVAILABLE, dated, point-in-time safe, FRESH and a V2-A.2 live role; legacy receipt-only, unknown event time, stale, future-available, wrong roll/contract semantics stay provenance-only or fail closed.
+- Replay is idempotent for both immutable observation snapshot and materialized feature. Read-only packet queries do not create/migrate a Feature Store.
+- Canonical data-root use is now `MARKET_AI_DATA_ROOT` for runtime paths, Data Lake and default Feature Store; old `MARKET_AI_HUB_DATA_ROOT` remains only migration fallback in Data Lake.
+- Analysis Packet exposes a bounded `factor_observation_summary` with lineage/source/quality/contract/freshness context. It does not turn those rows into probabilities and does not silently override existing target/reference price selection.
+- Validation: focused integration `155 passed, 1 deselected`; broader contract regression `265 passed, 2 deselected`; final default suite `1726 passed, 23 deselected, 132 warnings` in 150.34s, exit 0. Changed-file secret scan: 0 hits; `git diff --check` PASS.
+- W2 is still not fully closed: the next proof is that model input construction consumes only these gated Feature Store rows and preserves cutoff/lineage. Recorder runtime adoption remains separately pending.
 
 ## Phase 2 全歷程 Gate
 

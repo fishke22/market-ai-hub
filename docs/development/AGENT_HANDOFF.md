@@ -1,17 +1,17 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W2 field-aware quote replay after V2-I 2I.1.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W2 Feature Store / packet provenance wiring after V2-I 2I.1.
 
 ## Current repair checkpoint
 
-Read `research/phase3/reports/YUANTA_FIELD_AWARE_REPLAY_W2_2026-09-25.md` for the newest bounded work, and keep `QUOTE_HUB_HARDENING_2026-09-24.md` as the historical W1 repair report. W2 implementation commit is `825c19e7c67922eb7779d768ccd8b4207aae98cf`; runtime build_id is `52837b5fc6444e3f`.
+Read `research/phase3/reports/W2_FEATURE_STORE_PACKET_2026-09-25.md` for the newest bounded work, `YUANTA_FIELD_AWARE_REPLAY_W2_2026-09-25.md` for the reader step, and keep `QUOTE_HUB_HARDENING_2026-09-24.md` as the historical W1 repair report. Latest W2 implementation commit is `5fe8906bd1237f7f89cd96dbbfa9383b8763281f`; runtime build_id is `f09ff80765f94687`.
 
 Runtime adoption is still **RUNTIME_ADOPTION_PENDING**. Read-only inspection found the running recorder status still has the old field set and all 22 current `latest.json` quotes lack `field_provenance` / `freshness_semantics`; no broker login, logout, subscription, restart, order or account action was performed. Do not use a newly imported build_id as evidence for the already-running process.
 
 Offline W2 reader/replay now maps trade/bid/ask independently from per-field provenance into the existing V2-A.2 `FactorRepresentationObservation`, preserves V2-H lineage/source IDs, rejects market/contract/session mismatches, out-of-order receipts, partial files and persistence/overflow truth, and never combines source time-of-day with a fabricated date. Old schema without per-field provenance is explicitly downgraded to `LEGACY_TOP_LEVEL_RECEIPT_ONLY` and cannot become DIRECT_LIVE.
 
-The broader W2 path from V2-A.2 through feature store/models/public packet is **not yet complete**. Next bounded work is either an explicitly authorized maintenance-window recorder handover with tail/rollback checks, or further offline feature-store/public-packet wiring that does not touch the live owner. No fitting, new models, broker orders, or automatic training.
+W2 now has offline wiring through canonical Feature Store provenance and public packet source/quality context. Only LIVE-eligible V2-A.2 observations can materialize quote features; legacy/unknown-time/stale observations remain provenance-only. Packet exposure does not silently replace its target/reference price. **Actual model-consumption wiring is still pending**, so DATA READY is not claimed. Next bounded work: verify and wire model input consumption from gated Feature Store data without fitting; recorder handover still requires an explicitly authorized maintenance window. No new models, broker orders, or automatic training.
 
 ## Read first (order)
 
