@@ -528,5 +528,5 @@ def test_actual_readiness_counts_real_settled_samples(db):
     _sample(db, value=0.9, actual=0.0)
     r = CE.actual_evaluation_readiness(db)
     assert r["settled_event_probability_samples"] == 2
-    assert r["ACTUAL_PROBABILITY_EVALUATION"] == "EVALUATED"
+    assert r["ACTUAL_PROBABILITY_EVALUATION"] == "READY_FOR_EVALUATION"
     assert r["ACTUAL_CALIBRATION_EVIDENCE"] == "NONE_YET"

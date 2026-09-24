@@ -8,6 +8,7 @@ recording:
   parquet_flush_seconds: 30
   latest_snapshot_seconds: 1
   max_dynamic_subscriptions: 200
+  max_buffer_records: 100000
   keep_connection_until_process_exit: true
   logout_after_agent_use: false
   secret_backend: WINDOWS_CREDENTIAL_MANAGER_ONLY

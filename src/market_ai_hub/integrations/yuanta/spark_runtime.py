@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,8 +48,8 @@ class SparkRuntime:
         self._login_event = threading.Event()
         self._system_event = threading.Event()
         self._login_outcome = LoginOutcome()
-        self._callbacks: list[dict] = []
-        self._system_messages: list[str] = []
+        self._callbacks = deque(maxlen=1000)
+        self._system_messages = deque(maxlen=100)
         self.on_quote_callback = None  # optional callable(intMark, strIndex, objValue)
         self.enum_values: dict = {}
         self._load()

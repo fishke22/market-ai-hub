@@ -1,7 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: V2-H 2H.2 closure.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-24 quote-hub correctness hardening after V2-I 2I.1.
+
+## Current repair checkpoint
+
+Read `research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md` for exact tests,
+publication and runtime adoption status. Offline hardening does not upgrade market
+evidence. Audit probability helper is closed; readiness candidate counts are not evaluation.
+Use `scripts/get_yuanta_live_status.ps1` / `recorder_root()` to locate live files with
+MARKET_AI_DATA_ROOT, never assume the example data directory is active.
+New source enforces single owner and exposes per-field freshness and persistence failures.
+Existing old recorder must be handed over before claiming these protections are live.
+Next bounded work: graceful recorder handover + field-aware reader/replay integration;
+no fitting, new models, broker orders, or automatic training.
 
 ## Read first (order)
 

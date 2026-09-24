@@ -411,13 +411,12 @@ def forecast_artifact_payload(record: ForecastArtifactRecord) -> dict:
 
 
 def is_public_probability(artifact: ForecastArtifactRecord) -> bool:
-    """True 只在有真實 CalibrationEvidence 時；否則只能是內部 audit artifact。"""
-    return bool(
-        artifact.artifact_type in ("EVENT_PROBABILITY", "CLASS_SCORE")
-        and artifact.calibration_status_at_origin == "CALIBRATED"
-        and artifact.calibration_evidence_id
-        and artifact.value is not None
-    )
+    """Audit metadata never authorizes publication.
+
+    2I.1 has no fitted evidence resolver. Publication must use the typed
+    Price/Probability Map eligibility gate, not caller-declared status/IDs.
+    """
+    return False
 
 
 def make_lineage(**kwargs) -> FactorLineageRecord:
@@ -511,15 +510,20 @@ def _restore(payload: dict) -> dict:
 class PredictionAuditDB:
     """Append-only audit store (LOCAL_ONLY). Public API exposes NO UPDATE / DELETE."""
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path | None = None, *, read_only: bool = False) -> None:
         self.path = str(path) if path is not None else str(default_audit_db_path())
+        self.read_only = read_only
+        if read_only:
+            if not Path(self.path).is_file():
+                raise FileNotFoundError(self.path)
+            return
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
     def _conn(self):
         import duckdb
-        return duckdb.connect(self.path)
+        return duckdb.connect(self.path, read_only=self.read_only)
 
     def _init(self) -> None:
         with self._conn() as con:

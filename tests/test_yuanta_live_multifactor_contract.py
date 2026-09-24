@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import yaml
+import pytest
 
 from market_ai_hub.integrations.yuanta.capabilities import PROVIDER_STATUS
 from market_ai_hub.integrations.yuanta.spark_futures_quote_probe import _matches_requested_quote
@@ -76,6 +77,7 @@ def test_guide_documents_persistent_hub_and_no_relogin():
     assert "request_yuanta_quote.ps1" in (ROOT / "docs" / "development" / "AGENT_HANDOFF.md").read_text(encoding="utf-8")
 
 
+@pytest.mark.broker_diagnostic
 def test_default_recorder_subscriptions_use_actual_contract_codes_not_near_aliases():
     from market_ai_hub.integrations.yuanta.live_quote_recorder import (
         CONFIG_PATH, _load_config, resolve_default_subscriptions,

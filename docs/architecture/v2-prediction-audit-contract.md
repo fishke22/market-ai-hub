@@ -25,9 +25,11 @@ Type-specific requirements: `QUANTILE` needs `quantile_level`; `INTERVAL` needs
 `event_definition_id`; `NOT_AVAILABLE` must carry no value/raw_score.
 
 `raw score != calibrated probability` and `EVENT_PROBABILITY != automatically CALIBRATED`.
-`is_public_probability(artifact)` is True only for `EVENT_PROBABILITY`/`CLASS_SCORE` with
-`calibration_status_at_origin == CALIBRATED` **and** a `calibration_evidence_id` and a value.
-Everything else stays an internal audit artifact — no public probability.
+`is_public_probability(artifact)` is fail-closed (False) in 2I.1. Audit tags and an
+arbitrary evidence ID never authorize publication; CLASS_SCORE is not a probability.
+The separate PPM typed evidence gate remains authoritative for its own public view.
+A future fitted-evidence resolver must validate event family, target, horizon, model
+version, period and provenance before this audit API can publish probabilities.
 
 ### Prediction binding
 `PredictionRecord.forecast_artifact_digest` is part of the prediction payload, so identity binds

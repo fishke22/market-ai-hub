@@ -40,4 +40,4 @@ jobs:
       - name: Run lightweight tests (unit only)
         # integration tests need model weights / MCP subprocess; live tests need network.
         # Neither runs in public CI.
-        run: python -m pytest tests -q -m "not integration and not live"
+        run: python -m pytest tests -q -m "not integration and not live and not optional_model and not optional_integration and not private_data and not broker_diagnostic"

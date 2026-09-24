@@ -21,7 +21,8 @@ def data_root() -> Path:
     """<DATA_ROOT>：env MARKET_AI_DATA_ROOT 優先，否則 <ProjectRoot>/data。"""
     override = os.environ.get(_ENV_OVERRIDE, "").strip()
     if override:
-        return Path(override).expanduser()
+        path = Path(override).expanduser()
+        return path if path.is_absolute() else project_root() / path
     return project_root() / "data"
 
 

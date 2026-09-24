@@ -23,6 +23,7 @@ import math
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 from market_ai_hub.research.v2.prediction_audit import (
@@ -581,6 +582,20 @@ def evaluation_result_to_calibration_evidence(result: EvaluationResult) -> dict:
 
 # ── 真實資料 readiness（不建立 DB、不補值） ──
 def actual_evaluation_readiness(db: PredictionAuditDB | None = None) -> dict:
+    """Read candidate readiness without creating/migrating a database or claiming evaluation."""
+    import duckdb
+    try:
+        return _candidate_readiness(db)
+    except (duckdb.Error, OSError, ValueError, TypeError) as exc:
+        return {
+            "db_present": Path(db.path).exists() if db is not None else default_audit_db_path().exists(),
+            "ACTUAL_PROBABILITY_EVALUATION": "BLOCKED",
+            "ACTUAL_CALIBRATION_EVIDENCE": "NONE_YET",
+            "reason": "AUDIT_DB_UNREADABLE_" + type(exc).__name__,
+        }
+
+
+def _candidate_readiness(db: PredictionAuditDB | None = None) -> dict:
     """檢查 audit DB 是否已有真實 settled probabilistic samples。
 
     回傳 ACTUAL_PROBABILITY_EVALUATION / ACTUAL_CALIBRATION_EVIDENCE。
@@ -595,7 +610,7 @@ def actual_evaluation_readiness(db: PredictionAuditDB | None = None) -> dict:
                 "ACTUAL_PROBABILITY_EVALUATION": "INSUFFICIENT_EVIDENCE",
                 "ACTUAL_CALIBRATION_EVIDENCE": "NONE_YET",
             }
-        db = PredictionAuditDB()
+        db = PredictionAuditDB(default_audit_db_path(), read_only=True)
 
     settled = 0
     for pid in db.list_prediction_ids():
@@ -616,8 +631,9 @@ def actual_evaluation_readiness(db: PredictionAuditDB | None = None) -> dict:
         "db_present": True,
         "prediction_count": len(db.list_prediction_ids()),
         "settled_event_probability_samples": settled,
-        "ACTUAL_PROBABILITY_EVALUATION": ("EVALUATED" if settled >= MIN_PROBABILITY_SAMPLES
+        "ACTUAL_PROBABILITY_EVALUATION": ("READY_FOR_EVALUATION" if settled >= MIN_PROBABILITY_SAMPLES
                                           else "INSUFFICIENT_EVIDENCE"),
+        "readiness_scope": "UNVALIDATED_CANDIDATE_COUNT_ONLY",
         "ACTUAL_CALIBRATION_EVIDENCE": "NONE_YET",
     }
 

@@ -189,7 +189,8 @@ def test_uncalibrated_event_probability_remains_non_public():
     cal = _artifact("p1", artifact_type="EVENT_PROBABILITY", event_definition_id="TOUCH_1D",
                     label_type="TOUCH_1D", value=0.72,
                     calibration_status_at_origin="CALIBRATED", calibration_evidence_id="ev-1")
-    assert PA.is_public_probability(cal) is True
+    # A status string and unresolved evidence ID do not authorize publication.
+    assert PA.is_public_probability(cal) is False
 
 
 def test_uncalibrated_probability_persisted_but_not_public(db):

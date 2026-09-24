@@ -24,27 +24,15 @@ SCHEMA_VERSION = "1.1"
 
 SOURCE_ROOT = Path(__file__).resolve().parents[3]
 
-# runtime config（內容變 → build_id 變）
-RUNTIME_CONFIG_FILES = [
-    "config/model_registry.yaml",
-    "config/model_manifest.yaml",
-    "config/primary_targets.yaml",
-    "config/resource_profiles.yaml",
-    "config/model_resource_requirements.yaml",
-    "config/symbols.yaml",
-]
-
-
 def _fingerprint_paths() -> list[Path]:
     """全部 runtime source + runtime config（sorted，deterministic）。"""
     src_dir = SOURCE_ROOT / "src" / "market_ai_hub"
     paths: list[Path] = []
     if src_dir.exists():
         paths.extend(p for p in src_dir.rglob("*.py") if "__pycache__" not in p.parts)
-    for cfg in RUNTIME_CONFIG_FILES:
-        p = SOURCE_ROOT / cfg
-        if p.exists():
-            paths.append(p)
+    config_dir = SOURCE_ROOT / "config"
+    if config_dir.exists():
+        paths.extend(p for p in config_dir.rglob("*") if p.is_file() and p.suffix in (".yaml", ".yml", ".json"))
     return sorted(paths)
 
 
@@ -53,7 +41,8 @@ def _compute_build_id() -> str:
     for p in _fingerprint_paths():
         rel = p.relative_to(SOURCE_ROOT).as_posix()
         h.update(rel.encode("utf-8"))
-        h.update(p.read_bytes())
+        # Match Git's LF text contract even before Windows edits are staged.
+        h.update(p.read_bytes().replace(b"\r\n", b"\n"))
     return h.hexdigest()[:16]
 
 

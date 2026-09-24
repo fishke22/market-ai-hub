@@ -94,6 +94,7 @@ def test_valid_target():
 
 # ── 3706 data trace（資料層修正後應有真實 OHLC 變動）──
 
+@pytest.mark.live
 def test_3706_data_not_frozen():
     from market_ai_hub.research.forward import _fetch_frame
 
@@ -112,6 +113,8 @@ def test_nhits_nbeatsx_adapters_in_tournament():
     assert "nhits" in names and "nbeatsx" in names
 
 
+@pytest.mark.live
+@pytest.mark.optional_model
 def test_nhits_nbeatsx_smoke():
     from market_ai_hub.research.forward import _fetch_frame
 
@@ -155,4 +158,4 @@ def test_sample_size_report():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "fd90af1f1f11b5be"
+    assert build_fingerprint()["build_id"] == "7c3ea8b62785600a"

@@ -11,6 +11,10 @@ import json
 import os
 import re
 import time
+import math
+import threading
+from collections import deque
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -51,11 +55,109 @@ def _atomic_json(path: Path, payload: dict) -> None:
     os.replace(tmp, path)
 
 
+def recorder_root(config_path: Path = CONFIG_PATH) -> Path:
+    cfg = _load_config(config_path)
+    return _within(data_root(), str(cfg.get("storage", {}).get("root", "live/yuanta")))
+
+
+def _within(root: Path, relative: str) -> Path:
+    path = (root / relative).resolve()
+    if not path.is_relative_to(root.resolve()) or path == root.resolve():
+        raise ValueError("path must stay within recorder root")
+    return path
+
+
+@contextmanager
+def _single_instance(root: Path):
+    # Windows mutex is independent of DATA_ROOT: only one SPARK owner per session.
+    if os.name == "nt":
+        import ctypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+        kernel.CreateMutexW.restype = ctypes.c_void_p
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel.CreateMutexW(None, False, "Local\\MARKET_AI_HUB_SPARK_QUOTE_OWNER")
+        exists = ctypes.get_last_error() == 183
+        if not handle or exists:
+            if handle:
+                kernel.CloseHandle(handle)
+            raise RuntimeError("YUANTA_LIVE_ALREADY_RUNNING")
+        try:
+            yield
+        finally:
+            kernel.CloseHandle(handle)
+    else:
+        import fcntl
+        with (root / ".recorder.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+class QuoteBuffer:
+    """Bounded callback handoff. Failed writes keep the unacknowledged batch."""
+
+    def __init__(self, capacity: int):
+        if capacity < 1:
+            raise ValueError("buffer capacity must be positive")
+        self.capacity = capacity
+        self.records = deque()
+        self.lock = threading.Lock()
+        self.dropped = 0
+        self.latest = {}
+
+    def append(self, payload: dict) -> None:
+        with self.lock:
+            key = f"{payload['market_no']}:{payload['instrument_code']}"
+            self.latest[key] = _merge_quote(self.latest.get(key, {}), payload)
+            if len(self.records) >= self.capacity:
+                self.dropped += 1
+            else:
+                self.records.append(payload)
+
+    def snapshot(self):
+        with self.lock:
+            return dict(self.latest), len(self.records), self.dropped
+
+    def flush(self, root: Path, batch_size: int = 100000) -> str | None:
+        with self.lock:
+            batch = list(self.records)[:batch_size]
+        if not batch:
+            return None
+        result = _write_parquet(root, batch)  # exceptions propagate; no ack on failure
+        with self.lock:
+            for _ in batch:
+                self.records.popleft()
+        return result
+
+
+def _merge_quote(previous: dict, payload: dict) -> dict:
+    # Each retained field keeps its own time; top-level received_at is callback time only.
+    merged = dict(previous)
+    stamps = dict(previous.get("field_provenance", {}))
+    for key, value in payload.items():
+        if key in _QUOTE_FIELDS or key in ("value", "deal", "vol", "totalvol", "totalamt", "totalinvol", "totaloutvol"):
+            stamps[key] = {"received_at": payload["received_at"],
+                           "timestamp_quality": payload["timestamp_quality"],
+                           "source_time_of_day": payload.get("source_time_of_day"),
+                           "callback_type": payload["callback_type"]}
+    merged.pop("source_time_of_day", None)
+    merged.update(payload)
+    merged["field_provenance"] = stamps
+    merged["freshness_semantics"] = "PER_FIELD_ONLY"
+    return merged
+
+
 def _scalar(v: Any) -> Any:
+    if isinstance(v, float) and not math.isfinite(v):
+        return None
     if v is None or isinstance(v, (str, int, float, bool)):
         return v
     try:
-        return float(v)
+        number = float(v)
+        return number if math.isfinite(number) else None
     except Exception:
         try:
             return int(v)
@@ -187,13 +289,18 @@ def _subscribe(rt: SparkRuntime, account: str, pairs: list[tuple[int, str, str]]
     from YuantaOneAPI import WatchlistAll, enumLangType, enumMarketType
     if not pairs:
         return
-    items = NetList[WatchlistAll]()
-    for market, code, _ in pairs:
-        item = WatchlistAll()
-        item.MarketType = enumMarketType(market)
-        item.StockCode = code
-        items.Add(item)
-    rt._api.SubscribeWatchlistAll(account, items, enumLangType.UTF8)
+    for offset in range(0, len(pairs), 200):
+        delay = 0.2 - (time.monotonic() - getattr(rt, "_last_subscription_at", 0))
+        if delay > 0:
+            time.sleep(delay)
+        items = NetList[WatchlistAll]()
+        for market, code, _ in pairs[offset:offset + 200]:
+            item = WatchlistAll()
+            item.MarketType = enumMarketType(market)
+            item.StockCode = code
+            items.Add(item)
+        rt._api.SubscribeWatchlistAll(account, items, enumLangType.UTF8)
+        rt._last_subscription_at = time.monotonic()
 
 
 def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
@@ -201,49 +308,82 @@ def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
     dc = cfg.get("dynamic_requests", {})
     if not dc.get("enabled"):
         return
-    inbox = root / str(dc.get("inbox", "control/inbox"))
-    processed = root / str(dc.get("processed", "control/processed"))
-    failed = root / str(dc.get("failed", "control/failed"))
+    inbox = _within(root, str(dc.get("inbox", "control/inbox")))
+    processed = _within(root, str(dc.get("processed", "control/processed")))
+    failed = _within(root, str(dc.get("failed", "control/failed")))
     for x in (inbox, processed, failed):
         x.mkdir(parents=True, exist_ok=True)
     allowed = {int(x) for x in dc.get("allowed_markets", [])}
-    for req_path in sorted(inbox.glob("*.json")):
+    for req_path in sorted(inbox.glob("*.json"))[:10]:
         dest = processed
+        result = "REQUEST_SENT_NOT_LIVE_VERIFIED"
         try:
+            if req_path.is_symlink() or req_path.stat().st_size > 4096:
+                raise ValueError("invalid request file")
+            if (processed / req_path.name).exists() or (failed / req_path.name).exists():
+                req_path.unlink()  # already recorded by this ID, do not resubmit
+                continue
             req = json.loads(req_path.read_text(encoding="utf-8-sig"))
+            if req.get("action") != "subscribe":
+                raise ValueError("unsupported action")
             market = int(req["market_no"])
             symbol = str(req["symbol"])
             if market not in allowed or not _SYMBOL_RE.fullmatch(symbol):
                 raise ValueError("market/symbol not allowed")
             if (market, symbol) not in subscribed:
+                if sum(k == "dynamic" for k in subscribed.values()) >= int(cfg["recording"].get("max_dynamic_subscriptions", 200)):
+                    raise ValueError("dynamic subscription limit")
+                if len(subscribed) >= 2000:
+                    raise ValueError("total subscription limit")
                 _subscribe(rt, account, [(market, symbol, "dynamic")])
                 subscribed[(market, symbol)] = "dynamic"
-        except Exception:
+            else:
+                result = "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
+        except Exception as exc:
             dest = failed
+            result = "REJECTED_" + type(exc).__name__
+        _atomic_json(dest / (req_path.stem + ".result.json"), {"status": result, "processed_at": _utcnow().isoformat()})
         os.replace(req_path, dest / req_path.name)
 
 
 def _write_parquet(root: Path, records: list[dict]) -> str | None:
     if not records:
         return None
+    import pandas as pd
+    from uuid import uuid4
+    out = root / "parquet" / _utcnow().strftime("%Y-%m-%d")
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / ("part-" + uuid4().hex + ".parquet")
+    tmp = p.with_suffix(".partial")
     try:
-        import pandas as pd
-        out = root / "parquet" / _utcnow().strftime("%Y-%m-%d")
-        out.mkdir(parents=True, exist_ok=True)
-        p = out / ("part-" + _utcnow().strftime("%H%M%S-%f") + ".parquet")
-        pd.DataFrame(records).to_parquet(p, index=False)
-        return str(p)
-    except Exception:
-        return None
+        pd.DataFrame(records).to_parquet(tmp, index=False)
+        os.replace(tmp, p)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return str(p)
 
 
 def run(config_path: Path = CONFIG_PATH) -> int:
+    root = recorder_root(config_path)
+    root.mkdir(parents=True, exist_ok=True)
+    with _single_instance(root):
+        # Pre-lock releases may still be running. A fresh heartbeat blocks an overlapping login.
+        for legacy in {root, project_root() / "data" / "live" / "yuanta"}:
+            status_file = legacy / "status.json"
+            if status_file.exists():
+                status = json.loads(status_file.read_text(encoding="utf-8"))
+                heartbeat = status.get("heartbeat_at")
+                if heartbeat and status.get("pid") != os.getpid():
+                    if (_utcnow() - datetime.fromisoformat(heartbeat)).total_seconds() < 60:
+                        raise RuntimeError("YUANTA_LIVE_ALREADY_RUNNING")
+        return _run_locked(config_path, root)
+
+
+def _run_locked(config_path: Path, root: Path) -> int:
     cfg = _load_config(config_path)
     rec = cfg["recording"]
-    root = data_root() / str(cfg.get("storage", {}).get("root", "live/yuanta"))
-    root.mkdir(parents=True, exist_ok=True)
-    status_path = root / str(cfg["storage"].get("status_file", "status.json"))
-    latest_path = root / str(cfg["storage"].get("latest_file", "latest.json"))
+    status_path = _within(root, str(cfg["storage"].get("status_file", "status.json")))
+    latest_path = _within(root, str(cfg["storage"].get("latest_file", "latest.json")))
     from market_ai_hub.integrations.yuanta.order_api_guard import OrderApiExposureGuard
     if OrderApiExposureGuard().scan()["gate"] != "PASS":
         raise RuntimeError("OrderApiExposureGuard failed")
@@ -252,12 +392,16 @@ def run(config_path: Path = CONFIG_PATH) -> int:
     if cred is None or not secret:
         raise RuntimeError("SPARK securities credential unavailable")
     defaults = resolve_default_subscriptions(cfg)
+    if len(defaults) > 2000:
+        raise ValueError("total subscription limit")
     rt = SparkRuntime()
     subscribed = {(m, s): k for m, s, k in defaults}
-    latest: dict[str, dict] = {}
-    buffer: list[dict] = []
-    raw_day = ""
-    raw_handle = None
+    buffer = QuoteBuffer(int(rec.get("max_buffer_records", 100000)))
+    write_error = None
+    started_at = _utcnow()
+    recording_day = started_at.date()
+    if rec.get("raw_jsonl") or not rec.get("normalized_parquet"):
+        raise ValueError("persistent recorder requires Parquet; raw_jsonl is unsupported")
     last_latest = last_parquet = last_status = 0.0
     try:
         rt.instantiate()
@@ -268,72 +412,78 @@ def run(config_path: Path = CONFIG_PATH) -> int:
         secret = None
         if not outcome.received or outcome.msg_code not in ("0001", "00001"):
             raise RuntimeError(f"SPARK login failed: {outcome.msg_code}")
-        _subscribe(rt, cred.username, defaults)
-
         def on_quote(_mark, str_index, obj):
-            nonlocal raw_day, raw_handle
             payload = _extract_payload(obj, str(str_index))
             if payload is None:
                 return
             key = (payload["market_no"], payload["instrument_code"])
-            if key not in subscribed:
+            subscription_key = subscribed.get(key)
+            if subscription_key is None:
                 return
-            payload["subscription_key"] = subscribed[key]
-            latest_key = f"{key[0]}:{key[1]}"
-            merged = dict(latest.get(latest_key, {}))
-            merged.update(payload)
-            latest[latest_key] = merged
+            payload["subscription_key"] = subscription_key
             buffer.append(payload)
-            if rec.get("raw_jsonl"):
-                day = _utcnow().strftime("%Y-%m-%d")
-                if raw_handle is None or raw_day != day:
-                    if raw_handle is not None:
-                        raw_handle.close()
-                    raw_dir = root / "raw" / day
-                    raw_dir.mkdir(parents=True, exist_ok=True)
-                    raw_handle = (raw_dir / "quotes.jsonl").open("a", encoding="utf-8", buffering=1)
-                    raw_day = day
-                raw_handle.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
-                raw_handle.flush()
 
         rt.on_quote_callback = on_quote
+        _subscribe(rt, cred.username, defaults)
         while True:
             rt.pump(0.2)
             now = time.time()
             _dynamic_requests(root, cfg, rt, cred.username, subscribed)
+            latest, pending, dropped = buffer.snapshot()
             if now - last_latest >= float(rec.get("latest_snapshot_seconds", 1)):
                 _atomic_json(latest_path, {"updated_at": _utcnow().isoformat(), "quotes": latest})
                 last_latest = now
             if now - last_status >= 5:
+                last_quote = max((x.get("received_at", "") for x in latest.values()), default="")
+                age = (_utcnow() - datetime.fromisoformat(last_quote)).total_seconds() if last_quote else None
+                reasons = []
+                if write_error:
+                    reasons.append("PERSISTENCE_ERROR")
+                if dropped:
+                    reasons.append("BUFFER_OVERFLOW")
+                if age is None or age > 60:
+                    reasons.append("NO_RECENT_CALLBACK_SESSION_UNCHECKED")
+                if _utcnow().date() != recording_day:
+                    reasons.append("CONTRACT_REVALIDATION_REQUIRED")
                 _atomic_json(status_path, {
-                    "status": "RUNNING", "pid": os.getpid(), "provider": "SPARK_SECURITIES_PROFILE",
+                    "status": "DEGRADED" if reasons else "RUNNING", "pid": os.getpid(), "provider": "SPARK_SECURITIES_PROFILE",
                     "login_msg_code": outcome.msg_code, "subscriptions": len(subscribed),
-                    "last_quote_at": max((x.get("received_at", "") for x in latest.values()), default=""),
+                    "last_quote_at": last_quote, "quote_age_seconds": age,
+                    "health_reasons": reasons, "pending_records": pending, "dropped_records": dropped,
+                    "persistence_error": write_error, "started_at": started_at.isoformat(),
+                    "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
+                    "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
                     "heartbeat_at": _utcnow().isoformat(),
                 })
                 last_status = now
             if rec.get("normalized_parquet") and now - last_parquet >= float(rec.get("parquet_flush_seconds", 30)):
-                if buffer:
-                    batch = list(buffer)
-                    buffer.clear()
-                    _write_parquet(root, batch)
+                try:
+                    buffer.flush(root)
+                    write_error = None
+                except Exception as exc:
+                    write_error = type(exc).__name__  # no provider/credential text
                 last_parquet = now
     except KeyboardInterrupt:
         return 0
     finally:
         secret = None
-        if raw_handle is not None:
-            raw_handle.close()
-        if buffer and rec.get("normalized_parquet"):
-            _write_parquet(root, buffer)
         # Recorder lifetime owns the login. Agents never logout it. Process/OS exit closes the socket.
         try:
             rt.close()
             rt.dispose()
         except Exception:
             pass
+        try:
+            while buffer.snapshot()[1]:
+                buffer.flush(root)
+            write_error = None
+        except Exception as exc:
+            write_error = type(exc).__name__
         _atomic_json(status_path, {
-            "status": "STOPPED", "pid": os.getpid(), "stopped_at": _utcnow().isoformat()
+            "status": "STOPPED_WITH_UNFLUSHED_DATA" if write_error else "STOPPED",
+            "pid": os.getpid(), "stopped_at": _utcnow().isoformat(),
+            "pending_records": buffer.snapshot()[1], "dropped_records": buffer.snapshot()[2],
+            "persistence_error": write_error,
         })
     return 0
 

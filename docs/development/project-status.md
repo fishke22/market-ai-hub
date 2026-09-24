@@ -6,7 +6,7 @@
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Actual live readiness：OSE Micro / TX / MTX / TMF / NQ / ES live = **NOT_AVAILABLE**
+- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets; see Yuanta guide. This is historical capability evidence, not per-field current freshness or model-feed readiness.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
@@ -15,9 +15,20 @@
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
 - V2-I：**EVALUATION_FOUNDATION_PASS**（evaluation engine only；CALIBRATION FITTING NOT STARTED）
-- Yuanta SPARK securities profile：login ACCEPTED（0001）；TAIFEX/OSE subscription ACCEPTED，**無 callback** →
-  `spark_securities_taifex_quote` / `spark_securities_ose_quote` = `SUBSCRIPTION_ACCEPTED_NO_CALLBACK`
+- Yuanta SPARK securities profile：PR #53 had no callbacks; later local 2026-09-24 matrix records matching TAIFEX/OSE/CME/CBOT/CBOE/NYBOT callbacks. Preserve account_profile=SECURITIES. Source hardening does not re-certify those live observations.
 - Yuanta SPARK futures profile：0112 → **SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED**（不 retry）
+
+## 2026-09-24 correctness hardening
+
+Source fixes: durable-write acknowledgement, per-field freshness, bounded callbacks,
+single-owner mutex, subscription request validation/limits, shared data-root resolution,
+fail-closed audit probability helper, read-only readiness, fatal installer failures,
+offline CI markers, complete runtime-config fingerprint. See
+`research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md` for validation/publication state.
+The previously running recorder has not been restarted by this repair; disk source
+PASS does not mean that process loaded the new implementation.
+Automatic reconnect/roll, durable crash spool, model-feed adapter and calibration fitting
+remain future work. Research-only boundaries are unchanged.
 
 ## Phase 2 全歷程 Gate
 
@@ -267,5 +278,5 @@
 NO LIVE TRADING / NO ORDER / NO BROKER CREDENTIAL / AUTO_PROMOTE_CHAMPION=false /
 Yuanta quote-only、Trading API 未接 runtime、OrderApiExposureGuard PASS、secret scan 無真實 PII。
 
-## NEXT（禁止）
-- 不 git commit/push、不 release/tag、不 Live Trading、不 Yuanta order、不 recorder。
+## Historical stop point (superseded by later user-authorized quote work)
+- Historical phase prohibited commit/push/recorder. Later user authorization permits quote recorder engineering and publication. Live Trading and Yuanta order remain prohibited.
