@@ -75,6 +75,7 @@ class AnalysisPacket(BaseModel):
     data_coverage_summary: list[dict[str, Any]] = Field(default_factory=list)
     # W2: persisted V2-A.2 factor-observation provenance (source/quality, not a trading signal).
     factor_observation_summary: list[dict[str, Any]] = Field(default_factory=list)
+    model_input_readiness: dict[str, Any] = Field(default_factory=dict)
 
     research_gates: dict[str, Any] = Field(default_factory=dict)
     reanalysis_conditions: list[str] = Field(default_factory=list)
