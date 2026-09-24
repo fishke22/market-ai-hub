@@ -62,8 +62,8 @@ def _synthetic():
 
 
 # ── schema / capability ──
-def test_v2g_schema_2g1():
-    assert SU.V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION == "2G.1"
+def test_v2g_schema_2g2():
+    assert SU.V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION == "2G.2"
 
 
 def test_change_point_methods_are_research_challenger_not_implemented():
@@ -689,3 +689,280 @@ def test_synthetic_sequence_change_descriptors():
     assert "DIRECTIONAL" in a.steps[2].state_changed_layers
     assert a.probability_status == "NOT_AVAILABLE_UPSTREAM_UNCALIBRATED"
     assert a.change_point_status == "RESEARCH_CHALLENGER_NOT_IMPLEMENTED"
+
+
+# ── 2G.2 blocked-artifact audit lineage ──
+def _stale_pair():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")], source_snapshot_ids=["ctx18"])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")], source_snapshot_ids=["ev18"])
+    stale = copy.deepcopy(s1)
+    stale.directional_state.value = "STRONG_BEAR"
+    return s0, stale
+
+
+def test_blocked_snapshot_artifact_preserves_declared_snapshot_ids():
+    s0, stale = _stale_pair()
+    a = SU.build_state_sequence([s0, stale])
+    assert a.sequence_status == "BLOCKED"
+    assert set(a.candidate_snapshot_ids) == {s0.snapshot_id, stale.snapshot_id}
+
+
+def test_blocked_snapshot_artifact_preserves_recomputed_fingerprints():
+    s0, stale = _stale_pair()
+    a = SU.build_state_sequence([s0, stale])
+    stale_audit = [x for x in a.candidate_snapshot_audits if x.declared_snapshot_id == stale.snapshot_id][0]
+    assert stale_audit.recomputed_snapshot_id == SM.snapshot_identity(stale)
+    assert stale_audit.recomputed_snapshot_id != stale.snapshot_id
+
+
+def test_blocked_snapshot_artifact_preserves_source_lineage():
+    s0, stale = _stale_pair()
+    a = SU.build_state_sequence([s0, stale])
+    assert "ctx18" in a.candidate_source_snapshot_ids
+    assert "ev18" in a.candidate_source_snapshot_ids
+    assert "ctx18" in a.candidate_snapshot_source_snapshot_ids
+
+
+def test_blocked_snapshot_artifact_preserves_state_stream():
+    s0, stale = _stale_pair()
+    a = SU.build_state_sequence([s0, stale])
+    assert len(a.candidate_state_stream_ids) == 2
+    assert any("2026-09-18T08:00:00" in x for x in a.candidate_state_stream_ids)
+    assert any("2026-09-18T09:00:00" in x for x in a.candidate_state_stream_ids)
+
+
+def test_blocked_snapshot_artifact_preserves_asof():
+    ev_v = _ev("DIRECTIONAL", "BULLISH", "d1", asof_status="ASOF_VERIFIED")
+    s_v = SM.compose_state_snapshot(
+        _ctx(state_origin=_dt(18, 8), feature_cutoff_timestamp=_dt(18, 8), asof_status="ASOF_VERIFIED"), [ev_v])
+    assert s_v.derived_asof_status == "ASOF_VERIFIED"
+    stale = copy.deepcopy(_snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")]))
+    stale.directional_state.value = "STRONG_BEAR"
+    a = SU.build_state_sequence([s_v, stale])
+    assert a.sequence_status == "BLOCKED"
+    assert a.candidate_snapshot_asof_by_id[s_v.snapshot_id] == "ASOF_VERIFIED"
+    assert a.derived_asof_status == "LEGACY_TEMPORAL_UNVERIFIED"
+
+
+# ── 2G.2 blocked self identity ──
+def test_blocked_sequence_id_recomputes_from_artifact():
+    s0, stale = _stale_pair()
+    a = SU.build_state_sequence([s0, stale])
+    assert a.sequence_id != ""
+    assert SU.sequence_identity(a) == a.sequence_id
+
+
+def test_blocked_snapshot_sequence_identity_is_self_verifiable():
+    s0, stale = _stale_pair()
+    a = SU.build_state_sequence([s0, stale])
+    assert a.sequence_status == "BLOCKED"
+    assert SU.sequence_identity(a) == a.sequence_id
+
+
+def test_blocked_transition_sequence_identity_is_self_verifiable():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    t = SM.transition(s0, s1)
+    t.new_directional_state.value = "STRONG_BEAR"
+    a = SU.build_state_sequence([s0, s1], transitions=[t])
+    assert a.sequence_status == "BLOCKED"
+    assert SU.sequence_identity(a) == a.sequence_id
+
+
+# ── 2G.2 declared vs recomputed ──
+def test_forged_declared_snapshot_id_is_preserved():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    forged = copy.deepcopy(_snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")]))
+    forged.snapshot_id = "FORGED_X"
+    a = SU.build_state_sequence([s0, forged])
+    assert a.sequence_status == "BLOCKED"
+    assert "FORGED_X" in a.candidate_snapshot_ids
+
+
+def test_declared_snapshot_id_change_changes_blocked_audit_identity():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    fa = copy.deepcopy(_snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")]))
+    fa.snapshot_id = "FORGED_A"
+    fb = copy.deepcopy(_snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")]))
+    fb.snapshot_id = "FORGED_B"
+    aA = SU.build_state_sequence([s0, fa])
+    aB = SU.build_state_sequence([s0, fb])
+    assert aA.sequence_id != aB.sequence_id
+
+
+def test_same_content_different_declared_ids_share_recomputed_fingerprint():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    fa = copy.deepcopy(_snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")]))
+    fa.snapshot_id = "FORGED_A"
+    fb = copy.deepcopy(_snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")]))
+    fb.snapshot_id = "FORGED_B"
+    aA = SU.build_state_sequence([s0, fa])
+    aB = SU.build_state_sequence([s0, fb])
+    fa_audit = [x for x in aA.candidate_snapshot_audits if x.declared_snapshot_id == "FORGED_A"][0]
+    fb_audit = [x for x in aB.candidate_snapshot_audits if x.declared_snapshot_id == "FORGED_B"][0]
+    assert fa_audit.recomputed_snapshot_id == fb_audit.recomputed_snapshot_id
+
+
+# ── 2G.2 order determinism ──
+def test_blocked_candidate_snapshot_order_does_not_change_sequence_id():
+    s0, stale = _stale_pair()
+    a1 = SU.build_state_sequence([s0, stale])
+    a2 = SU.build_state_sequence([stale, s0])
+    assert a1.sequence_id == a2.sequence_id
+
+
+def test_blocked_candidate_transition_order_does_not_change_sequence_id():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    s2 = _snap(_dt(18, 10), [("DIRECTIONAL", "STRONG_BEAR", "d1")])
+    t01 = SM.transition(s0, s1)
+    t12 = SM.transition(s1, s2)
+    t12.new_directional_state.value = "BULLISH"  # forge
+    a1 = SU.build_state_sequence([s0, s1, s2], transitions=[t01, t12])
+    a2 = SU.build_state_sequence([s0, s1, s2], transitions=[t12, t01])
+    assert a1.sequence_status == "BLOCKED"
+    assert a1.sequence_id == a2.sequence_id
+
+
+def test_blocked_semantic_dump_is_order_independent():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 8), [("DIRECTIONAL", "BEARISH", "d1")])
+    a1 = SU.build_state_sequence([s0, s1])
+    a2 = SU.build_state_sequence([s1, s0])
+    assert a1.sequence_status == "BLOCKED"
+    assert a1.semantic_dump() == a2.semantic_dump()
+
+
+# ── 2G.2 transition lineage ──
+def test_forged_transition_block_preserves_declared_transition_id():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    t = SM.transition(s0, s1)
+    tid = t.transition_id
+    t.new_directional_state.value = "STRONG_BEAR"
+    a = SU.build_state_sequence([s0, s1], transitions=[t])
+    assert a.sequence_status == "BLOCKED"
+    assert tid in a.candidate_transition_ids
+
+
+def test_forged_transition_block_preserves_transition_fingerprint():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    t = SM.transition(s0, s1)
+    t.new_directional_state.value = "STRONG_BEAR"
+    a = SU.build_state_sequence([s0, s1], transitions=[t])
+    assert a.candidate_transition_audits[0].recomputed_transition_fingerprint != ""
+
+
+def test_orphan_transition_block_preserves_prev_new_ids():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    s2 = _snap(_dt(18, 10), [("DIRECTIONAL", "STRONG_BEAR", "d1")])
+    t = SM.transition(s0, s2)
+    a = SU.build_state_sequence([s0, s1, s2], transitions=[t])
+    assert a.sequence_status == "BLOCKED"
+    audit = a.candidate_transition_audits[0]
+    assert audit.previous_snapshot_id == s0.snapshot_id
+    assert audit.new_snapshot_id == s2.snapshot_id
+
+
+def test_transition_block_preserves_trigger_lineage():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    t = SM.transition(s0, s1, trigger_evidence_ids=["d1"])
+    t.new_directional_state.value = "STRONG_BEAR"
+    a = SU.build_state_sequence([s0, s1], transitions=[t])
+    assert a.candidate_transition_audits[0].trigger_evidence_ids == ["d1"]
+
+
+def test_transition_block_preserves_source_lineage():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")], source_snapshot_ids=["ctx18"])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")], source_snapshot_ids=["ev18"])
+    t = SM.transition(s0, s1)
+    t.new_directional_state.value = "STRONG_BEAR"
+    a = SU.build_state_sequence([s0, s1], transitions=[t])
+    assert "ctx18" in a.candidate_transition_source_snapshot_ids
+    assert "ev18" in a.candidate_transition_source_snapshot_ids
+
+
+# ── 2G.2 append audit ──
+def test_append_to_blocked_sequence_preserves_existing_audit_context():
+    s0, stale = _stale_pair()
+    blocked = SU.build_state_sequence([s0, stale])
+    existing_ids = set(blocked.candidate_snapshot_ids)
+    s2 = _snap(_dt(18, 10), [("DIRECTIONAL", "STRONG_BEAR", "d1")])
+    out = SU.append_state_update(blocked, s2)
+    assert out.sequence_status == "BLOCKED"
+    assert SU.BLOCKED_EXISTING_SEQUENCE_NOT_APPENDABLE in out.block_reason_codes
+    assert existing_ids.issubset(set(out.candidate_snapshot_ids))
+    assert s2.snapshot_id in out.candidate_snapshot_ids
+    assert SU.sequence_identity(out) == out.sequence_id
+
+
+def test_append_corrupted_existing_sequence_preserves_declared_sequence_id():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    base = SU.build_state_sequence([s0])
+    declared = base.sequence_id
+    base.snapshots[0].directional_state.value = "STRONG_BULL"
+    out = SU.append_state_update(base, s1)
+    assert out.sequence_status == "BLOCKED"
+    assert SU.BLOCKED_SEQUENCE_INTEGRITY_MISMATCH in out.block_reason_codes
+    assert out.existing_sequence_declared_id == declared
+
+
+def test_append_corrupted_existing_sequence_preserves_recomputed_sequence_id():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    base = SU.build_state_sequence([s0])
+    base.snapshots[0].directional_state.value = "STRONG_BULL"
+    recomputed = SU.sequence_identity(base)
+    out = SU.append_state_update(base, s1)
+    assert out.existing_sequence_recomputed_id == recomputed
+    assert out.existing_sequence_recomputed_id != out.existing_sequence_declared_id
+
+
+def test_append_failure_preserves_new_snapshot_candidate_lineage():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    base = SU.build_state_sequence([s0])
+    base.snapshots[0].directional_state.value = "STRONG_BULL"
+    out = SU.append_state_update(base, s1)
+    assert s1.snapshot_id in out.candidate_snapshot_ids
+
+
+def test_append_failure_is_deterministic():
+    s0 = _snap(_dt(18, 8), [("DIRECTIONAL", "BULLISH", "d1")])
+    s1 = _snap(_dt(18, 9), [("DIRECTIONAL", "BEARISH", "d1")])
+    base = SU.build_state_sequence([s0])
+    base.snapshots[0].directional_state.value = "STRONG_BULL"
+    out1 = SU.append_state_update(base, s1)
+    out2 = SU.append_state_update(base, s1)
+    assert out1.sequence_id == out2.sequence_id
+    assert out1.semantic_dump() == out2.semantic_dump()
+
+
+# ── 2G.2 policy freeze ──
+def test_sequential_policy_probability_status_frozen():
+    assert SU.SequentialUpdatePolicy().probability_status == "NOT_AVAILABLE_UPSTREAM_UNCALIBRATED"
+    with pytest.raises(ValueError):
+        SU.SequentialUpdatePolicy(probability_status="CALIBRATED")
+
+
+def test_sequential_policy_change_point_status_frozen():
+    assert SU.SequentialUpdatePolicy().change_point_status == "RESEARCH_CHALLENGER_NOT_IMPLEMENTED"
+    with pytest.raises(ValueError):
+        SU.SequentialUpdatePolicy(change_point_status="DETECTED")
+
+
+def test_sequential_policy_validation_status_frozen():
+    assert SU.SequentialUpdatePolicy().validation_status == "HYPOTHESIS_ONLY"
+    with pytest.raises(ValueError):
+        SU.SequentialUpdatePolicy(validation_status="PROVEN")
+
+
+def test_sequential_policy_persistence_not_configured():
+    assert SU.SequentialUpdatePolicy().persistence_policy == "NOT_CONFIGURED"
+    with pytest.raises(ValueError):
+        SU.SequentialUpdatePolicy(persistence_policy="CONFIGURED")
+
