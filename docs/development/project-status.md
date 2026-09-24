@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W3 Forward Evidence Engineering（W3.2 cycle engine PASS；eligible DAILY input / actual forward evidence pending）**
+- Current phase: **W3 Forward Evidence Engineering + model-evaluation correctness（W3.3 source code present；timestamp verification / eligible DAILY input / actual forward evidence pending）**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**81f02a25847b9e65**（W3.2 precommitted forward-cycle engine；fingerprint 全部 runtime source + config）
+- build_id：**eca898aa6fc222c2**（model-credibility corrections after W3.3；source fingerprint，不證明常駐 process 已升級）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -19,6 +19,13 @@
 - Yuanta SPARK futures profile：0112 → **SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED**（不 retry）
 
 ## 2026-09-24 correctness hardening
+
+Latest 2026-09-25 correction: code `ea29c12af8bdffb36bbaa1dd8275d445fc7135a0`.
+Exact outcome labels, seasonal horizons, interval origin alignment/validity, trend confidence truth
+and classifier forecast-origin inputs fixed. Offline profile 1785 passed / 34 deselected; focused
+172 passed / 3 deselected. See `MODEL_CREDIBILITY_PLAN_2026-09-25.md` and
+`MODEL_CREDIBILITY_VALIDATION_2026-09-25.md` in this directory for scope and limitations.
+Prior tournament rankings affected by these changes require versioned re-evaluation.
 
 Source fixes: durable-write acknowledgement, per-field freshness, bounded callbacks,
 single-owner mutex, subscription request validation/limits, shared data-root resolution,

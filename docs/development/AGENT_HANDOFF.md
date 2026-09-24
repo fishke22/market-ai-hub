@@ -5,6 +5,16 @@ wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W3.2 
 
 ## Current repair checkpoint
 
+2026-09-25 model-credibility correction: read `docs/development/MODEL_CREDIBILITY_PLAN_2026-09-25.md`
+and `MODEL_CREDIBILITY_VALIDATION_2026-09-25.md` before using old tournament results.
+Code commit `ea29c12af8bdffb36bbaa1dd8275d445fc7135a0`, build `eca898aa6fc222c2` fixes exact
+outcome labels, seasonal horizons, aligned/valid interval metrics, invented trend confidence and
+classifier forecast-origin inputs. Final offline profile: 1785 passed / 34 deselected; focused 172 passed.
+W3.3 tick-detail source code already exists at baseline `b567233`; OSE timestamp basis and terminal-close
+materialization still require evidence. Do not redo W3.1/W3.2/W3.3 engines. No live recorder action was taken.
+Next bounded offline package: C1 evaluation comparison/abstention audit described in the plan.
+The W3.2 checkpoint below is historical, including its runtime build, not the latest source identity.
+
 Read `research/phase3/reports/W32_PRECOMMITTED_FORWARD_CYCLE_2026-09-25.md` first, then the W3.1 governance and W2 reports. W3.2 implementation commit is `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; runtime build_id is `81f02a25847b9e65`.
 
 Runtime adoption is still **RUNTIME_ADOPTION_PENDING**. Read-only inspection found the running recorder status still has the old field set and all 22 current `latest.json` quotes lack `field_provenance` / `freshness_semantics`; no broker login, logout, subscription, restart, order or account action was performed. Do not use a newly imported build_id as evidence for the already-running process.
