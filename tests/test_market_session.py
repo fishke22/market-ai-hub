@@ -91,7 +91,12 @@ def test_session_status_vocabulary():
     assert session_status("USDJPY=X", _sat())["session_status"] == "CLOSED"
     assert session_status("USDJPY=X", _mon())["session_status"] == "OPEN"
     assert session_status("BTC-USD", _sat())["session_status"] == "OPEN"
-    assert session_status("NQ=F", _mon())["session_status"] == "UNKNOWN"
+    # V2-A.2: CME is now an explicit venue (no more silent UNKNOWN for NQ=F)
+    nq = session_status("NQ=F", _mon())
+    assert nq["session_status"] in ("OPEN", "CLOSED")
+    assert nq["venue_id"] == "CME"
+    # an unmapped symbol stays UNKNOWN (no TWSE fallback)
+    assert session_status("NOPE", _mon())["session_status"] == "UNKNOWN"
     # 不得出現 stale 作為 session status
     for sym, ts in (("USDJPY=X", _sat()), ("USDJPY=X", _mon()), ("BTC-USD", _sat()), ("NQ=F", _mon())):
         assert session_status(sym, ts)["session_status"] != "STALE"

@@ -239,7 +239,7 @@ def test_market_context_quality_degrades_on_stale():
 
 def test_healthcheck_display_not_required():
     # V2-A does not add public probability / trade action; only capability status surface exists
-    assert asof.V2_ASOF_SCHEMA_VERSION == "2A.1"
+    assert asof.V2_ASOF_SCHEMA_VERSION == "2A.2"
 
 
 # ── §29/§30: legacy feature-store bridge ──

@@ -33,22 +33,46 @@ except Exception as e:  # pragma: no cover
 EXCHANGE_TIMEZONE = {"TWSE": "Asia/Taipei", "TSE": "Asia/Tokyo"}
 
 
-def exchange_for_symbol(symbol: str) -> str:
-    if symbol == "^N225":
-        return "TSE"
-    return "TWSE"
+class UnknownVenueError(ValueError):
+    """No explicit cash venue mapping for a symbol. Fail closed (never default to TWSE)."""
+
+
+# explicit cash symbol -> exchange mapping; unknown symbols are NOT defaulted to TWSE.
+_CASH_SYMBOL_EXCHANGE = {
+    "^N225": "TSE",
+    "^TPX": "TSE",
+    "^TWII": "TWSE",
+}
+
+
+def exchange_for_symbol(symbol: str) -> str | None:
+    s = (symbol or "").strip().upper()
+    if s in _CASH_SYMBOL_EXCHANGE:
+        return _CASH_SYMBOL_EXCHANGE[s]
+    if s.endswith(".TW") or s.endswith(".TWO"):
+        return "TWSE"
+    if s.split(".")[0].isdigit():
+        return "TWSE"  # Taiwan listed stock code
+    return None
 
 
 def exchange_timezone(symbol: str) -> str:
-    return EXCHANGE_TIMEZONE[exchange_for_symbol(symbol)]
+    ex = exchange_for_symbol(symbol)
+    if ex is None:
+        raise UnknownVenueError(f"no explicit cash venue mapping for symbol {symbol!r}")
+    return EXCHANGE_TIMEZONE[ex]
 
 
 def calendar_name(symbol: str) -> str:
-    return {"TWSE": "XTAI", "TSE": "XTKS"}[exchange_for_symbol(symbol)]
+    ex = exchange_for_symbol(symbol)
+    if ex is None:
+        raise UnknownVenueError(f"no explicit cash venue mapping for symbol {symbol!r}")
+    return {"TWSE": "XTAI", "TSE": "XTKS"}[ex]
 
 
 def _cal(symbol: str):
-    return _CAL.get(exchange_for_symbol(symbol))
+    ex = exchange_for_symbol(symbol)
+    return _CAL.get(ex) if ex else None
 
 
 def calendar_verified(symbol: str) -> bool:
@@ -59,7 +83,17 @@ def calendar_verified(symbol: str) -> bool:
 
 
 def trading_date_of(ts_utc: datetime | pd.Timestamp, symbol: str) -> str:
-    """bar 的 UTC 時間戳 → 交易所當地 trading_date（YYYY-MM-DD）。"""
+    """bar 的 UTC 時間戳 → 交易所當地 trading_date（YYYY-MM-DD）。
+
+    Cash / calendar-date semantics only. Unknown symbols and derivatives symbols raise
+    (use research.v2.session_truth.resolve_venue_session for derivatives trading dates).
+    """
+    ex = exchange_for_symbol(symbol)
+    if ex is None:
+        raise UnknownVenueError(
+            f"trading_date_of is cash/calendar-date semantics; no explicit cash venue for symbol {symbol!r} "
+            "(derivatives must use session_truth.resolve_venue_session)"
+        )
     ts = pd.Timestamp(ts_utc)
     if ts.tzinfo is None:
         ts = ts.tz_localize("UTC")
@@ -78,6 +112,8 @@ def next_trading_sessions(symbol: str, after_date: date | datetime | str, n: int
     """after_date 之後的 n 個未來交易 session（嚴格不含 after_date 本身）。"""
     if n <= 0:
         return []
+    if exchange_for_symbol(symbol) is None:
+        raise UnknownVenueError(f"no explicit cash venue mapping for symbol {symbol!r}")
     if not calendar_verified(symbol):
         # CALENDAR_UNVERIFIED：給 best-effort（只跳週末），明確標記非 exact（由 caller 標 grade）
         start = pd.Timestamp(after_date) + pd.Timedelta(days=1)
@@ -95,12 +131,12 @@ def calendar_metadata(symbol: str) -> dict:
     ex = exchange_for_symbol(symbol)
     verified = calendar_verified(symbol)
     meta = {
-        "calendar_name": calendar_name(symbol),
-        "exchange_timezone": exchange_timezone(symbol),
+        "calendar_name": calendar_name(symbol) if ex else "UNKNOWN",
+        "exchange_timezone": exchange_timezone(symbol) if ex else "UTC",
         "calendar_source": "exchange_calendars (QuantConnect)" if _HAS_XCALS else "NONE",
         "calendar_verified": verified,
         "calendar_grade": "EXCHANGE_VERIFIED" if verified else "CALENDAR_UNVERIFIED",
-        "calendar_last_verified": datetime.now(timezone.utc).isoformat() if verified else None,
+        "calendar_last_verified": datetime.now(timezone.utc).isoformat() if verified else "",
     }
     if verified:
         c = _cal(symbol)
@@ -144,6 +180,23 @@ def next_ose_derivatives_sessions(after_date: date | datetime | str, n: int) -> 
     return [d for d in combined if d > start][:n]
 
 
+def is_ose_derivatives_session(d: date | datetime | str) -> bool:
+    """True when the local date is an OSE derivatives session (XTKS cash session OR JPX holiday trading)."""
+    ds = str(pd.Timestamp(d).date())
+    if ds in _ose_holiday_trading_sessions():
+        return True
+    try:
+        return is_session("^N225", d)
+    except Exception:
+        return False
+
+
+def next_ose_derivatives_session(after_date: date | datetime | str) -> str | None:
+    """Next OSE derivatives session strictly after after_date, or None."""
+    sessions = next_ose_derivatives_sessions(after_date, 1)
+    return sessions[0] if sessions else None
+
+
 def sanitize_daily_exchange_sessions(df: "pd.DataFrame", symbol: str) -> "pd.DataFrame":
     """2Q-F.4：daily bars 只保留 exchange 有效 session（排除週末/休市 invalid bars）。
 
@@ -154,6 +207,8 @@ def sanitize_daily_exchange_sessions(df: "pd.DataFrame", symbol: str) -> "pd.Dat
         return df
     out = df.copy()
     ex = exchange_for_symbol(symbol)
+    if ex is None:
+        raise UnknownVenueError(f"no explicit cash venue mapping for symbol {symbol!r}")
     invalid = []
     for idx, row in out.iterrows():
         ts = pd.Timestamp(row.get("timestamp_utc") or row.get("timestamp_local"))
@@ -187,6 +242,23 @@ def forecast_anchor(symbol: str, last_ts: datetime | pd.Timestamp, steps: int) -
     if origin.tzinfo is None:
         origin = origin.tz_localize("UTC")
     origin = origin.tz_convert("UTC")
+    if exchange_for_symbol(symbol) is None:
+        # unknown symbol: explicitly UNVERIFIED calendar (UTC best-effort business days, no TWSE pretence)
+        last_obs = origin.date().strftime("%Y-%m-%d")
+        start = pd.Timestamp(last_obs) + pd.Timedelta(days=1)
+        target_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start=start, periods=max(steps, 0))]
+        return {
+            "forecast_origin": origin.isoformat(),
+            "last_observed_trading_date": last_obs,
+            "forecast_target_dates": target_dates,
+            "exchange_timezone": "UTC",
+            "target_calendar": "UNKNOWN",
+            "calendar_name": "UNKNOWN",
+            "calendar_source": "NONE",
+            "calendar_verified": False,
+            "calendar_grade": "CALENDAR_UNVERIFIED",
+            "calendar_last_verified": "",
+        }
     last_obs = trading_date_of(origin, symbol)
     target_dates = next_trading_sessions(symbol, last_obs, steps)
     meta = calendar_metadata(symbol)

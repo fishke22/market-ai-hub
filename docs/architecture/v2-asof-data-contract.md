@@ -1,7 +1,9 @@
 # V2 As-Of Data Contract
 
-- **Schema**: `V2_ASOF_SCHEMA_VERSION = "2A.1"` (module `market_ai_hub/research/v2/asof.py`)
+- **Schema**: `V2_ASOF_SCHEMA_VERSION = "2A.2"` (module `market_ai_hub/research/v2/asof.py`)
 - Independent from Price/Probability Map `3A.2.x` (both versioned separately).
+- V2-A.2 adds venue/session truth + factor-representation routing — see
+  `docs/architecture/v2-session-factor-routing-contract.md`.
 
 ## Core invariant (machine-enforced)
 

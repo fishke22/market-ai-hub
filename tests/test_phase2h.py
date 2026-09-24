@@ -217,5 +217,5 @@ def test_live_smoke_osaka_packet():
     # 建 packet（不依賴 TradingView/Yuanta）
     p = build_analysis_packet(market="osaka", detail_level="normal", save_analysis=False)
     assert p["execution_target"] == EXECUTION_TARGET
-    assert p["target_data_status"] == "LIVE_VERIFIED"
+    assert p["target_data_status"] == "REFERENCE_AVAILABLE"  # V2-A.2: dated settlement != LIVE_VERIFIED
     assert p["reference_price_type"] == PRICE_TYPE_SETTLEMENT

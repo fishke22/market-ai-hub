@@ -620,14 +620,19 @@ def get_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MICR
 
 @mcp.tool()
 def get_data_coverage() -> dict:
-    """大阪微型日經各 factor 資料覆蓋摘要（LIVE_VERIFIED/CONTRACT_ONLY/NEEDS_CONFIG/...）。不得隱藏缺口。"""
-    from market_ai_hub.targets.coverage import LiveCoverageAuditor, LIVE_VERIFIED
+    """大阪微型日經各 factor 資料覆蓋摘要（REFERENCE_AVAILABLE/SOURCE_VERIFIED/PROXY/...）。不得隱藏缺口。
+
+    V2-A.2：LIVE_VERIFIED 不再用於 dated settlement / proxy observation。
+    """
+    from market_ai_hub.targets.coverage import (
+        LiveCoverageAuditor, PROXY, REFERENCE_AVAILABLE, SOURCE_VERIFIED,
+    )
 
     overrides = {
-        "Micro settlement": {"status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
-        "VIX": {"status": LIVE_VERIFIED, "source": "Cboe official"},
-        "CPI": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
-        "NFP": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
+        "Micro settlement": {"status": REFERENCE_AVAILABLE, "source": "JPX settlement CSV (dated official reference)"},
+        "VIX": {"status": PROXY, "source": "yfinance ^VIX (runtime observation)"},
+        "CPI": {"status": SOURCE_VERIFIED, "source": "BLS API v2 (official source)"},
+        "NFP": {"status": SOURCE_VERIFIED, "source": "BLS API v2 (official source)"},
     }
     recs = LiveCoverageAuditor().audit_osaka(overrides)
     return {"factors": [r.model_dump() for r in recs],

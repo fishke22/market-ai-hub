@@ -368,7 +368,7 @@ def test_versions():
     from market_ai_hub.research.v2.gap_session import V2_GAP_SESSION_SCHEMA_VERSION
     from market_ai_hub.research.price_probability_map import PRICE_PROBABILITY_MAP_VERSION
     assert L.V2_DAILY_LABEL_SCHEMA_VERSION == "2C.2"
-    assert V2_ASOF_SCHEMA_VERSION == "2A.1"
+    assert V2_ASOF_SCHEMA_VERSION == "2A.2"
     assert V2_GAP_SESSION_SCHEMA_VERSION == "2B.1"
     assert PRICE_PROBABILITY_MAP_VERSION == "3A.2.3"
 

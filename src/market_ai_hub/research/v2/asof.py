@@ -10,7 +10,7 @@ This module is CPU/lightweight, loads no model weights, and is read-only w.r.t. 
 It does NOT implement state models, labels, distribution fitting, calibration, or order flow.
 
 Separate schema version (not tied to Price/Probability Map 3A.2.x):
-    V2_ASOF_SCHEMA_VERSION = "2A.1"
+    V2_ASOF_SCHEMA_VERSION = "2A.2"
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from hashlib import sha256
 from zoneinfo import ZoneInfo
 from typing import Any
 
-V2_ASOF_SCHEMA_VERSION = "2A.1"
+V2_ASOF_SCHEMA_VERSION = "2A.2"
 
 # ── canonical enums ──
 FREQUENCY_SEMANTICS = ("TICK", "1M", "5M", "15M", "30M", "60M", "DAILY", "IRREGULAR", "STATIC", "UNKNOWN")
