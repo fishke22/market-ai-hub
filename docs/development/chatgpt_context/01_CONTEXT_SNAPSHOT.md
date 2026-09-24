@@ -10,17 +10,15 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-25 修補後交接：
+2026-09-25 W2 受限工作包交接：
 
-修補 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b（最終程式/安裝/測試基準；後續純文件 commit 見 PR）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：PASS：1679 passed、15 skipped、34 deselected、110 warnings，48.76s；https://github.com/fishke22/market-ai-hub/actions/runs/36025129753；對應實作 commit 40fd77a；remote：codex/quote-hub-correctness 已推送並核對實作 SHA；main 基準仍為 eb9202a。
+W1 修補基準仍為 `40fd77aeb35532e1b4dde42128f214b1c4683b1b`。本輪新增 field-aware reader/replay 實作 commit：`825c19e7c67922eb7779d768ccd8b4207aae98cf`；工作分支仍為 `codex/quote-hub-correctness`，PR #55 仍 OPEN、main 仍以 `eb9202a` 為基準。runtime build_id = `52837b5fc6444e3f`。本快照後續純文件 commit/remote SHA 以 handoff 與 PR 為準。
 
-公開前一基準已從 PR #53 d649059 前進至 PR #54 eb9202a。本文以修補報告為準，不再使用舊 dirty branch / no callback 描述當現況。runtime build_id = `192cdccf6173305e`。
+本輪沒有重做 W1。新增 `quote_reader.py` 將 Yuanta persisted quote 的 trade/bid/ask 各自按 `field_provenance` 接到既有 V2-A.2 `FactorRepresentationObservation`，並驗證 V2-H lineage/source IDs；錯 market/contract/SPARK 日夜盤、亂序、缺欄位時間、partial file、persistence error/overflow、unknown/unsupported representation 皆 fail closed。沒有 fitting、沒有新模型、沒有交易。
 
-本輪已實修 H1–H4 與 H5 的控制/資源邊界、readiness、安裝失敗處理、CI 分類、runtime config fingerprint、狀態/模型/資料來源文件。詳見 03_AUDIT_AND_REPAIRS.md，不需要下一棒重做同一漏洞修補。
+最終本機驗證：focused V2/Yuanta regression 153 passed、1 deselected；default suite 1717 passed、23 deselected、132 warnings，135.55s，exit 0。secret scanner 在本輪程式/測試變更 0 命中；repo 既有歷史命中另保留。
 
-最終驗證：1705 passed、23 deselected、132 warnings，165.76s，exit 0；預設 profile（不含 live/optional_model/private_data/broker_diagnostic）。原始碼跨 D→C 槽、中文/空白路徑與任意 cwd 的 relocation smoke 通過；非完整乾淨安裝驗收。
-
-**舊常駐 recorder 未由本輪重啟，所以不能聲稱新 source 已在其 process 生效。** 回報中的多市場 callbacks 是 PR #54 歷史 capability 證據，狀態檔 heartbeat 也不是每欄行情 freshness。無新 broker login/訂閱/登出/下單/帳務操作。
+**現場 recorder 仍是舊程序，明確為 RUNTIME_ADOPTION_PENDING。** 只讀 `status.json` 顯示舊 health 欄位；`latest.json` 22/22 quotes 都沒有 `field_provenance` / `freshness_semantics`。沒有新 broker login/訂閱/登出/重啟/下單/帳務操作，也不能以新 import 的 build_id 冒充執行中程序版本。舊 Parquet 可離線部分 replay：最近檔 934 rows / OSE 76 rows，5 筆有效成交可轉成 legacy receipt-only/delayed V2-A.2 observation，71 筆非有效成交 callback 拒用；未把私有行情值提交 repo。
 
 ## 2. 查核深度與限制
 
@@ -42,7 +40,7 @@ GitHub：https://github.com/fishke22/market-ai-hub
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。目前 packet 的部分 forecast summaries 仍是研究狀態描述；新 recorder 到 V2-A.2/模型/MCP 的完整接線需要另行驗證。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。目前已完成 persisted quote → field-aware reader → V2-A.2 observation → V2-H lineage 的離線接線；feature store/models/public packet 仍未完成端到端驗證，現場 recorder 也尚未 adoption。packet 的部分 forecast summaries 仍是研究狀態描述。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -108,4 +106,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對修補 PR/HEAD/dirty 與舊 recorder 是否已完成受控交接，再進行 W2 的 field-aware reader/replay。不要重做本輪已修正漏洞；仍未實作/驗證的項目見03。W3 到期與 scope gate 必須先於 calibration fitting；不因離線 tests PASS 或 recorder RUNNING 就宣稱可準確交易。
+先核對 PR #55/HEAD/dirty/remote SHA 與現場 recorder。field-aware reader→V2-A.2/V2-H 離線接線已完成，不要重做；若使用者提供維護窗口，按尾端落盤/rollback/單一 owner 步驟受控交接 recorder，否則繼續 W2 feature-store/public-packet 的離線接線。W3 到期與 scope gate 必須先於 calibration fitting；不因離線 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。

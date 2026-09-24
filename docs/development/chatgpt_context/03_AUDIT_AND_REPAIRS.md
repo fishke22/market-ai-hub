@@ -41,11 +41,21 @@
 
 關鍵測試：`tests/test_quote_hub_hardening.py`，以及原 V2-H2/I、Phase3A23、Yuanta contract。命令採 python -B -m pytest，獨立 MARKET_AI_DATA_ROOT / basetemp、禁 pytest cache；正式結果以 PR/本報告記錄為準。
 
+## 2026-09-25 W2 field-aware reader/replay 後續
+
+- 實作 commit：`825c19e7c67922eb7779d768ccd8b4207aae98cf`；runtime build_id `52837b5fc6444e3f`。
+- 新 `quote_reader.py` 以既有 `yuanta_live_recorder.yaml` subscription identity + V2-A.2 factor/session registry 為唯一 routing truth；trade/bid/ask 各讀自己的 `field_provenance`，`source_time_of_day` 沒日期時不組成 exchange timestamp。
+- 新 schema 缺該欄 `received_at` 會 typed reject；整個舊 schema 缺 `field_provenance` 時只降級為 `LEGACY_TOP_LEVEL_RECEIPT_ONLY`，不宣稱欄位 fresh。SPARK PM/day code 與 V2 session 不一致、錯 market/contract、unknown/unsupported representation、亂序、partial、write failure/overflow 皆有最小反例。
+- V2-H lineage 會保留 reader 的 source snapshot ID、quality、contract identity；CLASS_SCORE/public probability gate 未變。
+- read-only runtime inspection：目前執行中的 status 仍只有舊欄位，`latest.json` 22/22 都沒有 per-field provenance，因此明確為 `RUNTIME_ADOPTION_PENDING`。沒有登入/登出/訂閱/重啟。
+- read-only 舊 Parquet 實測：最近檔 934 rows，其中 OSE 76 rows；5 筆有效 trade 可轉成 V2-A.2 且全部降級為 legacy receipt-only/delayed reference，71 筆沒有有效正成交價而拒用。只記 aggregate evidence，不提交私有行情值。
+- focused regression：153 passed、1 deselected；final default suite：1717 passed、23 deselected、132 warnings，135.55s，exit 0。
+
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
 2. 自動 reconnect、授權拒絕後生命週期、session/contract 自動 roll、durable spool/WAL 尚未實作。新 status 保守標 NOT_CONTINUOUSLY_VERIFIED、MANUAL_SINGLE_OWNER、BUFFERED_NOT_ZERO_LOSS；跨 UTC 日提示 CONTRACT_REVALIDATION_REQUIRED。這些是下一工作包，不能把 flags 當已實現。
-3. recorder→V2-A.2→features/models→public packet 的 field-aware reader 尚未接通；logging 成功不等於模型在學習。現有舊錄製資料無 per-field provenance，不能自動補造時間或直接算高品質訓練資料。新的欄位 received_at 仍是「此 callback 觀測到欄位」時間，不保證是成交發生時間；SDK full snapshot 中重複出現的舊成交價，不能僅憑欄位存在就宣称最新成交。W2 必須按 callback/IndexFlag 的已驗證語義處理，未知即降級。
+3. recorder→V2-A.2 的 field-aware reader 與 V2-H lineage 已完成離線接線，但 V2-A.2→feature store/models→public packet 尚未端到端接通；logging 成功仍不等於模型在學習。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。SDK full snapshot 中重複出現的舊成交價不能僅憑欄位存在就宣稱最新成交。
 4. Outcome horizon maturity / evaluation_as_of / homogeneous model-version-event scope 的端到端契約仍需 W3 補足。2I.1 描述性 pooled metrics 不可當 production calibration；公開 audit helper 已關閉，維持 fitting NOT STARTED。
 5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。ENGINE PASS ≠ CALIBRATED ≠ EDGE。
 6. 新 Windows、重建 venv、WinCred/COM/合法 SDK/模型權重重新配置與恢復演練仍需 W7；不能整包複製就保證即用。
@@ -56,4 +66,4 @@
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對最新 HEAD/dirty/實際 runtime，以單一工作包完成受控 recorder 交接與 field-aware reader/replay；W3 到期與 scope 契約必須在 calibration fitting 之前。長期 Price/Probability Map 設計見 02_ROADMAP.md。
+下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。若使用者提供維護窗口，先做資料尾端/回復路徑/單一 owner 核對後才受控交接舊 recorder；否則可繼續不碰 live owner 的 W2 feature-store/public-packet 離線接線。W3 到期與 scope 契約必須在 calibration fitting 之前。長期 Price/Probability Map 設計見 02_ROADMAP.md。

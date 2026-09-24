@@ -2,11 +2,11 @@
 
 - Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
 - Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
-- build_id：**（本棒合併後以 `scripts/agent_bootstrap.ps1` 實測為準）**（fingerprint 全部 runtime source + config）
+- build_id：**52837b5fc6444e3f**（W2 field-aware reader source；fingerprint 全部 runtime source + config）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets; see Yuanta guide. This is historical capability evidence, not per-field current freshness or model-feed readiness.
+- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets; see Yuanta guide. This is historical capability evidence. Current live recorder remains **RUNTIME_ADOPTION_PENDING** because its status/latest files still expose the old schema; offline W2 reader PASS is not live deployment.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
@@ -27,8 +27,17 @@ offline CI markers, complete runtime-config fingerprint. See
 `research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md` for validation/publication state.
 The previously running recorder has not been restarted by this repair; disk source
 PASS does not mean that process loaded the new implementation.
-Automatic reconnect/roll, durable crash spool, model-feed adapter and calibration fitting
-remain future work. Research-only boundaries are unchanged.
+Automatic reconnect/roll, durable crash spool, full feature-store/model/public-packet integration and calibration fitting remain future work. The bounded reader → V2-A.2/V2-H lineage adapter is now offline-verified; research-only boundaries are unchanged.
+
+## 2026-09-25 W2 field-aware reader/replay
+
+- Implementation commit: `825c19e7c67922eb7779d768ccd8b4207aae98cf`; build_id `52837b5fc6444e3f`.
+- `src/market_ai_hub/integrations/yuanta/quote_reader.py` reads trade/bid/ask with independent field provenance, keeps callback receipt separate from exchange event time, and routes through existing V2-A.2 session/factor definitions rather than a parallel registry.
+- Source time-of-day without a date stays `event_timestamp=None` / `timestamp_precision=UNKNOWN`; old recorder schema degrades to `LEGACY_TOP_LEVEL_RECEIPT_ONLY`. Market/contract/session mismatches, missing field time in the new schema, out-of-order replay, partial files, persistence errors and overflow fail closed.
+- V2-H `lineage_from_observation()` preserves source snapshot IDs, quality and contract identity. No probability gate was relaxed; 2I.1 remains evaluation-only.
+- Read-only live inspection: running PID/status uses the old health schema and 0/22 latest quotes carry `field_provenance`; state = **RUNTIME_ADOPTION_PENDING**. Recorder was not stopped or restarted.
+- Local validation: focused V2/Yuanta regression `153 passed, 1 deselected`; final default suite `1717 passed, 23 deselected, 132 warnings` in 135.55s, exit 0. Existing private Parquet read-only sample: 934 rows, 76 OSE rows; 5 valid trade observations adapted and explicitly degraded, 71 non-valid trade callbacks rejected. No raw private quote values were added to the repo.
+- W2 is only partially complete: feature store/model/public packet end-to-end ingestion remains pending, as do reconnect/roll/WAL and controlled runtime adoption.
 
 ## Phase 2 全歷程 Gate
 
