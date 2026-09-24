@@ -94,8 +94,8 @@ class TournamentEngine:
                         run.points.append(res.point)
                     else:
                         run.points.append(None)
-                    run.p10.append(res.p10)
-                    run.p90.append(res.p90)
+                    run.p10.append(res.p10 if res.quantile_valid is True else None)
+                    run.p90.append(res.p90 if res.quantile_valid is True else None)
                     run.directions.append(res.direction or _direction_of(res.point, origin_price)
                                          if res.direction or res.point is not None else "")
                     run.actuals.append(actual)
@@ -144,8 +144,8 @@ class TournamentEngine:
             acts = [a for a, p in zip(run.actuals, run.points) if p is not None]
             naive = [op for op, p in zip(run.origin_prices, run.points) if p is not None]
             out.update(self._price_metrics(acts, pts, naive,
-                                           [q for q in run.p10 if q is not None],
-                                           [q for q in run.p90 if q is not None]))
+                                           [q for q, p in zip(run.p10, run.points) if p is not None],
+                                           [q for q, p in zip(run.p90, run.points) if p is not None]))
         # direction metrics（有 direction 的 model）
         dirs = [d for d in run.directions if d]
         if dirs:
@@ -165,17 +165,18 @@ class TournamentEngine:
         mase = mae / naive_mae if naive_mae > 0 else float("nan")
         pinball = float(np.mean(np.where(err >= 0, 0.5 * err, -0.5 * err)))
         out = {"mae": mae, "rmse": rmse, "mase": mase, "pinball_loss": pinball}
-        if p10 and p90 and len(p10) == len(actual):
+        out.update(coverage=None, interval_width=None, calibration_error=None, interval_sample_size=0)
+        if p10 is not None and p90 is not None and len(p10) == len(p90) == len(actual):
             lo = np.asarray(p10, float); hi = np.asarray(p90, float)
-            coverage = float(((actual >= lo) & (actual <= hi)).mean())
-            width = float(np.mean((hi - lo) / np.abs(actual)))
-            out["coverage"] = coverage
-            out["interval_width"] = width
-            out["calibration_error"] = abs(coverage - 0.8)
-        else:
-            out["coverage"] = None
-            out["interval_width"] = None
-            out["calibration_error"] = None
+            valid = np.isfinite(actual) & np.isfinite(lo) & np.isfinite(hi) & (lo <= hi)
+            if valid.any():
+                observed, lower, upper = actual[valid], lo[valid], hi[valid]
+                coverage = float(((observed >= lower) & (observed <= upper)).mean())
+                width = (float(np.mean((upper - lower) / np.abs(observed)))
+                         if np.all(observed != 0) else None)
+                out.update(coverage=coverage, interval_width=width,
+                           calibration_error=abs(coverage - 0.8),
+                           interval_sample_size=int(valid.sum()))
         return out
 
     @staticmethod

@@ -71,9 +71,9 @@ class SeasonalNaive(_PointBaseline):
 
     def _point(self, closes, steps):
         lag = 5  # 週級季節性（daily）
-        if len(closes) <= lag:
+        if len(closes) < lag:
             return float(closes.iloc[-1])
-        return float(closes.iloc[-lag])
+        return float(closes.iloc[-lag + (steps - 1) % lag])
 
 
 class _DirectionBaseline(ModelAdapter):

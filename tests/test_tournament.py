@@ -102,6 +102,55 @@ def test_baseline_presence():
         assert n in names, n
 
 
+def test_seasonal_naive_respects_forecast_horizon():
+    from market_ai_hub.research.tournament.baselines import SeasonalNaive
+    closes = pd.Series([10., 20., 30., 40., 50.])
+    assert [SeasonalNaive()._point(closes, h) for h in (1, 2, 5, 6, 10)] == [10, 20, 50, 10, 50]
+
+
+def test_interval_metrics_preserve_origin_alignment():
+    from market_ai_hub.research.tournament.engine import ModelRun
+    run = ModelRun(model="partial", task="price", points=[10., None, 30.],
+                   actuals=[10., 20., 30.], origin_prices=[9., 19., 29.],
+                   p10=[9., 19., None], p90=[11., None, 31.])
+    result = TournamentEngine()._summarize(run, 1)
+    assert result["coverage"] == 1.0
+    assert result["interval_sample_size"] == 1
+    assert result["interval_width"] == pytest.approx(0.2)
+
+
+def test_invalid_quantile_flag_is_not_evaluated():
+    from market_ai_hub.research.tournament.adapter import ModelAdapter
+    class InvalidQuantiles(ModelAdapter):
+        def forecast(self, df, steps):
+            return ForecastResult(point=100., p10=90., p90=110., quantile_valid=False)
+    result = TournamentEngine().run(ExamSpec("X", "1d", "v1", "v1", 60, 2),
+                                    _df(), [InvalidQuantiles()])
+    assert result["summaries"]["adapter"]["coverage"] is None
+
+
+@pytest.mark.parametrize("adapter_type", ["XGBoostAdapter", "LightGBMAdapter"])
+def test_classifier_predicts_origin_not_training_row(monkeypatch, adapter_type):
+    from market_ai_hub.features import features
+    from market_ai_hub.models import baseline_ml
+    from market_ai_hub.research.tournament import v1_adapters
+    frame = pd.DataFrame({"close": [100., 110., 90., 120., 80., 130.], "x": range(6)})
+    monkeypatch.setattr(features, "build_features", lambda df: df)
+    monkeypatch.setattr(baseline_ml, "FEATURE_INPUT", ["x"])
+    seen = {}
+    class Classifier:
+        def __init__(self, key):
+            pass
+        def fit(self, x, y):
+            seen["train"] = x.index.tolist()
+        def predict(self, x):
+            seen["predict"] = x.index.tolist()
+            return [1]
+    monkeypatch.setattr(baseline_ml, "BaselineClassifier", Classifier)
+    getattr(v1_adapters, adapter_type)().forecast(frame, 2)
+    assert seen == {"train": [0, 1, 2, 3], "predict": [5]}
+
+
 # ── Tournament engine（快速 adapter，不需載入深模型）──
 
 def _df(n=200):
@@ -174,4 +223,4 @@ def test_gpu_cleanup():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "976bf15b1d5df88f"
+    assert build_fingerprint()["build_id"] == "eca898aa6fc222c2"

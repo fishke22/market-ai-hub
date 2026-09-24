@@ -349,6 +349,11 @@ def build_evaluation_dataset(
                                                     detail=f"{len(bound)} bound outcomes"))
                 continue
             out = bound[0]
+            if out.label_type != art.label_type:
+                rejected.append(EvaluationRejection(
+                    prediction_id=pid, forecast_artifact_id=aid, reason="WRONG_EVENT_DEFINITION",
+                    detail=f"artifact label {art.label_type!r} != outcome label {out.label_type!r}"))
+                continue
             if out.prediction_id != pid:
                 rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
                                                     reason="CROSS_PREDICTION", detail=out.outcome_id))

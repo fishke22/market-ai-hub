@@ -96,6 +96,18 @@ def test_schema_version_2i1_and_no_calibrated_status():
     assert PA.v2_schema_versions()["calibration_evaluation"] == "2I.1"
 
 
+def test_opposite_touch_label_rejected_at_write_and_legacy_evaluation(db, monkeypatch):
+    pred, art, out = _sample(db)
+    wrong = replace(out, label_type="TOUCH_DOWN_1D", outcome_id="")
+    with pytest.raises(PA.ArtifactOutcomeMismatchError):
+        db.append_outcome(wrong)
+    # Legacy records may predate the write guard: the reader must also fail closed.
+    monkeypatch.setattr(db, "get_outcomes", lambda pid: [replace(wrong, outcome_id=out.outcome_id)])
+    result = CE.evaluate_manifest(db, _manifest(db, [pred]))
+    assert result.status == "BLOCKED"
+    assert "WRONG_EVENT_DEFINITION" in result.reason
+
+
 def test_status_vocabulary_is_closed():
     assert set(CE.EVALUATION_STATUSES) == {"EVALUATED", "INSUFFICIENT_SAMPLE",
                                           "NOT_EVALUATABLE", "BLOCKED"}

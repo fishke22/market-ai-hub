@@ -732,7 +732,7 @@ class PredictionAuditDB:
                 raise ArtifactBindingError(
                     f"{BLOCKED_ARTIFACT_PREDICTION_MISMATCH}: {record.forecast_artifact_id}")
             if (record.outcome_kind not in _ARTIFACT_OUTCOME_KINDS.get(art.artifact_type, set())
-                    or label_scope(record.label_type) != label_scope(art.label_type)):
+                    or record.label_type != art.label_type):
                 raise ArtifactOutcomeMismatchError(
                     f"{BLOCKED_ARTIFACT_OUTCOME_MISMATCH}: {art.artifact_type}/"
                     f"{art.label_type} vs {record.outcome_kind}/{record.label_type}")

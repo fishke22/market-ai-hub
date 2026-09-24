@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from market_ai_hub.regime.events import event_phase
-from market_ai_hub.regime.protection import RegimeProtection, wilson_ci
+from market_ai_hub.regime.protection import RegimeProtection
 
 
 def _aware(dt: datetime) -> datetime:
@@ -69,7 +69,7 @@ class MarketRegimeEngine:
         label = "bull" if ratio > self.trend_threshold else ("bear" if ratio < -self.trend_threshold else "sideways")
         return self._result("trend_regime", label, 200,
                             {"ma20": float(ma20), "ma200": float(ma200), "ratio": float(ratio)},
-                            {"confidence_interval": wilson_ci(0.5, 200)})
+                            {"confidence_interval": None, "confidence_status": "NOT_ESTIMATED"})
 
     def _volatility(self, panel) -> dict:
         s = self._series(panel, "^N225")
