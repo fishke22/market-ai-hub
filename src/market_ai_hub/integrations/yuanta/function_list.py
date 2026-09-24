@@ -34,6 +34,14 @@ def parse_market_enum(xlsx_path: str | Path) -> dict[str, int]:
 
 def find_overseas_futures(xlsx_path: str | Path) -> list[dict]:
     """讀股票代碼總表，回海外期貨（SGX/CME/OSE）列。"""
+    return [r for r in load_stock_code_rows(xlsx_path) if r["market_code"] in (202, 203, 207)]
+
+
+def load_stock_code_rows(xlsx_path: str | Path) -> list[dict]:
+    """讀「股票代碼總表」全部列（唯讀）。
+
+    欄位：市場別 | 市場代碼 | 商品代碼(報價 StkCode) | 商品名稱 | 下單代碼 | ...
+    """
     import openpyxl
 
     wb = openpyxl.load_workbook(xlsx_path, data_only=True, read_only=True)
@@ -41,8 +49,7 @@ def find_overseas_futures(xlsx_path: str | Path) -> list[dict]:
     for sn in wb.sheetnames:
         cand = wb[sn]
         first = next(cand.iter_rows(values_only=True), None)
-        cells = [str(c) for c in (first or []) if c is not None]
-        joined = " ".join(cells)
+        joined = " ".join(str(c) for c in (first or []) if c is not None)
         if "商品代碼" in joined and "市場" in joined:
             ws = cand
             break
@@ -51,9 +58,10 @@ def find_overseas_futures(xlsx_path: str | Path) -> list[dict]:
         return out
     for row in ws.iter_rows(values_only=True):
         vals = ["" if c is None else str(c).strip() for c in row]
-        if len(vals) < 3:
+        if len(vals) < 4 or not vals[1].isdigit():
             continue
-        mk, mc = vals[0], vals[1]
-        if mc in ("202", "203", "207"):
-            out.append({"market": mk, "market_code": int(mc), "code": vals[2], "name": vals[3]})
+        out.append({
+            "market": vals[0], "market_code": int(vals[1]), "code": vals[2],
+            "name": vals[3], "order_code": vals[4] if len(vals) > 4 else "",
+        })
     return out

@@ -19,7 +19,7 @@ from market_ai_hub.integrations.yuanta.sanitizer import (
     sanitize_login_result,
 )
 from market_ai_hub.integrations.yuanta.gateway import YuantaQuoteOnlyGateway
-from market_ai_hub.integrations.yuanta.resolver import YuantaInstrumentResolver
+from market_ai_hub.integrations.yuanta.resolver import YuantaInstrumentResolver, function_list_path
 from market_ai_hub.integrations.yuanta.contracts import OSE_MARKET_TYPE
 from market_ai_hub.integrations.yuanta.function_list import find_overseas_futures, parse_market_enum
 
@@ -116,10 +116,12 @@ def test_order_api_exposure_guard():
 
 
 # --- resolver ---
-def test_instrument_resolver_no_guess():
+def test_instrument_resolver_from_functionlist():
+    if function_list_path() is None:
+        pytest.skip("vendor FunctionList absent (fail-closed)")
     r = YuantaInstrumentResolver().resolve("OSE_NIKKEI225_MICRO_FUTURES")
-    assert r.verified is False  # OSE StkCode 不在 FunctionList → 不猜
-    assert r.spark_code == ""
+    assert r.verified is True  # 2Y-G.2: FunctionList 股票代碼總表 已含 OSE(207) JNU<YYMM>
+    assert r.spark_code.startswith("JNU")
 
 
 def test_market_enum_local_validation():

@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,6 +49,7 @@ class SparkRuntime:
         self._login_outcome = LoginOutcome()
         self._callbacks: list[dict] = []
         self._system_messages: list[str] = []
+        self.on_quote_callback = None  # optional callable(intMark, strIndex, objValue)
         self.enum_values: dict = {}
         self._load()
 
@@ -66,15 +68,19 @@ class SparkRuntime:
             OnResponseEventHandler,
             YuantaSparkAPITrader,
             enumEnvironmentMode,
+            enumLangType,
             enumLogType,
             enumMarketType,
+            enumQuoteIndexType,
         )
 
         self.YuantaSparkAPITrader = YuantaSparkAPITrader
         self.OnResponseEventHandler = OnResponseEventHandler
         self.enumEnvironmentMode = enumEnvironmentMode
+        self.enumLangType = enumLangType
         self.enumLogType = enumLogType
         self.enumMarketType = enumMarketType
+        self.enumQuoteIndexType = enumQuoteIndexType
 
         self.enum_values = {
             "environment_prod": int(enumEnvironmentMode.PROD),
@@ -113,6 +119,9 @@ class SparkRuntime:
                     received=True,
                 )
                 self._login_event.set()
+            elif self.on_quote_callback is not None:
+                # quote-only: bounded probe hook; no persistent stream
+                self.on_quote_callback(int(intMark), str(strIndex), objValue)
         except Exception:
             self._login_event.set()
 
@@ -130,6 +139,26 @@ class SparkRuntime:
     # --- quote-only 公開方法（無 order / 無 generic invoke）---
     def open_prod(self) -> None:
         self._api.Open(self.enumEnvironmentMode.PROD)
+
+    def pump(self, seconds: float) -> None:
+        """Bounded wait so CLR event-thread callbacks can fire (no background stream)."""
+        time.sleep(max(0.0, float(seconds)))
+
+    def enum_quote_index_default(self):
+        """Default quote index flag (成交/總覽) from the installed enum."""
+        et = getattr(self, "enumQuoteIndexType", None)
+        if et is None:
+            return None
+        try:
+            for name in ("成交", "總覽"):
+                if hasattr(et, name):
+                    return getattr(et, name)
+        except Exception:
+            pass
+        try:
+            return et(0)
+        except Exception:
+            return None
 
     def login(self, account: str, password: str) -> bool:
         """Login() 回傳 True 只代表 accepted；真正結果來自 OnResponse。"""

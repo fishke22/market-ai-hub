@@ -16,7 +16,7 @@ from market_ai_hub.integrations.yuanta.spark_auth import (
     should_abort,
 )
 from market_ai_hub.integrations.yuanta.sanitizer import mask_account, sanitize_login_result
-from market_ai_hub.integrations.yuanta.resolver import YuantaInstrumentResolver
+from market_ai_hub.integrations.yuanta.resolver import YuantaInstrumentResolver, function_list_path
 from market_ai_hub.integrations.yuanta.quote_probe import (
     MAX_STREAM_SECONDS,
     MAX_TICK_DETAIL_COUNT,
@@ -106,17 +106,21 @@ def test_probe_data_gitignored():
 
 
 # --- symbol discovery ---
-def test_symbol_discovery_no_guess():
+def test_symbol_discovery_from_functionlist():
+    if function_list_path() is None:
+        pytest.skip("vendor FunctionList absent (fail-closed)")
     r = YuantaInstrumentResolver().resolve("OSE_NIKKEI225_MICRO_FUTURES")
-    assert r.verified is False
-    assert r.spark_code == ""
+    assert r.verified is True  # 2Y-G.2: FunctionList OSE(207) 商品代碼
+    assert r.spark_code.startswith("JNU")
 
 
 def test_symbol_requires_market207_evidence():
+    if function_list_path() is None:
+        pytest.skip("vendor FunctionList absent (fail-closed)")
     r = YuantaInstrumentResolver()
     inst = r.resolve("OSE_NIKKEI225_MICRO_FUTURES")
     # 未 login / 無 market info → 不 verified（需 MarketNo=207 + 名稱/乘數證據）
-    assert inst.market_type == 207 and inst.verified is False
+    assert inst.market_type == 207 and inst.verified is True
 
 
 def test_secret_scan_after_real_login():
