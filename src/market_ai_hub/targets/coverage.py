@@ -21,6 +21,11 @@ NEEDS_CONFIG = "NEEDS_CONFIG"            # 需 API key / 設定
 DELAYED = "DELAYED"                      # 官方延遲來源
 PROXY = "PROXY"                          # 第三方 proxy（非官方）
 
+# V2-A.2 status disambiguation（LIVE 只描述 current usable live observation）
+SOURCE_VERIFIED = "SOURCE_VERIFIED"      # official source verified reachable（非 live quote）
+REFERENCE_AVAILABLE = "REFERENCE_AVAILABLE"  # 有官方 dated reference（e.g. daily settlement）
+LIVE_AVAILABLE = "LIVE_AVAILABLE"        # 目前有可用 live observation（需 timestamp/freshness 證明）
+
 # 大阪模型至少 audit 的 factor（誠實預設：大多 RESEARCH_PROXY / MISSING）
 AUDIT_FACTORS = [
     "Micro", "Mini", "Large", "Nikkei spot", "TOPIX", "SGX Nikkei", "CME Nikkei",

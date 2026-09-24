@@ -249,15 +249,87 @@ def _regime(panel: pd.DataFrame | None) -> dict:
         return {"status": "ERROR", "note": str(e)[:120]}
 
 
+_TARGET_VENUE = {"OSAKA_MICRO": "OSE_DERIVATIVES", "TAIWAN_STOCK": "XTAI", "TAIWAN_INDEX": "XTAI"}
+_REFERENCE_FRESH_SECONDS = 3600.0
+_REFERENCE_DELAYED_SECONDS = 36 * 3600.0
+
+
+def _parse_reference_ts(raw: str, tz: str):
+    """Parse a reference price timestamp ('20260918' / ISO) into a tz-aware UTC datetime."""
+    if not raw:
+        return None
+    try:
+        ts = pd.Timestamp(str(raw))
+    except Exception:
+        return None
+    if ts.tzinfo is None:
+        try:
+            ts = ts.tz_localize(tz or "UTC")
+        except Exception:
+            ts = ts.tz_localize("UTC")
+    return ts.tz_convert("UTC").to_pydatetime()
+
+
+def _fill_target_session_truth(packet: "AnalysisPacket", family: str) -> None:
+    """V2-A.2: populate packet.market_session / packet.freshness from session truth (no fake live)."""
+    from datetime import datetime, timezone
+
+    from market_ai_hub.research.v2.session_truth import resolve_venue_session
+
+    venue = _TARGET_VENUE.get(family)
+    now = datetime.now(timezone.utc)
+    if venue is None:
+        packet.market_session = "UNKNOWN"
+        packet.freshness = "UNKNOWN"
+        return
+    sess = resolve_venue_session(venue, now)
+    packet.market_session = sess.session_status
+    packet.target_semantics["target_venue"] = venue
+    packet.target_semantics["target_market_session"] = sess.model_dump()
+
+    ref_ts = _parse_reference_ts(packet.price_timestamp, sess.timezone or "UTC")
+    if ref_ts is None:
+        packet.freshness = "UNKNOWN"
+        packet.target_semantics["target_data_freshness"] = {
+            "freshness_status": "UNKNOWN", "quote_age_seconds": None, "reference_timestamp": "",
+            "timestamp_precision": "UNKNOWN", "availability_semantics": "NO_DATED_REFERENCE",
+        }
+    else:
+        age = (now - ref_ts).total_seconds()
+        if age <= _REFERENCE_FRESH_SECONDS:
+            fs = "FRESH"
+        elif age <= _REFERENCE_DELAYED_SECONDS:
+            fs = "DELAYED"
+        else:
+            fs = "STALE"
+        packet.freshness = fs
+        packet.target_semantics["target_data_freshness"] = {
+            "freshness_status": fs, "quote_age_seconds": age, "age_days": round(age / 86400.0, 2),
+            "reference_timestamp": ref_ts.isoformat(), "timestamp_precision": "SESSION_DATE_ONLY",
+            "availability_semantics": ("DATED_OFFICIAL_REFERENCE"
+                                       if packet.target_price_source == "settlement"
+                                       else "DATED_PROXY_REFERENCE"),
+        }
+    if packet.target_price_source in ("settlement", "finmind", "twse"):
+        packet.target_semantics["target_reference_role"] = "DAILY_REFERENCE"
+    elif packet.target_price_source in ("proxy", "proxy_index"):
+        packet.target_semantics["target_reference_role"] = "RESEARCH_PROXY_REFERENCE"
+    else:
+        packet.target_semantics["target_reference_role"] = "UNAVAILABLE"
+
+
 def _coverage_summary(family: str = "OSAKA_MICRO") -> list[dict]:
-    from market_ai_hub.targets.coverage import LiveCoverageAuditor, LIVE_VERIFIED
+    from market_ai_hub.targets.coverage import (
+        LiveCoverageAuditor, PROXY, REFERENCE_AVAILABLE, SOURCE_VERIFIED,
+    )
 
     if family == "OSAKA_MICRO":
         overrides = {
-            "Micro settlement": {"status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
-            "VIX": {"status": LIVE_VERIFIED, "source": "Cboe official"},
-            "CPI": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
-            "NFP": {"status": LIVE_VERIFIED, "source": "BLS API v2"},
+            "Micro settlement": {"status": REFERENCE_AVAILABLE,
+                                 "source": "JPX settlement CSV (dated official reference)"},
+            "VIX": {"status": PROXY, "source": "yfinance ^VIX (runtime observation)"},
+            "CPI": {"status": SOURCE_VERIFIED, "source": "BLS API v2 (official source)"},
+            "NFP": {"status": SOURCE_VERIFIED, "source": "BLS API v2 (official source)"},
         }
         recs = LiveCoverageAuditor().audit_osaka(overrides)
         return [r.model_dump() for r in recs]
@@ -462,7 +534,7 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             packet.reference_price_type = micro["price_type"]
             packet.price_timestamp = micro["date"]
             packet.contract_month = micro["contract"]
-            packet.target_data_status = "LIVE_VERIFIED"
+            packet.target_data_status = "REFERENCE_AVAILABLE"
             packet.target_price_source = "settlement"
             packet.data_reused.append("jpx_micro_settlement")
         else:
@@ -483,7 +555,7 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             packet.reference_price = stock_ref["price"]
             packet.reference_price_type = stock_ref["price_type"]
             packet.price_timestamp = stock_ref.get("price_timestamp", "")
-            packet.target_data_status = "LIVE_VERIFIED" if stock_ref.get("data_grade") == "OFFICIAL_DAILY" else "RESEARCH_PROXY"
+            packet.target_data_status = "REFERENCE_AVAILABLE" if stock_ref.get("data_grade") == "OFFICIAL_DAILY" else "RESEARCH_PROXY"
             packet.target_price_source = stock_ref.get("source", "stock")
         else:
             packet.target_data_status = "MISSING"
@@ -501,6 +573,9 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             packet.target_data_status = "MISSING"
             packet.target_price_source = "DIRECT_NOT_IMPLEMENTED"
             packet.data_missing.append("taiwan_index")
+
+    # 2b. V2-A.2 target/reference session + freshness truth（typed；不得 fabricated live status）
+    _fill_target_session_truth(packet, family)
 
     # 3. regime / event（family 隔離，§7；provider 失敗 → degrade，不整份分析失敗）
     try:
@@ -565,14 +640,17 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
 
 def _coverage_summary_compact(family: str = "OSAKA_MICRO") -> list[dict]:
     """compact：只回最關鍵覆蓋項（family 隔離，§8）。"""
-    from market_ai_hub.targets.coverage import LIVE_VERIFIED, MISSING
+    from market_ai_hub.targets.coverage import (
+        MISSING, PROXY, REFERENCE_AVAILABLE, SOURCE_VERIFIED,
+    )
 
     if family == "OSAKA_MICRO":
         return [
-            {"factor": "Micro settlement", "status": LIVE_VERIFIED, "source": "JPX settlement CSV"},
+            {"factor": "Micro settlement", "status": REFERENCE_AVAILABLE, "source": "JPX settlement CSV (daily)"},
             {"factor": "Micro OHLC", "status": MISSING, "source": "not in official xlsx/csv"},
-            {"factor": "VIX", "status": LIVE_VERIFIED, "source": "Cboe official"},
-            {"factor": "CPI/NFP", "status": LIVE_VERIFIED, "source": "BLS API v2"},
+            {"factor": "VIX (runtime observation)", "status": PROXY, "source": "yfinance ^VIX"},
+            {"factor": "VIX (official release source)", "status": SOURCE_VERIFIED, "source": "Cboe official"},
+            {"factor": "CPI/NFP", "status": SOURCE_VERIFIED, "source": "BLS API v2"},
             {"factor": "PCE/GDP", "status": "NEEDS_CONFIG", "source": "BEA API"},
         ]
     if family == "TAIWAN_STOCK":

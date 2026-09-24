@@ -83,6 +83,19 @@ def _confidence_inputs(
     }
 
 
+def _cross_market_entry(symbol: str, value: float, return_1d: float,
+                        event_timestamp, received_at) -> dict:
+    """Typed factor representation entry (V2-A.2). Keeps last/return_1d for compatibility."""
+    from market_ai_hub.research.v2.factor_representation import build_cross_market_entry
+
+    return build_cross_market_entry(
+        symbol, value=value, return_1d=return_1d, event_timestamp=event_timestamp,
+        asof=received_at, received_at=received_at,
+        provider="yfinance", source_frequency="DAILY", data_grade="RESEARCH_PROXY",
+        timestamp_precision="SESSION_DATE_ONLY", point_in_time_safe=False,
+    )
+
+
 def analyze_osaka_nikkei(horizon: str = "1d", requested_dates: str = "") -> dict:
     """大阪日經：PROXY 骨架（^N225 + 跨市場），非 OSE micro 即時模型。
 
@@ -228,10 +241,14 @@ def analyze_osaka_nikkei(horizon: str = "1d", requested_dates: str = "") -> dict
     results.update(vote)
 
     cross = {}
+    received_at = datetime.now(timezone.utc)
     for sym, df in data.items():
         if sym != target_sym and len(df) > 2:
             c = _daily_closes(df)
-            cross[sym] = {"last": float(c.iloc[-1]), "return_1d": float(c.pct_change().iloc[-1])}
+            last_ts = c.index[-1]
+            ts = last_ts.to_pydatetime() if hasattr(last_ts, "to_pydatetime") else last_ts
+            cross[sym] = _cross_market_entry(sym, float(c.iloc[-1]), float(c.pct_change().iloc[-1]),
+                                             ts, received_at)
     results["cross_market"] = cross
 
     results["used_market_data"] = list(data.keys())

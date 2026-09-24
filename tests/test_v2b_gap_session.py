@@ -189,4 +189,4 @@ def test_forward_fill_flag_truthful():
 
 def test_version_2b():
     assert g.V2_GAP_SESSION_SCHEMA_VERSION == "2B.1"
-    assert asof.V2_ASOF_SCHEMA_VERSION == "2A.1"  # V2-A unchanged
+    assert asof.V2_ASOF_SCHEMA_VERSION == "2A.2"  # V2-A.2 session/factor foundation

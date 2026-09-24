@@ -1,19 +1,17 @@
 """Market open / quote freshness（V1.3.1：session 與 freshness 正式分離）。
 
-V1.3.1 語義修正：
-- market_open / tradable_now / session_status 只由「市場交易制度 + session 規則」決定，
-  與資料新鮮度無關。stale quote 不得把 market_open / tradable_now 改成 false。
-- session_status 使用：OPEN / CLOSED / PREOPEN / AFTER_HOURS / HOLIDAY_SESSION / UNKNOWN。
-  不得使用 STALE 當 session status。
-- freshness_status 使用：LIVE / RECENT / STALE / HISTORICAL / UNKNOWN（只看 quote age / SLA）。
-- quote_live：boolean，依 quote age / source SLA。
-- usable_for_live_decision：boolean，只有資料夠新（quote_live）且完整才 true。
+V2-A.2：session 由 research.v2.session_truth 的 venue registry + intraday hours 決定
+（不再把「日曆是交易日」等同「整個日曆日 OPEN」）。未知 symbol → UNKNOWN（不默認 TWSE）。
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
 import pandas as pd
+
+from market_ai_hub.research.v2.session_truth import (
+    resolve_symbol_session, TRADING_SESSION_STATUSES,
+)
 
 ASSET_CLASS = {
     "^N225": "index",
@@ -42,40 +40,30 @@ def asset_class(symbol: str) -> str:
     return "proxy"
 
 
-def _exchange_open(symbol: str, as_of: datetime) -> bool:
-    from market_ai_hub.services.calendar import is_session, trading_date_of
-
-    td = trading_date_of(as_of, symbol)
-    return is_session(symbol, td)
-
-
-def _fx_open(as_of: datetime) -> bool:
-    """FX（USDJPY spot）簡化 session：週六/週日休市（UTC）。"""
-    u = as_of.astimezone(timezone.utc)
-    return u.weekday() not in (5, 6)
-
-
 def session_status(symbol: str, as_of: datetime | None = None) -> dict:
-    """只由交易制度/session 決定，與資料新鮮度無關。
+    """Legacy OPEN/CLOSED/UNKNOWN，derived from V2-A.2 venue session truth.
 
-    session_status ∈ OPEN / CLOSED / UNKNOWN（TWSE/TSE/fx 目前無 intraday 小時，
-    故只分 OPEN/CLOSED；PREOPEN/AFTER_HOURS/HOLIDAY_SESSION 保留給未來 intraday/OSE）。
+    Only a real intraday trading session is OPEN; a tradeable calendar day outside session hours is
+    CLOSED. Unknown symbols/venues → UNKNOWN (no silent venue fallback).
     """
     as_of = as_of or datetime.now(timezone.utc)
     if as_of.tzinfo is None:
         as_of = as_of.replace(tzinfo=timezone.utc)
     ac = asset_class(symbol)
-    if ac == "crypto":
-        return {"asset_class": ac, "market_open": True, "tradable_now": True, "session_status": "OPEN"}
-    if ac == "fx":
-        open_ = _fx_open(as_of)
-        return {"asset_class": ac, "market_open": open_, "tradable_now": open_,
-                "session_status": "OPEN" if open_ else "CLOSED"}
-    if ac in ("index", "equity"):
-        open_ = _exchange_open(symbol, as_of)
-        return {"asset_class": ac, "market_open": open_, "tradable_now": open_,
-                "session_status": "OPEN" if open_ else "CLOSED"}
-    return {"asset_class": ac, "market_open": None, "tradable_now": None, "session_status": "UNKNOWN"}
+    ctx = resolve_symbol_session(symbol, as_of)
+    if ctx is None or ctx.session_status == "UNKNOWN":
+        return {"asset_class": ac, "market_open": None, "tradable_now": None,
+                "session_status": "UNKNOWN"}
+    open_ = ctx.session_status in TRADING_SESSION_STATUSES
+    return {
+        "asset_class": ac,
+        "market_open": open_,
+        "tradable_now": open_,
+        "session_status": "OPEN" if open_ else "CLOSED",
+        "venue_id": ctx.venue_id,
+        "venue_session_status": ctx.session_status,
+        "trading_date": ctx.trading_date,
+    }
 
 
 def freshness_level(age_seconds: float | None, ac: str) -> str:

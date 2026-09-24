@@ -84,7 +84,7 @@ class MarketRegimeEngine:
                             {"realized_vol_20d_annualized": vol})
 
     def _risk(self, panel) -> dict:
-        vix = self._series(panel, "^VIX")
+        vix = self._series(panel, "VIX")
         if vix is None or len(vix) == 0:
             return self.protection.insufficient_result("risk_regime", 0)
         v = float(vix.iloc[-1])
@@ -93,10 +93,10 @@ class MarketRegimeEngine:
 
     def _rates(self, panel) -> dict:
         us10 = self._series(panel, "US10Y")
-        us2 = self._series(panel, "US2Y")
-        if us10 is None or us2 is None or len(us10) == 0 or len(us2) == 0:
+        us5 = self._series(panel, "US5Y")
+        if us10 is None or us5 is None or len(us10) == 0 or len(us5) == 0:
             return self.protection.insufficient_result("rates_regime", 0)
-        slope = float(us10.iloc[-1] - us2.iloc[-1])
+        slope = float(us10.iloc[-1] - us5.iloc[-1])
         if slope < -0.1:
             shape = "inverted"
         elif slope < 0.3:
@@ -104,8 +104,9 @@ class MarketRegimeEngine:
         else:
             shape = "normal"
         direction = "rising" if (us10.iloc[-1] - us10.iloc[min(len(us10) - 1, 20)]) > 0 else "falling"
-        return self._result("rates_regime", f"{shape}_{direction}", min(len(us10), len(us2)),
-                            {"us10y": float(us10.iloc[-1]), "us2y": float(us2.iloc[-1]), "slope": slope})
+        return self._result("rates_regime", f"{shape}_{direction}", min(len(us10), len(us5)),
+                            {"us10y": float(us10.iloc[-1]), "us5y": float(us5.iloc[-1]),
+                             "slope": slope, "curve": "10Y-5Y"})
 
     def _fx(self, panel) -> dict:
         s = self._series(panel, "USDJPY=X")
