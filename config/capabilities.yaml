@@ -51,19 +51,28 @@ yuanta_securities_auth:
   api_family: SPARK
 
 yuanta_spark_futures:
-  status: CONTRADICTION
-  note: "user says enabled; server 0112；不直接下結論，走 contradiction diagnosis"
+  status: EXTERNAL_ENTITLEMENT_RETEST_REQUIRED
+  api_family: SPARK
+  note: "historical server result = 0112（PERMISSION_UNAVAILABLE）；需重新收到 server callback 才可改判"
 
 yuanta_futures_auth:
-  status: PARTIAL
-  gate: PHASE2YE
+  status: VERIFIED
+  gate: PHASE2YG3_AUTH_VERIFIED
   api_family: YUANTA_QUOTE_COM
-  note: "T+1 盤登入成功；T 盤無登入權（疑 login ID 非帳號）"
+  note: "實測 ReqType=1(T) 與 ReqType=2(T+1) 皆 Status=2 LogonOK code=0"
 
 yuanta_futures_quote:
-  status: NOT_TESTED
+  status: REGISTRATION_UNRESOLVED
   api_family: YUANTA_QUOTE_COM
-  note: "legacy_login_id 修正後重測；OSE scope 未證實排除"
+  note: "AUTH_VERIFIED_REGISTRATION_UNRESOLVED；TMFJ6PM ReqType=2 AddMktReg return=0 後 OnRegError ErrCode=3（意義 UNKNOWN，不推論）"
+
+yuanta_ose_micro_quote:
+  status: NOT_AVAILABLE
+  note: "nearest StkCode=JNU2612 (MarketNo=207)；無 live callback 不得標 live"
+
+yuanta_taifex_quote:
+  status: NOT_AVAILABLE_UNTIL_CALLBACK
+  note: "直到實際收到行情 callback 才可改判"
 
 yuanta_futures_trading_api:
   status: FUTURE_RESEARCH_ONLY

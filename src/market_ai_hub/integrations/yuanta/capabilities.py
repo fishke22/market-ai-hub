@@ -20,6 +20,16 @@ CAPABILITIES = [
 ]
 
 # 只有真的收到有效 callback/result 才可標 SUPPORTED_BY_ACCOUNT
+# 2Y-G.3: measured provider status (machine-readable). Login success != quote success.
+PROVIDER_STATUS = {
+    "legacy_futures_auth": "VERIFIED",                     # ReqType=1/2 measured Status=2 LogonOK code=0
+    "legacy_domestic_quote": "AUTH_VERIFIED_REGISTRATION_UNRESOLVED",
+    "spark_futures": "EXTERNAL_ENTITLEMENT_RETEST_REQUIRED",
+    "ose_micro_live": "NOT_AVAILABLE",
+    "taifex_live": "NOT_AVAILABLE_UNTIL_CALLBACK",
+}
+
+
 ACCOUNT_VERIFIED_STATUS = {"SUPPORTED_BY_ACCOUNT", "NOT_ENTITLED", "NOT_RETURNED", "ERROR"}
 
 

@@ -99,6 +99,43 @@ def read_profile_credential(profile: str) -> StoredCredential | None:
     return None
 
 
+def normalize_credential_secret(value) -> str:
+    """Normalize a Windows Credential Manager secret to `str`（安全 helper）。
+
+    - `str` → 原樣回傳
+    - `bytes`/`bytearray` → UTF-16LE decode，去 trailing NUL
+    - 其他型別 / 長度奇數 / decode 失敗 → `CredentialBackendError`（fail closed）
+
+    本 helper 不 log、不 print、不寫檔，也不回傳任何 masked 以外的形式。
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+        if len(raw) % 2 != 0:
+            raise CredentialBackendError(
+                "credential secret byte length is odd; not valid UTF-16LE (fail-closed)")
+        try:
+            text = raw.decode("utf-16-le")
+        except UnicodeDecodeError as e:
+            raise CredentialBackendError(
+                "credential secret is not valid UTF-16LE (fail-closed)") from e
+        return text.rstrip("\x00")
+    raise CredentialBackendError(
+        f"unsupported credential secret type: {type(value).__name__} (fail-closed)")
+
+
+def read_profile_password(profile: str) -> str | None:
+    """Normalized password for a profile（None = 未設定）。不回傳 masked 以外的資訊、不 log。"""
+    cred = read_profile_credential(profile)
+    if cred is None:
+        return None
+    try:
+        return normalize_credential_secret(cred.password)
+    except CredentialBackendError:
+        return None
+
+
 def delete_credential(target: str) -> bool:
     _require_wincred()
     import win32cred

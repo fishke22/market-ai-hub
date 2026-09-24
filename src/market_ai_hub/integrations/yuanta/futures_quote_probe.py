@@ -21,12 +21,17 @@ from market_ai_hub.integrations.yuanta.credential_store import (
     CredentialBackendError,
     CRED_TARGET_LEGACY_LOGIN_ID,
     read_profile_credential,
+    read_profile_password,
     write_credential,
 )
 from market_ai_hub.integrations.yuanta.futures_com import require_32bit, YuantaFuturesQuoteClient
 from market_ai_hub.integrations.yuanta.sanitizer import mask_account
 
 RESULT_PATH = "YUANTA_FUTURES_QUOTE_RESULT.json"
+
+# AddMktReg ReqType：1=T 盤、2=T+1（TypeLib 已驗證）
+REQ_TYPE_SESSIONS = {"T": 1, "TPLUS1": 2}
+# OnRegError ErrCode=3 observed 2026-09-24 → 意義 UNKNOWN，不猜
 
 # Legacy COM 為 DOMESTIC_ONLY：這些海外/OSE 字樣一律拒收
 _NON_DOMESTIC_MARKERS = ("JNU", "JNM", "JNI", "NK225", "NIKKEI", "OSE", "^N225")
@@ -59,8 +64,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="yuanta.futures_quote_probe")
     ap.add_argument("--instrument", default="TAIFEX_TMF")   # 國內指數期貨
     ap.add_argument("--symbol", default="")                  # 需 verified，不得猜
+    ap.add_argument("--session", choices=list(REQ_TYPE_SESSIONS), default="T",
+                    help="AddMktReg ReqType：T=1、TPLUS1=2")
     ap.add_argument("--seconds", type=float, default=8.0)
     args = ap.parse_args()
+    req_type = REQ_TYPE_SESSIONS[args.session]
 
     if _security_precheck() != 0:
         return 1
@@ -101,16 +109,24 @@ def main() -> int:
     print("Architecture: x86")
     print("Login ID:   ", mask_account(login_id))
     print("Symbol:     ", args.symbol)
+    print("Session:    ", args.session, "(AddMktReg ReqType=%d)" % req_type)
     print("Orders:      DISABLED")
     print("Mode:        QUOTE_ONLY")
     print("=" * 40)
 
-    password = getpass.getpass("Password: ")
+    # 密碼來源：WinCred futures secret（normalized UTF-16LE）→ 無則 getpass fallback
+    password = read_profile_password("futures")
+    if not password:
+        password = getpass.getpass("Password: ")
+        print("password source: getpass (WinCred futures secret not preset)")
+    else:
+        print("password source: Windows Credential Manager (futures secret, normalized)")
 
     client = YuantaFuturesQuoteClient()
     evidence: dict = {
         "api_family": "YUANTA_QUOTE_COM", "mode": "QUOTE_ONLY", "orders": "DISABLED",
         "login_id_masked": mask_account(login_id), "architecture": "x86",
+        "session": args.session, "req_type": req_type,
         "subscription": None, "callback_count": 0, "callbacks": [],
         "verified_at": datetime.now(timezone.utc).isoformat(), "security": "PASS",
     }
@@ -120,17 +136,28 @@ def main() -> int:
         del password
         state = client.wait_login(timeout=45.0)
         evidence["login_status"] = getattr(state, "state", "UNKNOWN")
-        ret = client.register_quote_symbol(args.symbol, "1", 1)  # 單一商品
-        evidence["subscription"] = {"symbol": args.symbol, "AddMktReg_return": ret}
-        print(f"AddMktReg({args.symbol}) ret={ret}")
+        ret = client.register_quote_symbol(args.symbol, "1", req_type)  # 單一商品
+        evidence["subscription"] = {"symbol": args.symbol, "req_type": req_type, "AddMktReg_return": ret}
+        print(f"AddMktReg({args.symbol}, ReqType={req_type}) ret={ret}")
         events = client.pump_quote(timeout=float(args.seconds))
-        evidence["callback_count"] = len(events)
+        reg_errors = [e for e in events if "reg_error" in e]
+        quotes = [e for e in events if e.get("event") in ("OnGetMktData", "OnGetMktQuote")]
+        evidence["callback_count"] = len(quotes)
+        evidence["reg_errors"] = reg_errors
         for ev in events[:10]:
             evidence["callbacks"].append({k: (mask_account(v) if k == "symbol" else v) for k, v in ev.items()})
-        print(f"quote callbacks: {len(events)}")
+        if quotes:
+            evidence["quote_status"] = "LIVE_CALLBACK_VERIFIED"
+        elif reg_errors:
+            # ErrCode 意義 UNKNOWN → 只記錄，不推論
+            evidence["quote_status"] = "AUTH_VERIFIED_REGISTRATION_UNRESOLVED"
+            evidence["reg_error_codes"] = sorted({int(e["reg_error"]) for e in reg_errors})
+        else:
+            evidence["quote_status"] = "NO_CALLBACK"
+        print(f"quote callbacks: {len(quotes)} | reg_errors: {len(reg_errors)} | status: {evidence['quote_status']}")
         for ev in events[:10]:
             print("  ", {k: (mask_account(v) if k == "symbol" else v) for k, v in ev.items()})
-        client.unregister_quote_symbol(args.symbol, 1)
+        client.unregister_quote_symbol(args.symbol, req_type)
     except Exception as e:
         print("QUOTE_PROBE_FAILED:", type(e).__name__, str(e)[:200])
         evidence["error"] = f"{type(e).__name__}: {str(e)[:200]}"

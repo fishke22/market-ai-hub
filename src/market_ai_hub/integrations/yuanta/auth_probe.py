@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from market_ai_hub.integrations.yuanta.credential_store import (
     CredentialBackendError,
     read_profile_credential,
+    read_profile_password,
 )
 from market_ai_hub.integrations.yuanta.sanitizer import mask_account
 from market_ai_hub.integrations.yuanta.spark_auth import (
@@ -98,7 +99,13 @@ def main() -> int:
     print("Orders:    ", cfg.orders)
     print("=" * 40)
 
-    password = getpass.getpass(f"Yuanta {args.profile} password: ")
+    # 密碼來源：WinCred <profile> secret（normalized UTF-16LE）→ 無則 getpass fallback
+    password = read_profile_password(args.profile)
+    if not password:
+        password = getpass.getpass(f"Yuanta {args.profile} password: ")
+        print("password source: getpass (WinCred secret not preset)")
+    else:
+        print("password source: Windows Credential Manager (normalized)")
 
     rt = SparkRuntime()
     outcome = None
