@@ -2,7 +2,7 @@
 
 - Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
 - Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
-- build_id：**f09ff80765f94687**（W2 Feature Store / packet provenance wiring；fingerprint 全部 runtime source + config）
+- build_id：**bed003b51f6d1f8b**（W2 gated model-input contract；fingerprint 全部 runtime source + config）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -27,7 +27,7 @@ offline CI markers, complete runtime-config fingerprint. See
 `research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md` for validation/publication state.
 The previously running recorder has not been restarted by this repair; disk source
 PASS does not mean that process loaded the new implementation.
-Automatic reconnect/roll, durable crash spool, actual model-consumption wiring and calibration fitting remain future work. Reader → V2-A.2/V2-H lineage → canonical Feature Store provenance → packet source/quality context is now offline-verified; research-only boundaries are unchanged.
+Automatic reconnect/roll, durable crash spool, validated TICK→daily aggregation / broker DATA READY and calibration fitting remain future work. Reader → V2-A.2/V2-H lineage → canonical Feature Store provenance → packet/model-input boundary is offline-verified; research-only boundaries are unchanged.
 
 ## 2026-09-25 W2 field-aware reader/replay
 
@@ -48,7 +48,16 @@ Automatic reconnect/roll, durable crash spool, actual model-consumption wiring a
 - Canonical data-root use is now `MARKET_AI_DATA_ROOT` for runtime paths, Data Lake and default Feature Store; old `MARKET_AI_HUB_DATA_ROOT` remains only migration fallback in Data Lake.
 - Analysis Packet exposes a bounded `factor_observation_summary` with lineage/source/quality/contract/freshness context. It does not turn those rows into probabilities and does not silently override existing target/reference price selection.
 - Validation: focused integration `155 passed, 1 deselected`; broader contract regression `265 passed, 2 deselected`; final default suite `1726 passed, 23 deselected, 132 warnings` in 150.34s, exit 0. Changed-file secret scan: 0 hits; `git diff --check` PASS.
-- W2 is still not fully closed: the next proof is that model input construction consumes only these gated Feature Store rows and preserves cutoff/lineage. Recorder runtime adoption remains separately pending.
+- Feature Store / packet provenance sub-step is complete; recorder runtime adoption remains separately pending.
+
+## 2026-09-25 W2 gated model-input contract
+
+- Implementation commit: `9a11ce309ef5159545cb64e4ed8fa81ca0bbacfd`; build_id `bed003b51f6d1f8b`.
+- Read-only model-input construction consumes only materialized, point-in-time-safe, AVAILABLE Feature Store rows at/before cutoff and requires homogeneous representation, contract and source frequency. Missing schema/store, mixed contracts/frequency, duplicate event times and insufficient history produce typed abstention states.
+- Lineage/source snapshot IDs remain attached. Public readiness exposes metadata only (`values_exposed=false`); later-available rows are excluded by test.
+- Current broker features are `TICK`, while Chronos/TimesFM/classifiers are `1d`; Osaka direct readiness therefore reports `INCOMPATIBLE_FREQUENCY` rather than fake resampling. Taiwan index is checked per futures representation; Taiwan stock has no broker direct-target model-input mapping.
+- Offline W2 engineering path = **W2_OFFLINE_CONTRACT_PASS**. This is not DATA READY: live recorder adoption is pending and there is no validated TICK→daily aggregation for the current daily models.
+- Validation: focused `117 passed, 1 deselected`; packet regression `76 passed, 1 deselected`; V2 regression `146 passed`; final default suite `1735 passed, 23 deselected, 132 warnings` in 141.75s, exit 0. Changed-file secret scan 0 hits; `git diff --check` PASS.
 
 ## Phase 2 全歷程 Gate
 

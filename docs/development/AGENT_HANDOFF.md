@@ -1,17 +1,17 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W2 Feature Store / packet provenance wiring after V2-I 2I.1.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 W2 offline model-input contract closure after V2-I 2I.1.
 
 ## Current repair checkpoint
 
-Read `research/phase3/reports/W2_FEATURE_STORE_PACKET_2026-09-25.md` for the newest bounded work, `YUANTA_FIELD_AWARE_REPLAY_W2_2026-09-25.md` for the reader step, and keep `QUOTE_HUB_HARDENING_2026-09-24.md` as the historical W1 repair report. Latest W2 implementation commit is `5fe8906bd1237f7f89cd96dbbfa9383b8763281f`; runtime build_id is `f09ff80765f94687`.
+Read `research/phase3/reports/W2_MODEL_INPUT_CONTRACT_2026-09-25.md` for the latest W2 closure, then `W2_FEATURE_STORE_PACKET_2026-09-25.md` / `YUANTA_FIELD_AWARE_REPLAY_W2_2026-09-25.md` for prior W2 steps. Latest implementation commit is `9a11ce309ef5159545cb64e4ed8fa81ca0bbacfd`; runtime build_id is `bed003b51f6d1f8b`.
 
 Runtime adoption is still **RUNTIME_ADOPTION_PENDING**. Read-only inspection found the running recorder status still has the old field set and all 22 current `latest.json` quotes lack `field_provenance` / `freshness_semantics`; no broker login, logout, subscription, restart, order or account action was performed. Do not use a newly imported build_id as evidence for the already-running process.
 
 Offline W2 reader/replay now maps trade/bid/ask independently from per-field provenance into the existing V2-A.2 `FactorRepresentationObservation`, preserves V2-H lineage/source IDs, rejects market/contract/session mismatches, out-of-order receipts, partial files and persistence/overflow truth, and never combines source time-of-day with a fabricated date. Old schema without per-field provenance is explicitly downgraded to `LEGACY_TOP_LEVEL_RECEIPT_ONLY` and cannot become DIRECT_LIVE.
 
-W2 now has offline wiring through canonical Feature Store provenance and public packet source/quality context. Only LIVE-eligible V2-A.2 observations can materialize quote features; legacy/unknown-time/stale observations remain provenance-only. Packet exposure does not silently replace its target/reference price. **Actual model-consumption wiring is still pending**, so DATA READY is not claimed. Next bounded work: verify and wire model input consumption from gated Feature Store data without fitting; recorder handover still requires an explicitly authorized maintenance window. No new models, broker orders, or automatic training.
+W2 offline contract is now **PASS** through the model-input boundary: persisted quote → field-aware V2-A.2 observation → V2-H lineage → canonical Feature Store gate → public packet provenance → read-only model-input contract. Current broker rows are `TICK`, while Chronos/TimesFM/classifiers are `1d`; the model-input gate therefore returns `INCOMPATIBLE_FREQUENCY` instead of fabricating daily bars. This is **not DATA READY** and no model inference/training was enabled. Next bounded work is W3 outcome maturity / `evaluation_as_of` / homogeneous scope correctness. Recorder handover still requires explicit maintenance-window authorization.
 
 ## Read first (order)
 

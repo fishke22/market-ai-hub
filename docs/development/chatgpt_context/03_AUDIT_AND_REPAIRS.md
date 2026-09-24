@@ -60,11 +60,19 @@
 - Analysis Packet 新增 bounded provenance summary，保留 source snapshot IDs/quality/contract/freshness，但不覆寫既有 reference price，也沒有新增 probability/trading 欄位。
 - regression：155 passed/1 deselected；broader 265 passed/2 deselected；default 1726 passed/23 deselected/132 warnings，150.34s，exit 0；changed-file secret scan 0 hits；diff check PASS。
 
+## 2026-09-25 W2 model-input contract closure
+
+- 實作 commit：`9a11ce309ef5159545cb64e4ed8fa81ca0bbacfd`；runtime build_id `bed003b51f6d1f8b`。
+- 新 model-input layer 以 read-only query 消費 Feature Store gated rows，固定 cutoff、representation、contract、frequency 與 lineage；later-available row 排除、mixed contracts/frequency、duplicate event time、history 不足均 typed abstain。
+- public packet 只顯示 readiness metadata，不暴露輸入值；現有 broker source frequency=`TICK`，current model frequency=`1d`，因此 Osaka readiness=`INCOMPATIBLE_FREQUENCY`。禁止 silent resample / fake daily bar。
+- W2 offline engineering path 標 `W2_OFFLINE_CONTRACT_PASS`，但 live recorder adoption、bar aggregation、DATA READY 仍未成立。
+- regression：117 passed/1 deselected；76 passed/1 deselected；146 passed；default 1735 passed/23 deselected/132 warnings，141.75s，exit 0。
+
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
 2. 自動 reconnect、授權拒絕後生命週期、session/contract 自動 roll、durable spool/WAL 尚未實作。新 status 保守標 NOT_CONTINUOUSLY_VERIFIED、MANUAL_SINGLE_OWNER、BUFFERED_NOT_ZERO_LOSS；跨 UTC 日提示 CONTRACT_REVALIDATION_REQUIRED。這些是下一工作包，不能把 flags 當已實現。
-3. recorder→V2-A.2 reader/V2-H lineage→Feature Store provenance/model-feature gate→public packet provenance 已完成離線接線，但**模型輸入建構尚未證明會消費這些 gated rows**；因此 logging/feature materialization 仍不等於模型在學習。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。SDK full snapshot 中重複出現的舊成交價不能僅憑欄位存在就宣稱最新成交。
+3. recorder→V2-A.2→V2-H→Feature Store→packet→model-input boundary 已完成離線契約；但 broker TICK 仍不相容現有 1d models，沒有 validated bar aggregation，所以 DATA READY / broker-driven inference 仍不成立。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。
 4. Outcome horizon maturity / evaluation_as_of / homogeneous model-version-event scope 的端到端契約仍需 W3 補足。2I.1 描述性 pooled metrics 不可當 production calibration；公開 audit helper 已關閉，維持 fitting NOT STARTED。
 5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。ENGINE PASS ≠ CALIBRATED ≠ EDGE。
 6. 新 Windows、重建 venv、WinCred/COM/合法 SDK/模型權重重新配置與恢復演練仍需 W7；不能整包複製就保證即用。
@@ -75,4 +83,4 @@
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。優先完成不碰 live owner 的 W2 模型輸入消費/cutoff/lineage 離線接線；若使用者另提供維護窗口，再按資料尾端/回復路徑/單一 owner 核對後受控交接舊 recorder。W3 到期與 scope 契約必須在 calibration fitting 之前。長期 Price/Probability Map 設計見 02_ROADMAP.md。
+下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W2 離線契約已關閉；優先進 W3：outcome horizon maturity、evaluation_as_of、homogeneous model/version/event scope uniqueness。若使用者另提供維護窗口，再按資料尾端/回復路徑/單一 owner 核對後受控交接舊 recorder。W3 必須在 calibration fitting 之前。長期 Price/Probability Map 設計見 02_ROADMAP.md。
