@@ -15,8 +15,9 @@
 
 ### Step 2. 安裝 Python 3.12 x64
 - 官方：<https://www.python.org/downloads/windows/>
-- 安裝時勾 **Add python.exe to PATH**。
-- 確認：`python --version` → `Python 3.12.x`
+- 安裝時可勾 **Add python.exe to PATH**；但 MARKET_AI_HUB installer 不只相信 PATH，會實測 Python 版本與 64-bit pointer width。
+- 只接受 CPython 3.11/3.12 64-bit；32-bit Python 會被拒絕。
+- 可先用 `scripts\setup_windows.ps1 -BootstrapOnly` 做不下載依賴的新 venv 驗證。
 
 ### Step 3. Clone repository
 ```powershell
@@ -25,10 +26,19 @@ cd D:\MARKET_AI_HUB
 ```
 
 ### Step 4. 一鍵安裝
+先做無下載 bootstrap：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -BootstrapOnly
+```
+再做完整依賴安裝：
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -WithDev
 ```
-（細節與「看到什麼才算成功」見 `docs/INSTALL_WINDOWS.md`）
+若要先驗證 source checkout 搬到其他磁碟/中文空白路徑後不依賴舊 checkout，執行：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify_source_relocation_bootstrap.ps1
+```
+（完整安裝會連外抓依賴；無網路或未授權時只做 bootstrap。）
 
 ### Step 5. 下載模型
 ```powershell
@@ -69,7 +79,7 @@ D:\MARKET_AI_HUB\.venv\Scripts\python.exe -m pytest tests -q -m "not integration
 | 市場資料 / DuckDB / Parquet | ❌ 沒有 | 需重新抓取 |
 | `.env` / token | ❌ 沒有 | 自行設定 |
 
-**結論**：只要 GitHub repo 存在 + 網路可連到官方來源，就能從零恢復完整功能。
+**結論**：GitHub repo + 可取得的合法依賴來源足以重建 **core source/environment**；但不能據此宣稱完整功能已自動恢復。模型 weights、私人市場資料、WinCred、憑證、元大 proprietary SDK/COM、帳號 entitlement 與 Startup/排程都必須依各自流程重新取得/建立並分別驗收。`.venv` 不搬移，目的地重新建立。
 
 ---
 

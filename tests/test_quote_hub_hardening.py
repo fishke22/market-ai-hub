@@ -180,11 +180,51 @@ def test_yuanta_x86_setup_parses_and_invalid_override_fails_before_install():
     assert "install minimal deps" not in combined
 
 
+def test_windows_setup_selects_supported_64bit_python_and_supports_no_download_bootstrap():
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "scripts/setup_windows.ps1").read_text(encoding="utf-8-sig")
+    assert "struct.calcsize('P')*8" in text
+    assert "$info.bits -ne 64" in text
+    assert "$info.minor -notin @(11, 12)" in text
+    assert "foreach ($preferredMinor in @(12, 11))" in text
+    assert "Automatic installation is intentionally disabled" in text
+    assert "[switch]$BootstrapOnly" in text
+    assert "BOOTSTRAP_ONLY_PASS (no dependency install performed)" in text
+    assert "& $pythonPath -m venv .venv" in text
+    assert "platform.machine" not in text
+
+    relocation = (root / "scripts/verify_source_relocation_bootstrap.ps1").read_text(encoding="utf-8-sig")
+    assert "git -C $Root ls-files" in relocation
+    assert "-BootstrapOnly" in relocation
+    assert "old_repo_in_syspath" in relocation
+    assert "SOURCE_RELOCATION_BOOTSTRAP_PASS" in relocation
+
+
+@pytest.mark.skipif(os.name != "nt", reason="PowerShell installer")
+def test_windows_setup_rejects_fake_32bit_python_before_bootstrap(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    fake = tmp_path / "fake-python.cmd"
+    fake.write_text(
+        '@echo off\n'
+        '@echo {"executable":"C:\\\\fake\\\\python.exe","version":"3.12.0","major":3,"minor":12,"bits":32}\n',
+        encoding="ascii",
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(root / "scripts/setup_windows.ps1"), "-BootstrapOnly", "-PythonExe", str(fake)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "must be CPython 3.11/3.12 64-bit" in combined
+    assert "建立 .venv" not in combined
+
+
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell installer")
 def test_installer_native_failure_is_fatal():
     root = Path(__file__).resolve().parents[1]
-    text = (root / "scripts/setup_windows.ps1").read_text(encoding="utf-8")
-    function = text[text.index("function Assert-NativeSuccess"):text.index("$Root =")]
+    text = (root / "scripts/setup_windows.ps1").read_text(encoding="utf-8-sig")
+    function = text[text.index("function Assert-NativeSuccess"):text.index("function Get-PythonInfo")]
     result = subprocess.run(["powershell", "-NoProfile", "-Command",
         function + '\n$LASTEXITCODE = 17; Assert-NativeSuccess "mock"; exit 0'], capture_output=True)
     assert result.returncode != 0

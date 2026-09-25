@@ -14,14 +14,21 @@ cd MARKET_AI_HUB
 讀 `SYSTEM_MANIFEST.yaml`（machine-readable 能力/架構/target/安全）。讀 `config/capabilities.yaml`（feature 狀態）。
 
 ## STEP 3 — Check OS / Python / GPU
-- Windows x64、Python 3.12.13、CUDA GPU（RTX 4060 Ti 16GB 或等效）。
-- 無 GPU 也可跑（模型 fallback CPU），但 heavy model 慢。
+- Windows x64；主環境只接受 CPython 3.11/3.12 **64-bit**。V1 freeze 為 Python 3.12.13。
+- 不要用 `platform.machine()` 判 Python bitness；32-bit Python 在 64-bit Windows 也可能回 `AMD64`。正式 installer 以 pointer width 驗證。
+- CUDA GPU（RTX 4060 Ti 16GB 或等效）是模型加速項；無 GPU 仍可跑 CPU fallback，但 heavy model 較慢。
 
 ## STEP 4 — Create environment
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
+# 只驗 Python 選擇 + 建立新 venv，不下載任何 dependency：
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -BootstrapOnly
+
+# 如需明確指定 interpreter：
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -BootstrapOnly -PythonExe "<python.exe>"
 ```
+- installer 會優先從 Windows Python Launcher 枚舉 3.12/3.11 x64，拒絕 32-bit 或 3.13+。
+- `-BootstrapOnly` 不執行 pip install；適合先做新路徑/新 venv 無下載驗收。
+- source relocation 可重現 smoke：`scripts\verify_source_relocation_bootstrap.ps1`。它只複製 Git tracked files 到 temp 新路徑、建立 bootstrap venv，並驗證新程序不依賴原 checkout。
 
 ## STEP 5 — Install dependencies
 ```powershell

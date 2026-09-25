@@ -58,16 +58,24 @@ cd D:\MARKET_AI_HUB
 
 ## Step 4. 一鍵安裝
 
+先做不下載套件的 bootstrap 驗證：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -BootstrapOnly
+```
+看到 `RESULT: BOOTSTRAP_ONLY_PASS`，代表 installer 已選到 Python 3.11/3.12 64-bit 並建立可用的新 `.venv`。它會拒絕 32-bit Python，即使該 Python 在 64-bit Windows 上把 `platform.machine()` 回報成 `AMD64`。
+
+再進完整安裝：
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -WithDev
 ```
 
-這個腳本會自動：檢查 Python → 建立 `.venv` → 安裝依賴 → 檢查 Torch/CUDA → 檢查 import。
+這個腳本會：驗證受支援的 64-bit Python → 建立/檢查 `.venv` → 安裝依賴 → 檢查 Torch/CUDA → 檢查 import。
 
 **看到什麼才算成功**：最後顯示 `=== 安裝完成 ===`。
 
-> 若出現紅色 `[FAIL] 找不到 Python`，回到 Step 1。
-> 安裝依賴可能需數分鐘（會下載數百 MB）。
+> 若沒有受支援的 64-bit Python，回到 Step 1；installer 不會自行下載 Python。必要時可用 `-PythonExe "<python.exe>"` 明確指定。
+> 安裝依賴會連外下載套件；未授權或離線環境先停在 `-BootstrapOnly`。
+> 想驗證「搬到另一個含空白/中文路徑仍能 bootstrap」可執行 `scripts\verify_source_relocation_bootstrap.ps1`。
 
 ---
 
