@@ -66,7 +66,7 @@ The recorder freezes `runtime_build_id` at startup. If disk source/config change
 starts, the action returns `TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE` before a broker query. This
 prevents a stale process from attributing evidence to code it did not load.
 
-Runtime evidence schema `W3.3-C2.2` includes that frozen build ID. The evidence boundary recomputes the OSE-local timestamp-basis cross-check from the canonical raw batch and bound request/callback times, so caller-asserted verified flags cannot promote an invalid batch. Raw tick values are persisted only in the local raw evidence artifact; typed evidence/control results expose metadata and IDs, not prices. Persisted artifacts are reloaded and canonical IDs/bindings are checked again before terminal-close materialization.
+Historical C2.2 runtime evidence schema `W3.3-C2.2` includes that frozen build ID. The evidence boundary recomputes the OSE-local timestamp-basis cross-check from the canonical raw batch and bound request/callback times, so caller-asserted verified flags cannot promote an invalid batch. Raw tick values are persisted only in the local raw evidence artifact; typed evidence/control results expose metadata and IDs, not prices. Persisted artifacts are reloaded and canonical IDs/bindings are checked again before terminal-close materialization.
 
 Offline validation for this addendum:
 - initial controlled-path focused: `70 passed, 2 deselected`;
@@ -79,16 +79,19 @@ Offline validation for this addendum:
 
 No `request_yuanta_tick_detail_measurement.ps1` request was queued in this package.
 
+## C2.3 live-evidence addendum
+
+The 2026-09-25 foreground maintenance path kept the single logical recorder owner alive and produced fresh W1/W2 provenance. Exactly one JNU2612 / LastCount=20 measurement was issued. It persisted canonical raw snapshot `w33_tick_cbce3cba39291cd1f14e`; C2.2 blocked the batch as `RAW_TRADE_AFTER_DAY_CLOSE` because its terminal raw clock was 15:45:01.
+
+Typed reload of that raw artifact passed. The 20 raw timestamps span 15:39:47–15:45:01, with the last regular-session row at 15:40:00 and the terminal row at 15:45:01. JPX documents continuous trading through 15:40 and a closing auction at 15:45; Yuanta documents `StickDetail.TimeStamp` as a DateTime/time field but does not document an OSE auction-second convention. C2.3 therefore adds an evidence-bounded one-second closing-auction grace only. `15:45:02` and later remain fail-closed, and the derived session event timestamp remains exactly 15:45:00 while the provider timestamp is preserved separately.
+
+Current runtime evidence schema is `W3.3-C2.3`; timestamp-basis method is `OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`; current build is `afd52f88a351541a`. Final validation: focused `59 passed`; broader `154 passed, 2 deselected`; full offline `1861 passed, 24 deselected, 132 warnings in 133.26s`, exit 0. The C2.2 blocked result did not persist a complete typed verification artifact, so it is not retroactively upgraded: `RUNTIME_TIMESTAMP_VERIFIED=NONE_YET`, eligible DAILY terminal close=`NONE_YET`, and actual forward evidence=`NONE_YET`.
+
 ## Runtime boundary
 
-No broker login/logout, subscription change, live query, recorder restart, order, account, position or
-balance action was performed. No scheduler was enabled.
+Historical C2.2 engineering performed no live query in that package; the C2.3 addendum above records the later authorized live measurement. Current truth after C2.3 offline hardening: the foreground Runner path, broker login, fresh W1/W2 provenance, exact-contract request/callback plumbing and canonical raw persistence are all demonstrated. The recorder was gracefully stopped after the one measurement and is currently not running.
 
-The next live step still requires an explicitly authorized controlled maintenance window. The live
-recorder currently has W1/W2 per-field provenance active, but the process was started before the C2
-controlled-measurement commit and therefore has not loaded this action. Adoption requires a controlled
-restart into the current build plus explicit enablement of `tick_detail_measurements`; the probe must
-remain on the same single-owner login. Until that authorization and measurement exist:
+The C2.2 measurement cannot be retroactively promoted because its blocked path did not persist a complete typed verification artifact. A future valid OSE maintenance measurement must run the published C2.3 build, persist typed evidence, reload it successfully, and only then permit exact-contract DAILY terminal-close materialization. Until that measurement exists:
 
 ```text
 W3.3 ENGINE PASS

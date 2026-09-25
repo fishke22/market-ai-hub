@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **C2 W3.3 SECOND MAINTENANCE ATTEMPT FAIL_CLOSED_AFTER_LOGIN / RUNNER_CHILD_LIFETIME_BLOCKER / RECORDER_NOT_RUNNING**
+- Current phase: **C2 W3.3 REAL RAW EVIDENCE CAPTURED / C2.3 OFFLINE_PASS / RUNTIME_REVERIFICATION_PENDING / RECORDER_NOT_RUNNING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**ba7c0e1b9ca9d62c**（C2 startup-observability source/config fingerprint；不證明 recorder 已成功啟動或已產生 runtime evidence）
+- build_id：**afd52f88a351541a**（C2.3 one-second closing-auction grace source/config fingerprint；不證明 typed runtime evidence 已成立）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -20,11 +20,11 @@
 
 ## 2026-09-25 C2 same-owner controlled measurement path
 
-- Initial implementation: `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening: `9496eb9afa65e647b5fceca86610247ff24e258e`; review fixes: `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, `873e6bd9697efe1bc2c67d1767c708b23af2df10`; maintenance control `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`; request-script repair `1452a45cf0c4de631d213eaa8648c3eae3b90211`; startup observability `b9cfcb0e302e1520027d2c69adf363d15baf00c4`; current build_id `ba7c0e1b9ca9d62c`.
+- Initial implementation: `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening: `9496eb9afa65e647b5fceca86610247ff24e258e`; review fixes: `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, `873e6bd9697efe1bc2c67d1767c708b23af2df10`; maintenance control `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`; request-script repair `1452a45cf0c4de631d213eaa8648c3eae3b90211`; startup observability `b9cfcb0e302e1520027d2c69adf363d15baf00c4`; current build_id `afd52f88a351541a`.
 - New recorder control action `tick_detail_measurement` runs only inside the existing owner. Config default remains `enabled: false`; the queue script does not login/logout.
 - OSE market 207 + exact JNU contract + LastCount<=20 only. Actual request and callback must both be inside 15:45–17:00 JST; ambiguous outstanding requests and unsafe evidence paths block before a broker call.
 - Recorder freezes `runtime_build_id` at startup and compares it to current disk fingerprint before measurement. Stale process/disk mismatch returns `TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE`.
-- Runtime evidence schema `W3.3-C2.2` binds process build, request/callback identity and canonical raw snapshot. UTC-like/Taipei-like timestamp-basis alternatives fail closed, and evidence validation recomputes the cross-check from batch + request/callback rather than trusting asserted success fields.
+- Runtime evidence schema `W3.3-C2.3` binds process build, request/callback identity and canonical raw snapshot. UTC-like/Taipei-like alternatives fail closed. C2.3 permits only `15:45:01` as an evidence-bounded closing-auction print; `15:45:02+` remains blocked and session event time remains 15:45.
 - Raw tick values stay in local evidence storage. Control/evidence metadata expose IDs/paths/status, not prices. Persisted artifacts are reloadable and canonical IDs/bindings are checked again before terminal-close materialization.
 - Review hardening also makes optional Feature Store provenance queries return [] on DuckDB/IO failure and prevents `LEGACY_TOP_LEVEL_RECEIPT_ONLY` rows from being presented as FRESH in public packet freshness.
 - Maintenance-control commit `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c` adds runtime-only tick-detail enable and control-inbox graceful shutdown while keeping tracked `enabled: false`. Startup-observability commit `b9cfcb0e302e1520027d2c69adf363d15baf00c4` adds `startup_stage`, safe error-type/login-code status and start-script confirmation of a fresh running build.
@@ -32,6 +32,8 @@
 - First authorized live attempt: valid OSE session and in-window; FunctionList resolver selected `JNU2612`. Old owner was already absent. One runtime-only owner start exited before fresh status/log.
 - Second new user continuation: one new runtime-only start reached `login_msg_code=0001`, `startup_stage=RUNNING`, build `ba7c0e1b9ca9d62c`, measurement gate=true, subscriptions=42 and zero pending/dropped records. The child disappeared after the one-shot Runner command returned, before any fresh callback/W1-W2 provenance. No `START_FAILED`, clean `STOPPED`, recorder stderr/stdout or crash dump was produced. Required measurement preconditions therefore failed; no GetStkTickDetail request and no second login retry occurred in that execution.
 - WebCodex continuation rule: run `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` as a long-running Runner Job and keep that exact execution alive while separate calls inspect status / queue the one measurement / send graceful shutdown. Do not use ad-hoc detachment to evade Runner lifecycle controls.
+- Third attempt: foreground Runner Job PASS; fresh RUNNING/login `0001`/W1-W2 provenance. Exactly one JNU2612 request `tick-detail-01892509e2e742619eef0c0d07349d39` produced raw snapshot `w33_tick_cbce3cba39291cd1f14e`; C2.2 result = `TICK_DETAIL_TIMESTAMP_BASIS_BLOCKED / RAW_TRADE_AFTER_DAY_CLOSE`. Raw reload PASS; no typed evidence artifact was created.
+- C2.3 offline validation: focused `59 passed`; broader `154 passed, 2 deselected`; full offline `1861 passed, 24 deselected, 132 warnings in 133.26s`, exit 0. Foreground recorder graceful-shutdown PASS; current recorder NOT RUNNING.
 - Actual runtime timestamp evidence = **NONE_YET**; eligible real DAILY terminal close = **NONE_YET**; ACTUAL_FORWARD_EVIDENCE = **NONE_YET**.
 
 ## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness

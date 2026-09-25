@@ -12,13 +12,13 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 2026-09-25 C2 W3.3 controlled-measurement path 最新交接：
 
-controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、`873e6bd9697efe1bc2c67d1767c708b23af2df10`；maintenance-control = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；request-script repair = `1452a45cf0c4de631d213eaa8648c3eae3b90211`；startup-observability source = `b9cfcb0e302e1520027d2c69adf363d15baf00c4`；current source/config build_id = `ba7c0e1b9ca9d62c`。
+controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、`873e6bd9697efe1bc2c67d1767c708b23af2df10`；maintenance-control = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；request-script repair = `1452a45cf0c4de631d213eaa8648c3eae3b90211`；startup-observability source = `b9cfcb0e302e1520027d2c69adf363d15baf00c4`；current source/config build_id = `afd52f88a351541a`。
 新增的 `tick_detail_measurement` 只會在既有 single-owner recorder 內執行，
 而且 `tick_detail_measurements.enabled=false` 預設關閉。它只允許 OSE 207 + exact JNU contract
 + LastCount<=20，actual request/callback 都必須在 15:45–17:00 JST，遇到 outstanding ambiguity、
 unsafe evidence path 或 running-process build 與 disk build 不一致，都會在 broker query 前 fail closed。
 
-runtime evidence schema 現為 `W3.3-C2.2`，綁定 recorder 啟動時凍結的 `runtime_build_id`。
+runtime evidence schema 現為 `W3.3-C2.3`，綁定 recorder 啟動時凍結的 `runtime_build_id`。
 timestamp-basis cross-check 對 UTC-like / Taipei-like raw clock 都有反例拒絕，而且 evidence validation 會從 raw batch + request/callback times 重新計算，不接受 caller 自行宣稱成功。Feature Store optional provenance query 遇 DuckDB/IO 錯誤回空集合；`LEGACY_TOP_LEVEL_RECEIPT_ONLY` 不會再被 packet 標成 FRESH。raw tick 值只留本機 evidence raw artifact；control result / verification evidence 不公開價格。
 
 maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tracked config 仍維持 `enabled:false`。startup-observability 再補 `startup_stage`、安全的 error type/login code 與 start script fresh-status confirmation。驗證：focused `42 passed, 2 deselected`；broader regression `151 passed, 2 deselected`；final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`，exit 0；targeted secret scan 0；diff check PASS。沒有新增 dependency 或 license surface。
@@ -27,7 +27,7 @@ maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tra
 
 第一次 current-build runtime-only owner start 的 launcher PID `9060` 隨即消失，沒有 fresh status/log，recorder stdout/stderr 為空；該次沒有 queue measurement。第二次由新的使用者 continuation 觸發，在約 16:32 JST 再做一次 start：startup telemetry 證明 SPARK login `0001`、`startup_stage=RUNNING`、runtime build=`ba7c0e1b9ca9d62c`、measurement gate=true、subscriptions=42、pending/dropped=0。可是 one-shot WebCodex launcher 結束後 recorder PID `33448` 也隨即消失，最後 heartbeat 停在 `2026-09-25T07:32:13.645637Z`，且沒有 callback / W1-W2 provenance / clean STOPPED / stderr/stdout / crash dump。量測前 gate 因此失敗，**沒有送 GetStkTickDetail，也沒有在同一 execution 做第二次 login retry**。目前狀態 = **SECOND_ATTEMPT_FAIL_CLOSED_AFTER_LOGIN / RUNNER_CHILD_LIFETIME_BLOCKER / RECORDER NOT RUNNING**。真實 OSE timestamp-basis evidence、eligible DAILY terminal close、W3.2 actual forward evidence均仍為 NONE_YET。
 
-下一步是新的 maintenance execution。WebCodex 不得再用背景 Start-Process 形式期待 recorder 在 one-shot Runner command 結束後常駐；改用 `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` 當作 long-running Runner Job，保持該 exact execution 存活，再用另一個工具呼叫驗 fresh heartbeat/W1-W2 provenance、queue 唯一一筆 `JNU2612`、驗 evidence，最後送 graceful shutdown並 observe 同一 Job 結束。
+第三次 maintenance 已證明 foreground Runner Job 路徑可用：recorder RUNNING/login `0001`、fresh W1/W2 provenance、exact JNU2612，並只送出一筆 measurement。C2.2 取得 canonical raw snapshot `w33_tick_cbce3cba39291cd1f14e`，但因 raw terminal timestamp=`15:45:01` 被 `RAW_TRADE_AFTER_DAY_CLOSE` fail closed。raw typed reload PASS，未產生 verification artifact。C2.3 只新增 **1 秒** closing-auction grace；`15:45:02+` 仍拒絕，session event timestamp 仍為 15:45。C2.3 build=`afd52f88a351541a`；focused 59、broader 154/2 deselected、full offline 1861/24 deselected/132 warnings in 133.26s，全部 exit 0。舊 C2.2 failed result不事後補造 evidence，因此 runtime timestamp verification 仍 NONE_YET。
 
 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 歷史交接：
 
@@ -138,4 +138,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與 recorder process/status。W2、W3.1、W3.2、W3.3 engines 不要重做。第二次 attempt 已證明 broker login 本身可成功，但背景 child 無法可靠跨越 one-shot WebCodex Runner lifetime；**同一 execution 不得再 retry broker login**。下一次新的使用者 continuation必須使用 foreground Runner Job 路徑；只有該 Job 持續存活、fresh current-build owner 有 W1/W2 provenance 且仍位於有效 OSE 15:45–17:00 JST 視窗時，才可送唯一一筆 `JNU2612` measurement。C3/C4 仍等待真實 C1/C2 輸入。
+先核對最新 HEAD/remote/worktree/build/PR #55 CI 與 recorder count。W2/W3.1/W3.2/W3.3 engines 不要重做。下一次新的使用者 continuation在有效 OSE 15:45–17:00 JST 視窗內，用已證明的 foreground Runner Job 路徑啟動 current C2.3 build `afd52f88a351541a`，驗 fresh W1/W2 provenance + FunctionList exact JNU，再只送一筆 measurement。typed evidence 成立才 materialize DAILY close；否則 fail closed。C3/C4 仍等待真實 C1/C2 輸入。

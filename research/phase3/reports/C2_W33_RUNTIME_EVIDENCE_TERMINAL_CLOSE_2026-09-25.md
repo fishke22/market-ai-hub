@@ -107,3 +107,13 @@ timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock �
 - 這組證據顯示 broker login 已成功，失敗發生在 one-shot WebCodex launcher 返回之後；行為與 Runner 回收 child process 相符，但沒有把它宣稱成已證實的 Windows crash/root cause。
 - 依量測前 gate，fresh heartbeat + W1/W2 provenance 不成立，所以**沒有 queue GetStkTickDetail**；同一 execution 也沒有第二次 login retry。
 - WebCodex 下一次必須改用 recorder `-Foreground` 作為 long-running Runner Job，保持原 execution 存活，再從其他呼叫送 control inbox measurement/shutdown。若工具沒有 detached-process 能力，不得用 shell trick 繞過 Runner lifecycle。
+
+## 第三次 maintenance attempt：real raw capture + C2.3
+
+- Foreground Runner Job 路徑成功保持 recorder 存活；fresh status=RUNNING、SPARK login `0001`、runtime measurement gate=true、fresh W1/W2 `PER_FIELD_ONLY` callbacks。FunctionList 再次解析 exact active nearest contract=`JNU2612`。
+- 只 queue 一筆 operator request `tick-detail-01892509e2e742619eef0c0d07349d39`（runtime request=`tick_detail_1`, LastCount=20）。C2.2 result=`TICK_DETAIL_TIMESTAMP_BASIS_BLOCKED / RAW_TRADE_AFTER_DAY_CLOSE`；canonical raw snapshot=`w33_tick_cbce3cba39291cd1f14e`。
+- Raw artifact typed reload PASS，20 rows 的 raw clock 範圍為 15:39:47–15:45:01；control/verification metadata 不公開價格。JPX 官方交易時間為 15:40 結束 continuous trading、15:45 closing auction、17:00 night open；Yuanta 官方只將 `StickDetail.TimeStamp` 定義為 DateTime/時間，未說明 OSE auction-second/timezone convention。
+- C2.3 將 runtime evidence schema 升為 `W3.3-C2.3`、timestamp method 升為 `OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`，只接受**一秒** closing-auction print grace。`15:45:02` 反例仍 fail closed；session event timestamp 固定 15:45:00，provider timestamp 保留真實 +1 秒。
+- C2.3 build_id=`afd52f88a351541a`。focused=`59 passed`；broader=`154 passed, 2 deselected`；full offline=`1861 passed, 24 deselected, 132 warnings in 133.26s`，exit 0。
+- C2.2 blocked result沒有持久化完整 typed callback evidence，因此不事後補造 C2.3 evidence。**RUNTIME_TIMESTAMP_VERIFIED / eligible DAILY terminal close / ACTUAL_FORWARD_EVIDENCE 仍為 NONE_YET**。
+- Foreground recorder 已透過 control-inbox graceful shutdown，Runner Job exit 0；目前 recorder NOT RUNNING。
