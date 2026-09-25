@@ -129,6 +129,8 @@ def test_tick_detail_request_script_uses_single_regex_escape():
     text = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
     assert r"[ValidatePattern('^JNU\d{4}$')]" in text
     assert r"[ValidatePattern('^JNU\\d{4}$')]" not in text
+    assert text.count("action = \"tick_detail_measurement\"") == 1
+    assert text.count("YUANTA_TICK_DETAIL_MEASUREMENT_QUEUED") == 1
 
 
 def test_maintenance_scripts_keep_measurement_runtime_only_and_shutdown_graceful():
