@@ -357,6 +357,16 @@ def _tick_detail_measurement(
     outstanding = [x for x in traces.get("requests", []) if x.get("request_id") not in matched]
     if outstanding:
         return False, {"status": "TICK_DETAIL_MEASUREMENT_REQUEST_ALREADY_PENDING", "values_exposed": False}
+    prior_same_identity = [
+        x for x in traces.get("requests", [])
+        if int(x.get("market_no", -1)) == market
+        and str(x.get("stock_code", "") or "").strip().upper() == symbol
+    ]
+    if prior_same_identity:
+        return False, {
+            "status": "TICK_DETAIL_MEASUREMENT_ALREADY_ATTEMPTED_IN_PROCESS",
+            "values_exposed": False,
+        }
 
     captured: dict[str, Any] = {}
     previous_hook = rt.on_tick_detail_callback

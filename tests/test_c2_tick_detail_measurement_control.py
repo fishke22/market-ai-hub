@@ -328,3 +328,36 @@ def test_measurement_blocks_when_running_process_build_is_stale(tmp_path, monkey
     assert ok is False
     assert result["status"] == "TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE"
     assert rt.calls == []
+
+
+def test_measurement_does_not_retry_same_contract_in_one_process(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    rt.pending_trace = None
+    rt.tick_detail_runtime_traces = lambda: {
+        "requests": [{
+            "request_id": "tick_detail_old",
+            "market_no": 207,
+            "stock_code": "JNU2612",
+            "last_count": 20,
+            "accepted": True,
+        }],
+        "callbacks": [{"request_id": "tick_detail_old"}],
+    }
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is False
+    assert result["status"] == "TICK_DETAIL_MEASUREMENT_ALREADY_ATTEMPTED_IN_PROCESS"
+    assert rt.calls == []
+
+
+def test_runtime_verification_requirements_include_c2_2_provenance():
+    req = TD.runtime_verification_requirements()
+    assert req["runtime_evidence_schema_version"] == "W3.3-C2.2"
+    assert req["controlled_measurement_default_enabled"] is False
+    joined = " ".join(req["required_checks"])
+    assert "runtime process build id" in joined
+    assert "no prior same-contract" in joined
+    assert "persisted and reload-validated" in joined
