@@ -293,6 +293,9 @@ def _factor_observation_summary(family: str, as_of: datetime) -> list[dict]:
         cutoff = cutoff.tz_convert("UTC")
     for row in rows:
         available = row.get("available_at")
+        quality_status = str(row.get("quality_status", "UNKNOWN") or "UNKNOWN")
+        stored_staleness = str(row.get("staleness_status", "UNKNOWN") or "UNKNOWN")
+        legacy_receipt_only = "LEGACY_TOP_LEVEL_RECEIPT_ONLY" in quality_status
         age = None
         freshness = "UNKNOWN"
         if available:
@@ -302,7 +305,12 @@ def _factor_observation_summary(family: str, as_of: datetime) -> list[dict]:
             else:
                 at = at.tz_convert("UTC")
             age = max(0.0, (cutoff - at).total_seconds())
-            freshness = "FRESH" if age <= 60.0 else ("DELAYED" if age <= 300.0 else "STALE")
+            if legacy_receipt_only:
+                freshness = "UNKNOWN"
+            elif stored_staleness in ("STALE", "DELAYED"):
+                freshness = stored_staleness
+            else:
+                freshness = "FRESH" if age <= 60.0 else ("DELAYED" if age <= 300.0 else "STALE")
         out.append({
             "lineage_id": row.get("lineage_id", ""),
             "economic_factor_id": row.get("economic_factor_id", ""),
@@ -315,7 +323,8 @@ def _factor_observation_summary(family: str, as_of: datetime) -> list[dict]:
             "event_timestamp": row.get("event_timestamp"),
             "available_at": available,
             "timestamp_precision": row.get("timestamp_precision", "UNKNOWN"),
-            "quality_status": row.get("quality_status", "UNKNOWN"),
+            "staleness_status_at_ingest": stored_staleness,
+            "quality_status": quality_status,
             "provider": row.get("provider", ""),
             "source_type": row.get("source_type", ""),
             "data_grade": row.get("data_grade", ""),

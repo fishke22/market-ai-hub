@@ -229,9 +229,10 @@ def test_trade_after_day_close_blocks_fail_closed(tmp_path):
         _row(15, 44, 58, 42000.0, 101),
         _row(15, 45, 1, 42005.0, 102),
     ])
-    result = _materialize(batch, tmp_path, evidence=_evidence(batch))
+    forged = _rehash(_evidence(_batch()), source_snapshot_id=batch.source_snapshot_id)
+    result = _materialize(batch, tmp_path, evidence=forged)
     assert result.status == TCM.STATUS_BLOCKED
-    assert "TRADE_AFTER_DAY_CLOSE_BEFORE_NIGHT_OPEN" in result.reason
+    assert "TIMESTAMP_BASIS_CROSSCHECK_FAILED" in result.reason
 
 
 def test_contract_month_must_match_requested_jnu_code(tmp_path):
@@ -301,13 +302,37 @@ def test_runtime_exchange_builder_binds_matching_request_callback():
         request_trace=request,
         callback_trace=callback,
         runtime_build_id="TEST_BUILD_C2",
-        timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
-        timestamp_basis_method=TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK,
-        timestamp_crosscheck_passed=True,
     )
     assert evidence.runtime_request_id == "tick_detail_7"
     assert evidence.source_snapshot_id == batch.source_snapshot_id
     assert evidence.evidence_id == TV.canonical_evidence_id(evidence)
+
+
+def test_runtime_exchange_builder_recomputes_timestamp_basis():
+    batch = _batch(rows=[_row(10, 0, 0, 42000.0, 101)])
+    request = TickDetailRequestTrace(
+        request_id="tick_detail_8",
+        request_time_utc=_dt(24, 6, 45, 30),
+        market_no=TD.OSE_MARKET_NO,
+        stock_code=batch.stock_code,
+        last_count=20,
+        accepted=True,
+    )
+    callback = TickDetailCallbackTrace(
+        request_id="tick_detail_8",
+        callback_received_at_utc=batch.received_at,
+        callback_mark=1,
+        callback_index=TV.CALLBACK_INDEX,
+        returned_market_no=batch.market_no,
+        returned_stock_code=batch.stock_code,
+    )
+    with pytest.raises(ValueError, match="TIMESTAMP_BASIS_CROSSCHECK_FAILED"):
+        TV.build_ose_runtime_verification_from_exchange(
+            batch,
+            request_trace=request,
+            callback_trace=callback,
+            runtime_build_id="TEST_BUILD_C2",
+        )
 
 
 def test_runtime_exchange_builder_rejects_uncorrelated_callback():
@@ -334,7 +359,4 @@ def test_runtime_exchange_builder_rejects_uncorrelated_callback():
             request_trace=request,
             callback_trace=callback,
             runtime_build_id="TEST_BUILD_C2",
-            timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
-            timestamp_basis_method=TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK,
-            timestamp_crosscheck_passed=True,
         )

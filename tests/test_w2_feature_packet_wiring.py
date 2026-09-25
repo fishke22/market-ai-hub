@@ -147,6 +147,11 @@ def test_unknown_event_time_is_kept_as_snapshot_but_not_model_feature(tmp_path, 
     assert rows[0]["quality_status"].startswith("LEGACY_TOP_LEVEL_RECEIPT_ONLY")
     assert rows[0]["event_timestamp"] is None
 
+    import market_ai_hub.packet.builder as b
+    summary = b._factor_observation_summary("OSAKA_MICRO", ASOF)
+    assert summary[0]["packet_freshness"] == "UNKNOWN"
+    assert summary[0]["staleness_status_at_ingest"] == rows[0]["staleness_status"]
+
 
 def test_stale_quote_is_not_materialized_as_live_feature(tmp_path, monkeypatch):
     monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(tmp_path / "data"))
@@ -244,3 +249,17 @@ def test_latest_observations_opens_existing_store_read_only(tmp_path, monkeypatc
     )
     assert rows
     assert read_only_flags == [True]
+
+
+def test_latest_observations_corrupt_store_fails_closed(tmp_path, monkeypatch):
+    root = tmp_path / "data"
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(root))
+    store = FeatureStore()
+    store.db_path.parent.mkdir(parents=True, exist_ok=True)
+    store.db_path.write_bytes(b"not-a-duckdb-file")
+
+    rows = store.latest_observations(
+        as_of=ASOF,
+        representation_ids=["OSE_MICRO_FUTURES"],
+    )
+    assert rows == []

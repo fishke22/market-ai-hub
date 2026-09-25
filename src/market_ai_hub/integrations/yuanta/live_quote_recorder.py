@@ -437,9 +437,6 @@ def _tick_detail_measurement(
             request_trace=request_trace,
             callback_trace=callback_trace,
             runtime_build_id=loaded_build_id,
-            timestamp_basis_status=crosscheck["timestamp_basis_status"],
-            timestamp_basis_method=crosscheck["timestamp_basis_method"],
-            timestamp_crosscheck_passed=True,
         )
         evidence_path = evidence_dir / f"{evidence.evidence_id}.json"
         _atomic_json(evidence_path, evidence.model_dump())

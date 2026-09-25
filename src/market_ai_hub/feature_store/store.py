@@ -427,21 +427,24 @@ class FeatureStore:
         if not self.db_path.exists():
             return []
         cutoff = _utc_naive(as_of)
-        with duckdb.connect(str(self.db_path), read_only=True) as con:
-            has_table = con.execute(
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='factor_observations'"
-            ).fetchone()[0]
-            if not has_table:
-                return []
-            q = "SELECT * FROM factor_observations WHERE available_at <= ?"
-            params: list[Any] = [cutoff]
-            reps = [str(x) for x in (representation_ids or []) if str(x)]
-            if reps:
-                q += f" AND representation_id IN ({','.join(['?'] * len(reps))})"
-                params.extend(reps)
-            q += " ORDER BY available_at DESC, received_at DESC LIMIT ?"
-            params.append(max(1, int(limit)))
-            df = con.execute(q, params).df()
+        try:
+            with duckdb.connect(str(self.db_path), read_only=True) as con:
+                has_table = con.execute(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='factor_observations'"
+                ).fetchone()[0]
+                if not has_table:
+                    return []
+                q = "SELECT * FROM factor_observations WHERE available_at <= ?"
+                params: list[Any] = [cutoff]
+                reps = [str(x) for x in (representation_ids or []) if str(x)]
+                if reps:
+                    q += f" AND representation_id IN ({','.join(['?'] * len(reps))})"
+                    params.extend(reps)
+                q += " ORDER BY available_at DESC, received_at DESC LIMIT ?"
+                params.append(max(1, int(limit)))
+                df = con.execute(q, params).df()
+        except (duckdb.Error, OSError):
+            return []
         out: list[dict] = []
         for row in df.to_dict("records"):
             row["source_snapshot_ids"] = _decode_ids(row.pop("source_snapshot_ids_json", "[]"))

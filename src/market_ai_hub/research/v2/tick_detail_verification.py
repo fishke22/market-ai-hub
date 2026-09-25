@@ -142,12 +142,19 @@ def verification_blockers(
     if request_window["trading_date"] != callback_window["trading_date"]:
         blockers.append("REQUEST_CALLBACK_TRADING_DATE_MISMATCH")
 
-    if evidence.timestamp_basis_status != TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED:
-        blockers.append("TIMESTAMP_BASIS_RUNTIME_VERIFICATION_REQUIRED")
-    if not evidence.timestamp_crosscheck_passed:
+    derived_crosscheck = crosscheck_ose_local_timestamp_basis(
+        batch,
+        request_time=evidence.request_time,
+        callback_received_at=evidence.callback_received_at,
+    )
+    if not derived_crosscheck["timestamp_crosscheck_passed"]:
         blockers.append("TIMESTAMP_BASIS_CROSSCHECK_FAILED")
-    if evidence.timestamp_basis_method != TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK:
-        blockers.append("TIMESTAMP_BASIS_METHOD_UNSUPPORTED")
+    if evidence.timestamp_basis_status != derived_crosscheck["timestamp_basis_status"]:
+        blockers.append("TIMESTAMP_BASIS_STATUS_ASSERTION_MISMATCH")
+    if evidence.timestamp_basis_method != derived_crosscheck["timestamp_basis_method"]:
+        blockers.append("TIMESTAMP_BASIS_METHOD_ASSERTION_MISMATCH")
+    if evidence.timestamp_crosscheck_passed != derived_crosscheck["timestamp_crosscheck_passed"]:
+        blockers.append("TIMESTAMP_BASIS_RESULT_ASSERTION_MISMATCH")
 
     return sorted(set(blockers))
 
@@ -282,11 +289,8 @@ def build_ose_runtime_verification_from_exchange(
     request_trace: Any,
     callback_trace: Any,
     runtime_build_id: str,
-    timestamp_basis_status: str,
-    timestamp_basis_method: str,
-    timestamp_crosscheck_passed: bool,
 ) -> TickDetailRuntimeVerificationEvidence:
-    """Build evidence only from one runtime-correlated request/callback pair."""
+    """Build evidence from one correlated exchange and recompute timestamp-basis truth."""
     request_id = str(getattr(request_trace, "request_id", "") or "")
     callback_request_id = str(getattr(callback_trace, "request_id", "") or "")
     if not request_id or request_id != callback_request_id:
@@ -294,12 +298,24 @@ def build_ose_runtime_verification_from_exchange(
     accepted = getattr(request_trace, "accepted", None)
     if accepted is None:
         raise ValueError("REQUEST_ACCEPTANCE_NOT_FINAL")
+    request_time = getattr(request_trace, "request_time_utc")
+    callback_received_at = getattr(callback_trace, "callback_received_at_utc")
+    crosscheck = crosscheck_ose_local_timestamp_basis(
+        batch,
+        request_time=request_time,
+        callback_received_at=callback_received_at,
+    )
+    if not crosscheck["timestamp_crosscheck_passed"]:
+        raise ValueError(
+            "TIMESTAMP_BASIS_CROSSCHECK_FAILED"
+            + (f":{crosscheck['reason']}" if crosscheck["reason"] else "")
+        )
     return build_ose_runtime_verification_evidence(
         batch,
         runtime_request_id=request_id,
         runtime_build_id=runtime_build_id,
-        request_time=getattr(request_trace, "request_time_utc"),
-        callback_received_at=getattr(callback_trace, "callback_received_at_utc"),
+        request_time=request_time,
+        callback_received_at=callback_received_at,
         requested_market_no=getattr(request_trace, "market_no"),
         requested_stock_code=getattr(request_trace, "stock_code"),
         last_count=getattr(request_trace, "last_count"),
@@ -308,9 +324,9 @@ def build_ose_runtime_verification_from_exchange(
         callback_mark=getattr(callback_trace, "callback_mark"),
         returned_market_no=getattr(callback_trace, "returned_market_no"),
         returned_stock_code=getattr(callback_trace, "returned_stock_code"),
-        timestamp_basis_status=timestamp_basis_status,
-        timestamp_basis_method=timestamp_basis_method,
-        timestamp_crosscheck_passed=timestamp_crosscheck_passed,
+        timestamp_basis_status=crosscheck["timestamp_basis_status"],
+        timestamp_basis_method=crosscheck["timestamp_basis_method"],
+        timestamp_crosscheck_passed=crosscheck["timestamp_crosscheck_passed"],
     )
 
 
