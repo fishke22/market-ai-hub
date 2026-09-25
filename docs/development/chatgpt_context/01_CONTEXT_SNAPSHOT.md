@@ -10,7 +10,29 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 交接：
+2026-09-25 C2 W3.3 controlled-measurement path 最新交接：
+
+controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、latest source `873e6bd9697efe1bc2c67d1767c708b23af2df10`；current source/config build_id = `d0f179c3460497e7`。
+新增的 `tick_detail_measurement` 只會在既有 single-owner recorder 內執行，
+而且 `tick_detail_measurements.enabled=false` 預設關閉。它只允許 OSE 207 + exact JNU contract
++ LastCount<=20，actual request/callback 都必須在 15:45–17:00 JST，遇到 outstanding ambiguity、
+unsafe evidence path 或 running-process build 與 disk build 不一致，都會在 broker query 前 fail closed。
+
+runtime evidence schema 現為 `W3.3-C2.2`，綁定 recorder 啟動時凍結的 `runtime_build_id`。
+timestamp-basis cross-check 對 UTC-like / Taipei-like raw clock 都有反例拒絕，而且 evidence validation 會從 raw batch + request/callback times 重新計算，不接受 caller 自行宣稱成功。Feature Store optional provenance query 遇 DuckDB/IO 錯誤回空集合；`LEGACY_TOP_LEVEL_RECEIPT_ONLY` 不會再被 packet 標成 FRESH。raw tick 值只留本機 evidence raw artifact；control result / verification evidence 不公開價格。
+
+驗證：review-round focused `74 passed, 1 deselected`；related W2/W3/C1/quote `199 passed, 2 deselected`；final offline profile `1854 passed, 24 deselected, 132 warnings in 124.53s`，exit 0；targeted secret scan 0；diff check PASS。沒有新增 dependency 或 license surface。
+
+現場 recorder 現在已有 W1/W2 `PER_FIELD_ONLY` provenance，表示 W1/W2 runtime adoption 已發生；
+但 process 在目前 C2 measurement/review commits（through `873e6bd`）前已啟動，所以 **C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING**。本棒沒有
+restart/login/logout，也沒有 queue `request_yuanta_tick_detail_measurement.ps1`。真實 OSE
+timestamp-basis evidence、eligible DAILY terminal close、W3.2 actual forward evidence 均仍為 NONE_YET。
+
+下一步需要使用者明確 maintenance-window 授權：受控將唯一 recorder owner 切到已發布 current
+build、顯式啟用 `tick_detail_measurements`，再於有效 OSE session 的 15:45 <= JST < 17:00
+送出一筆 exact JNU measurement。沒有這個授權就不 restart/login/queue request。
+
+2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 歷史交接：
 
 C2 implementation commit = `92e178e4ea6cad632d071747efe1c273bcc79efc`；source build_id = `b6cfc2ceae89d221`。Raw tick-detail snapshot 永遠保持 UNVERIFIED，verification 狀態不再參與 raw canonical identity；SPARK runtime 分開保留實際 request time 與 callback receive time，並只在 request/callback 唯一可關聯時產生 correlation。terminal-close materializer 不再信任一個 status 字串，必須吃綁定 request/callback/market/code/canonical snapshot/timestamp-basis cross-check 的 typed runtime evidence。
 
@@ -119,4 +141,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。下一包是 C2 controlled runtime measurement：只有在明確維護窗口授權下，使用既有單一 owner 路徑取得 matched request/callback 與 OSE timestamp-basis cross-check evidence，再由已通過 offline correctness 的 materializer 建立第一筆 eligible contract DAILY terminal close；沒有授權就不 restart/login/retry broker。C3/C4 仍等待真實 C1/C2 輸入；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。
+先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。下一包是 C2 runtime adoption + controlled measurement：只有在明確 maintenance-window 授權下，受控重啟唯一 recorder 到已發布 current build、顯式啟用 tick_detail_measurements，並於 15:45–17:00 JST 取得 matched request/callback + timestamp-basis evidence；再由既有 materializer 建立第一筆 eligible DAILY terminal close。沒有授權就不 restart/login/queue request。C3/C4 仍等待真實 C1/C2 輸入。

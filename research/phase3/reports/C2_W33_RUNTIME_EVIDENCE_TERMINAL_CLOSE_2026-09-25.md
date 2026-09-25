@@ -53,7 +53,7 @@ C2 離線 correctness gate **PASS**。Implementation commit: `92e178e4ea6cad632d
 - 尚無真實 contract DAILY terminal-close row 可宣稱 DATA READY。
 - W3.2 actual forward prediction/outcome sample 仍為 NONE_YET。
 - calibration fitting 未開始。
-- recorder runtime adoption / restart 仍需明確 maintenance-window 授權。
+- C2 controlled-measurement runtime adoption / recorder restart 仍需明確 maintenance-window 授權；W1/W2 per-field recorder adoption 已另行觀測成立。
 
 ## 發布與工作樹邊界
 
@@ -61,6 +61,26 @@ Implementation commit 只包含 C2 code/tests。開工前已 staged 的：
 - `docs/architecture/v2-tick-detail-source-contract.md`
 - `research/phase3/reports/W33_TICK_DETAIL_SOURCE_2026-09-25.md`
 
-仍視為 pre-existing staged W3.3 work，不屬於 implementation commit，也不得因本報告而冒稱它們已被本棒重新驗證。
+在 `92e178e` implementation checkpoint 時仍屬 pre-existing staged W3.3 work，沒有被偷偷帶入 implementation commit；後續 controlled-path handoff 已逐段重新核對並將它們更新到 C2.2 現況。
 
 下一個 bounded package 是 **C2 runtime measurement**：只在使用者明確允許安全維護窗口後，透過既有單一 owner 路徑收集 matched request/callback + timestamp-basis cross-check evidence，再由本次 materializer 產生第一筆 eligible DAILY terminal close。沒有授權就保持 offline，不 restart/login。
+
+
+## 後續 C2 controlled-measurement path（同日追加）
+
+後續 initial control-path commit `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf` 把「未來如何在不建立第二個
+broker owner 的前提下取得真實證據」做成正式 control path；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review corrections = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、latest source `873e6bd9697efe1bc2c67d1767c708b23af2df10`；current source/config build_id = `d0f179c3460497e7`。
+`tick_detail_measurements.enabled` 預設仍為 `false`，因此發布程式本身不會
+自動觸發 broker query。
+
+新增控制包括：exact OSE/JNU contract、actual request/callback 15:45–17:00 JST window、
+outstanding-request ambiguity block、同 process 同 contract 禁止二次 attempt、evidence path containment、
+五秒 callback cap、startup-frozen `runtime_build_id` 與 disk fingerprint mismatch fail-closed、
+raw/evidence 持久化與重載驗證。
+timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock 反例；review hardening 之後 evidence validation 會重新計算 cross-check，不再信 caller-supplied verified flags。另修正 optional Feature Store provenance query 遇 DuckDB/IO failure 時 fail closed，以及 legacy receipt-only packet freshness 不再標 FRESH。
+
+驗證：review-round focused `74 passed, 1 deselected`；related regression `199 passed, 2 deselected`；final offline profile `1854 passed, 24 deselected, 132 warnings in 124.53s`，exit 0；targeted changed-file secret scan 0；diff check PASS。
+
+現場 recorder 雖已有 W1/W2 `PER_FIELD_ONLY` provenance，但其啟動時間早於目前 C2 measurement/review commits through `873e6bd`，所以
+**C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING**。本棒沒有 restart/login/logout，也沒有 queue
+`request_yuanta_tick_detail_measurement.ps1`。真實 timestamp-basis evidence 仍為 `NONE_YET`。

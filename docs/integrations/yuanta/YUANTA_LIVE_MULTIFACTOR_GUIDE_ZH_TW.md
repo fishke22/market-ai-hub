@@ -262,6 +262,17 @@ Legacy規則相反：
 4. recorder 會在**既有 SPARK connection**上追加 `SubscribeWatchlistAll`；agent 不讀密碼、不 Login、不 Logout。
 5. request 會移到 `control/processed` 或 `control/failed`，fail-closed。
 
+### 受控 OSE Tick-detail measurement（平常停用）
+- `config/yuanta_live_recorder.yaml` 的 `tick_detail_measurements.enabled` 預設為 `false`。
+- 只有明確 maintenance-window 授權後，才可受控重啟 recorder 到已發布 current build，並顯式啟用此 gate。
+- 啟用後仍只由**同一個 recorder owner**執行；agent 不自行 Login/Logout。
+- 受控入口：`scripts/request_yuanta_tick_detail_measurement.ps1 -Symbol JNU<YYMM> [-LastCount 20]`。
+- request 只允許 OSE market 207、exact `JNU\d{4}`、`LastCount<=20`，且 request/callback 都必須落在 15:45–17:00 JST。
+- recorder 啟動時凍結 `runtime_build_id`；measurement 會重新計算目前磁碟 fingerprint，若與 process build 不同就在碰 API 前 fail closed。
+- evidence builder / materializer 會重新從 raw batch + request/callback times 驗證 timestamp basis，不接受 caller 自行聲稱 cross-check 成功。
+- raw tick 值只寫本機 `evidence/tick_detail/raw`；control result 與 verification evidence 不公開價格。
+- 目前現場 recorder 已有 W1/W2 per-field provenance，但啟動時間早於目前 C2 measurement/review commits through `873e6bd`，所以此 action 尚未 runtime adoption。
+
 ### 長期資料
 - 主訓練格式：`data/live/yuanta/parquet/YYYY-MM-DD/*.parquet`
 - 即時快照：`latest.json`

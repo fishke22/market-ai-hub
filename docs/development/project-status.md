@@ -1,12 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **C2 W3.3 RUNTIME-EVIDENCE / TERMINAL-CLOSE OFFLINE_CORRECTNESS_PASS（controlled live timestamp verification / actual DAILY input / forward evidence pending）**
+- Current phase: **C2 W3.3 CONTROLLED-MEASUREMENT PATH OFFLINE_PASS / RUNTIME_ADOPTION_PENDING（live timestamp verification / actual DAILY input / forward evidence pending）**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**b6cfc2ceae89d221**（C2 source fingerprint；不證明常駐 recorder process 已升級或已產生 runtime evidence）
+- build_id：**d0f179c3460497e7**（C2 controlled-measurement + review-hardening source/config fingerprint；不證明常駐 recorder process 已載入或已產生 runtime evidence）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets; see Yuanta guide. This is historical capability evidence. Current live recorder remains **RUNTIME_ADOPTION_PENDING** because its status/latest files still expose the old schema; offline W2 reader PASS is not live deployment.
+- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets. Current 2026-09-25 read-only inspection shows the live recorder emits W1/W2 `PER_FIELD_ONLY` provenance. **C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING** remains because the process predates the C2 measurement/review commits through `873e6bd`.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
@@ -17,6 +17,19 @@
 - V2-I：**EVALUATION_FOUNDATION_PASS**（evaluation engine only；CALIBRATION FITTING NOT STARTED）
 - Yuanta SPARK securities profile：PR #53 had no callbacks; later local 2026-09-24 matrix records matching TAIFEX/OSE/CME/CBOT/CBOE/NYBOT callbacks. Preserve account_profile=SECURITIES. Source hardening does not re-certify those live observations.
 - Yuanta SPARK futures profile：0112 → **SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED**（不 retry）
+
+## 2026-09-25 C2 same-owner controlled measurement path
+
+- Initial implementation: `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening: `9496eb9afa65e647b5fceca86610247ff24e258e`; review fixes: `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, latest source `873e6bd9697efe1bc2c67d1767c708b23af2df10`; current build_id `d0f179c3460497e7`.
+- New recorder control action `tick_detail_measurement` runs only inside the existing owner. Config default remains `enabled: false`; the queue script does not login/logout.
+- OSE market 207 + exact JNU contract + LastCount<=20 only. Actual request and callback must both be inside 15:45–17:00 JST; ambiguous outstanding requests and unsafe evidence paths block before a broker call.
+- Recorder freezes `runtime_build_id` at startup and compares it to current disk fingerprint before measurement. Stale process/disk mismatch returns `TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE`.
+- Runtime evidence schema `W3.3-C2.2` binds process build, request/callback identity and canonical raw snapshot. UTC-like/Taipei-like timestamp-basis alternatives fail closed, and evidence validation recomputes the cross-check from batch + request/callback rather than trusting asserted success fields.
+- Raw tick values stay in local evidence storage. Control/evidence metadata expose IDs/paths/status, not prices. Persisted artifacts are reloadable and canonical IDs/bindings are checked again before terminal-close materialization.
+- Review hardening also makes optional Feature Store provenance queries return [] on DuckDB/IO failure and prevents `LEGACY_TOP_LEVEL_RECEIPT_ONLY` rows from being presented as FRESH in public packet freshness.
+- Validation: review-round focused `74 passed, 1 deselected`; related regression `199 passed, 2 deselected`; final offline profile `1854 passed, 24 deselected, 132 warnings in 124.53s`, exit 0. Targeted secret scan 0; diff check PASS.
+- Live recorder currently has W1/W2 per-field provenance, but started before the C2 measurement/review commits through `873e6bd`; C2 control action has not been adopted. No restart/login/logout or tick-detail request occurred.
+- Actual runtime timestamp evidence = **NONE_YET**; eligible real DAILY terminal close = **NONE_YET**; ACTUAL_FORWARD_EVIDENCE = **NONE_YET**.
 
 ## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness
 

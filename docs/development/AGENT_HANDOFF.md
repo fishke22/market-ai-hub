@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C2 W3.3 controlled-measurement path offline acceptance.
 
 ## Current repair checkpoint
+
+2026-09-25 C2 controlled-measurement-path initial implementation is `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening is `9496eb9afa65e647b5fceca86610247ff24e258e`; review follow-ups are `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, and latest source commit `873e6bd9697efe1bc2c67d1767c708b23af2df10`; current source/config build is `d0f179c3460497e7`. The existing single-owner recorder now has an offline-verified control action capable of issuing one bounded OSE `GetStkTickDetail` request through that same owner, but `tick_detail_measurements.enabled=false` by default. It accepts only market 207 + exact JNU contract + bounded LastCount, requires actual request and callback inside 15:45–17:00 JST, blocks ambiguous outstanding requests, validates evidence paths before any API call, freezes runtime build identity at process startup, and persists canonical raw/evidence artifacts that are revalidated on reload.
+
+Runtime evidence schema is now `W3.3-C2.2` and carries the frozen process `runtime_build_id`. The OSE timestamp-basis cross-check is fail-closed against UTC-like and Taipei-like clock alternatives, and the evidence validation boundary now recomputes that cross-check from the bound raw batch plus request/callback times instead of trusting caller-supplied success flags. Feature Store provenance reads fail closed to an empty optional view on DuckDB/IO errors, and packet freshness never labels `LEGACY_TOP_LEVEL_RECEIPT_ONLY` data as FRESH. Local raw artifacts may contain tick prices; control-result and verification metadata do not expose prices.
+
+Validation for the latest source: review-round focused `74 passed, 1 deselected`; related W2/W3/C1/quote regression `199 passed, 2 deselected`; final offline profile `1854 passed, 24 deselected, 132 warnings in 124.53s`, exit 0, excluding only the live-owner-conflicting `test_single_instance_lock_releases_after_error`. Targeted changed-file secret scan = 0; diff check PASS. No dependency or license surface was added.
+
+Live truth: the current recorder is actively writing W1/W2 `PER_FIELD_ONLY` provenance, so whole-recorder adoption is no longer pending. However, that process started around 07:41 Asia/Taipei, before the C2 measurement/review commits through `873e6bd`, so **C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING**. No restart/login/logout occurred and no `request_yuanta_tick_detail_measurement.ps1` request was queued. Actual runtime timestamp evidence remains **NONE_YET**; eligible real DAILY terminal close remains **NONE_YET**; W3.2 ACTUAL_FORWARD_EVIDENCE remains **NONE_YET**.
+
+Next bounded step requires explicit maintenance-window authorization: publish/adopt the current build in the single recorder owner, explicitly enable `tick_detail_measurements`, then during a valid OSE session at 15:45 <= JST < 17:00 queue one exact JNU measurement. Without that authorization, do not restart/login or run the request.
 
 2026-09-25 C2 offline correctness implementation is commit `92e178e4ea6cad632d071747efe1c273bcc79efc`; source build is `b6cfc2ceae89d221`. Raw W3.3 tick-detail batches now remain permanently UNVERIFIED, canonical raw snapshot identity excludes verification state, SPARK records bounded request/callback correlation metadata, and terminal-close materialization requires a separate typed runtime verification artifact bound to the exact request, callback, returned market/code and canonical source snapshot. Ambiguous duplicate outstanding requests do not guess correlation. The controlled window is checked from actual request time (and callback time), not callback receipt substituted for request time.
 
@@ -11,7 +21,7 @@ C2 also adds a reviewed `DERIVED_DAILY` Feature Store gate for exact contract-sp
 
 Evidence boundary: **C2_OFFLINE_CORRECTNESS_PASS != RUNTIME_TIMESTAMP_VERIFIED != DATA READY != ACTUAL_FORWARD_EVIDENCE != CALIBRATED != TRADING EDGE**. No broker login/logout/restart/subscription/order/account action occurred. Actual runtime timestamp evidence remains **NONE_YET** and W3.2 actual forward evidence remains **NONE_YET**. Read `research/phase3/reports/C2_W33_RUNTIME_EVIDENCE_TERMINAL_CLOSE_2026-09-25.md`.
 
-Pre-existing staged W3.3 contract/report files remain staged and were deliberately excluded from commit `92e178e`. Next bounded package is controlled live runtime measurement only after explicit maintenance-window authorization; otherwise remain offline.
+The pre-existing W3.3 contract/report files were deliberately excluded from C2 implementation commits until ownership was clear; this handoff reconciles them to the current C2.2 contract without changing the historical source-foundation evidence. Controlled live measurement still requires explicit maintenance-window authorization.
 
 2026-09-25 C1 evaluation-comparison package is implemented in commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`; runtime build is `c64b98bd4a09d576`. It adds explicit VALID/FAILED/ABSTAINED/NONFINITE/INVALID_TARGET accounting, common-origin pairwise metrics plus each model's full coverage, fail-closed finite/accounting persistence, C1.1 leaderboard version isolation, horizon-aware random walk, train-only classification majority baseline, and aligned 20-session rates lookback. CLI run now persists pairwise rows and compare reads those rows instead of comparing different success subsets.
 
@@ -27,7 +37,7 @@ The W3.2 checkpoint below is historical, including its runtime build, not the la
 
 Read `research/phase3/reports/W32_PRECOMMITTED_FORWARD_CYCLE_2026-09-25.md` first, then the W3.1 governance and W2 reports. W3.2 implementation commit is `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; runtime build_id is `81f02a25847b9e65`.
 
-Runtime adoption is still **RUNTIME_ADOPTION_PENDING**. Read-only inspection found the running recorder status still has the old field set and all 22 current `latest.json` quotes lack `field_provenance` / `freshness_semantics`; no broker login, logout, subscription, restart, order or account action was performed. Do not use a newly imported build_id as evidence for the already-running process.
+Historical W2 handoff recorded recorder adoption as pending. Current read-only inspection on 2026-09-25 shows the running recorder now emits `PER_FIELD_ONLY` provenance, so W1/W2 runtime adoption is present. C2 measurement adoption is separately pending because the process predates the C2 measurement/review commits through `873e6bd`. Do not use a disk build_id as evidence for an already-running process.
 
 Offline W2 reader/replay now maps trade/bid/ask independently from per-field provenance into the existing V2-A.2 `FactorRepresentationObservation`, preserves V2-H lineage/source IDs, rejects market/contract/session mismatches, out-of-order receipts, partial files and persistence/overflow truth, and never combines source time-of-day with a fabricated date. Old schema without per-field provenance is explicitly downgraded to `LEGACY_TOP_LEVEL_RECEIPT_ONLY` and cannot become DIRECT_LIVE.
 
