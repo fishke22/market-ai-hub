@@ -134,6 +134,17 @@ def test_license_present():
 
 
 # --- 14: reconstruction required files ---
+def test_reconstruct_verify_is_independent_of_caller_cwd_and_uses_runtime_build_identity():
+    text = _read("scripts/reconstruct_verify.ps1")
+    root_idx = text.index("$Root = Split-Path -Parent $PSScriptRoot")
+    chdir_idx = text.index("Set-Location -LiteralPath $Root")
+    manifest_idx = text.index("open('config/system_manifest.yaml'")
+    assert root_idx < chdir_idx < manifest_idx
+    assert '$m -eq "runtime_introspected"' in text
+    assert "from market_ai_hub.services.build_info import build_fingerprint" in text
+    assert '$runtimeBuild -match "^[0-9a-f]{16}$"' in text
+
+
 def test_reconstruction_required_files():
     required = [
         "README.md", "config/system_manifest.yaml", "docs/development/AI_RECONSTRUCTION_GUIDE.md",
