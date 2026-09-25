@@ -264,7 +264,8 @@ Legacy規則相反：
 
 ### 受控 OSE Tick-detail measurement（平常停用）
 - `config/yuanta_live_recorder.yaml` 的 `tick_detail_measurements.enabled` 預設為 `false`。
-- 只有明確 maintenance-window 授權後，才可受控重啟 recorder 到已發布 current build。不要把 tracked safe default 改成 true；使用 `scripts/start_yuanta_live_recorder.ps1 -EnableTickDetailMeasurements` 做 runtime-only 啟用。
+- 只有明確 maintenance-window 授權後，才可受控重啟 recorder 到已發布 current build。不要把 tracked safe default 改成 true；一般本機維護可使用 `scripts/start_yuanta_live_recorder.ps1 -EnableTickDetailMeasurements` 做 runtime-only 啟用。
+- **WebCodex 特例：** one-shot Runner command 結束後，其背景 child 不保證能繼續存活。受控 measurement 必須用 `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` 啟動成 long-running Runner Job；保持該 Job 存活，再從另一個工具呼叫檢查 status / queue measurement / queue shutdown。不要用 shell detachment trick 繞過 Runner lifecycle。
 - 正常維護停機使用 `scripts/stop_yuanta_live_recorder.ps1`；它送 control-inbox `shutdown`，讓 recorder 自己走 close/dispose + pending flush。不要把 `Stop-Process` 當正常維護流程。
 - 啟用後仍只由**同一個 recorder owner**執行；agent 不自行 Login/Logout。
 - 受控入口：`scripts/request_yuanta_tick_detail_measurement.ps1 -Symbol JNU<YYMM> [-LastCount 20]`。
@@ -272,7 +273,7 @@ Legacy規則相反：
 - recorder 啟動時凍結 `runtime_build_id`；measurement 會重新計算目前磁碟 fingerprint，若與 process build 不同就在碰 API 前 fail closed。
 - evidence builder / materializer 會重新從 raw batch + request/callback times 驗證 timestamp basis，不接受 caller 自行聲稱 cross-check 成功。
 - raw tick 值只寫本機 `evidence/tick_detail/raw`；control result 與 verification evidence 不公開價格。
-- 2026-09-25 maintenance-window 授權已取得；current maintenance-control source commit = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`，build_id = `351267947f7f468d`。現場舊 recorder 啟動時間更早，所以此 action 尚未 runtime adoption。
+- 2026-09-25 maintenance-window 授權已取得；current startup-observability build_id = `ba7c0e1b9ca9d62c`。第二次 WebCodex attempt 已實證 SPARK login `0001` 與 current-build RUNNING，但背景 child 在 one-shot launcher 結束後消失；未送 tick-detail measurement。下一次須走上述 foreground Runner Job 路徑。
 
 ### 長期資料
 - 主訓練格式：`data/live/yuanta/parquet/YYYY-MM-DD/*.parquet`

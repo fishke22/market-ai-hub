@@ -98,3 +98,12 @@ timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock �
 為避免下一次再發生「背景 process 被建立就誤報成功」，source commit `b9cfcb0e302e1520027d2c69adf363d15baf00c4`（build_id `ba7c0e1b9ca9d62c`）新增 startup stage telemetry 與 start-script fresh-status gate。可觀測 stage 包含 `PRE_BROKER_READY / INSTANTIATE / OPEN_PROD / WAIT_CONNECTED / LOGIN_REQUEST / WAIT_LOGIN / SUBSCRIBE / RUNNING`；失敗只落地安全的 error type、login msg code、build/gate/status，不保存 credential。Start script 只有看到 fresh RUNNING/DEGRADED、build matching，且 maintenance gate 符合要求時才回報成功。
 
 該修補驗證：focused `42 passed, 2 deselected`；broader regression `151 passed, 2 deselected`；final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`，exit 0；targeted secret scan 0；`git diff --check` PASS。
+
+## 第二次 maintenance attempt：login 成功、Runner child lifetime fail-closed
+
+- 新的使用者 continuation 在 15:31 Asia/Taipei / 16:31 JST 再次確認：2026-09-25 是有效 OSE derivatives session；HEAD/remote=`d8cf0ab846ca22611edfd1235579b1edba52f002`、worktree clean、CI #160 SUCCESS、tracked `tick_detail_measurements.enabled=false`、recorder process count=0、FunctionList active nearest contract=`JNU2612`。
+- 本次只做一個新的 owner start。start script 回報 `YUANTA_LIVE_STARTING pid=39864`，接著 fresh status 回報真正 recorder PID `33448`、`login_msg_code=0001`、`startup_stage=RUNNING`、runtime build=`ba7c0e1b9ca9d62c`、runtime measurement gate=true、subscriptions=42、pending=0、dropped=0、persistence_error=null。
+- 約 12 秒後 PID `33448` 已不存在；status heartbeat 停在 `2026-09-25T07:32:13.645637Z`，`latest.json` quote count=0，沒有 fresh W1/W2 provenance。status 沒有轉成 `START_FAILED` 或 clean `STOPPED`，recorder stdout/stderr 仍為 0 bytes，近期 CrashDumps/WER 沒有對應 python dump。
+- 這組證據顯示 broker login 已成功，失敗發生在 one-shot WebCodex launcher 返回之後；行為與 Runner 回收 child process 相符，但沒有把它宣稱成已證實的 Windows crash/root cause。
+- 依量測前 gate，fresh heartbeat + W1/W2 provenance 不成立，所以**沒有 queue GetStkTickDetail**；同一 execution 也沒有第二次 login retry。
+- WebCodex 下一次必須改用 recorder `-Foreground` 作為 long-running Runner Job，保持原 execution 存活，再從其他呼叫送 control inbox measurement/shutdown。若工具沒有 detached-process 能力，不得用 shell trick 繞過 Runner lifecycle。

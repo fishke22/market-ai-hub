@@ -25,10 +25,9 @@ maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tra
 
 第一次已授權 maintenance 在有效 OSE session 的 15:56 JST 進行。當時舊 recorder PID `6432/14952` 已經消失；最後 stale status 為 `DEGRADED`、heartbeat `2026-09-25T06:46:17.888693Z`、`pending_records=772`，所以可能存在 buffered-data gap。FunctionList resolver 唯一選出目前最近有效 OSE micro contract = `JNU2612`；舊 runtime 同時訂閱的 `JNU2703` 只是下一月份，不拿來冒充 active contract。
 
-只嘗試一次 current-build runtime-only owner start；launcher PID `9060` 隨即消失，沒有 fresh status/log，recorder stdout/stderr 為空。依 fail-closed 契約沒有 retry broker login、沒有 queue `request_yuanta_tick_detail_measurement.ps1`。非登入診斷確認 build/guard/credential existence/FunctionList/default subscriptions/SparkRuntime constructor/Start-Process CLI mechanics 都通過，因此第一次 live attempt 狀態 = **FAIL_CLOSED_STARTUP_UNOBSERVED**。**目前 recorder NOT RUNNING。** 真實 OSE
-timestamp-basis evidence、eligible DAILY terminal close、W3.2 actual forward evidence 均仍為 NONE_YET。
+第一次 current-build runtime-only owner start 的 launcher PID `9060` 隨即消失，沒有 fresh status/log，recorder stdout/stderr 為空；該次沒有 queue measurement。第二次由新的使用者 continuation 觸發，在約 16:32 JST 再做一次 start：startup telemetry 證明 SPARK login `0001`、`startup_stage=RUNNING`、runtime build=`ba7c0e1b9ca9d62c`、measurement gate=true、subscriptions=42、pending/dropped=0。可是 one-shot WebCodex launcher 結束後 recorder PID `33448` 也隨即消失，最後 heartbeat 停在 `2026-09-25T07:32:13.645637Z`，且沒有 callback / W1-W2 provenance / clean STOPPED / stderr/stdout / crash dump。量測前 gate 因此失敗，**沒有送 GetStkTickDetail，也沒有在同一 execution 做第二次 login retry**。目前狀態 = **SECOND_ATTEMPT_FAIL_CLOSED_AFTER_LOGIN / RUNNER_CHILD_LIFETIME_BLOCKER / RECORDER NOT RUNNING**。真實 OSE timestamp-basis evidence、eligible DAILY terminal close、W3.2 actual forward evidence均仍為 NONE_YET。
 
-下一步是新的 maintenance start attempt，不是同一失敗嘗試的自動 retry。必須使用已發布 build `ba7c0e1b9ca9d62c`，讓 startup telemetry 能指出 `INSTANTIATE/OPEN_PROD/WAIT_CONNECTED/LOGIN_REQUEST/WAIT_LOGIN/SUBSCRIBE` 中的實際失敗階段。只有 fresh status 顯示 current build owner 已 RUNNING/DEGRADED 且 measurement runtime gate=true，才可在有效 15:45–17:00 JST window 送唯一一筆 `JNU2612` measurement；任何 `START_FAILED` 都停止，不做第二次 login retry。
+下一步是新的 maintenance execution。WebCodex 不得再用背景 Start-Process 形式期待 recorder 在 one-shot Runner command 結束後常駐；改用 `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` 當作 long-running Runner Job，保持該 exact execution 存活，再用另一個工具呼叫驗 fresh heartbeat/W1-W2 provenance、queue 唯一一筆 `JNU2612`、驗 evidence，最後送 graceful shutdown並 observe 同一 Job 結束。
 
 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 歷史交接：
 
@@ -139,4 +138,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與 recorder process/status。W2、W3.1、W3.2、W3.3 engines 不要重做。第一次 C2 maintenance attempt 已 fail closed；**同一 execution 不得自動 retry broker login**。下一次必須由新的使用者 continuation 觸發，並使用已發布 current build 的 startup telemetry；只有 fresh current-build owner 成功 RUNNING/DEGRADED 且位於有效 OSE 15:45–17:00 JST 視窗時，才可送唯一一筆 `JNU2612` measurement。C3/C4 仍等待真實 C1/C2 輸入。
+先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與 recorder process/status。W2、W3.1、W3.2、W3.3 engines 不要重做。第二次 attempt 已證明 broker login 本身可成功，但背景 child 無法可靠跨越 one-shot WebCodex Runner lifetime；**同一 execution 不得再 retry broker login**。下一次新的使用者 continuation必須使用 foreground Runner Job 路徑；只有該 Job 持續存活、fresh current-build owner 有 W1/W2 provenance 且仍位於有效 OSE 15:45–17:00 JST 視窗時，才可送唯一一筆 `JNU2612` measurement。C3/C4 仍等待真實 C1/C2 輸入。

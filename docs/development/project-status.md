@@ -1,12 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **C2 W3.3 FIRST MAINTENANCE ATTEMPT FAIL_CLOSED / RECORDER_NOT_RUNNING / RUNTIME_ADOPTION_PENDING**
+- Current phase: **C2 W3.3 SECOND MAINTENANCE ATTEMPT FAIL_CLOSED_AFTER_LOGIN / RUNNER_CHILD_LIFETIME_BLOCKER / RECORDER_NOT_RUNNING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
 - build_id：**ba7c0e1b9ca9d62c**（C2 startup-observability source/config fingerprint；不證明 recorder 已成功啟動或已產生 runtime evidence）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets. The old 2026-09-25 recorder later disappeared before the authorized C2 measurement attempt; last stale heartbeat was `2026-09-25T06:46:17.888693Z` with `pending_records=772`, so buffered-data loss is possible. The attempted current-build owner did not reach a fresh status/log and exited; **recorder currently NOT RUNNING**. No tick-detail measurement was sent.
+- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets. The first 2026-09-25 maintenance start was unobserved. A second user-triggered attempt at ~16:32 JST reached current-build RUNNING, SPARK login `0001`, measurement gate=true and subscriptions=42, then the recorder child disappeared after the one-shot WebCodex launcher returned. Final fresh-build status had no callback/provenance yet. **Recorder currently NOT RUNNING; no tick-detail measurement was sent.**
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
@@ -29,7 +29,9 @@
 - Review hardening also makes optional Feature Store provenance queries return [] on DuckDB/IO failure and prevents `LEGACY_TOP_LEVEL_RECEIPT_ONLY` rows from being presented as FRESH in public packet freshness.
 - Maintenance-control commit `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c` adds runtime-only tick-detail enable and control-inbox graceful shutdown while keeping tracked `enabled: false`. Startup-observability commit `b9cfcb0e302e1520027d2c69adf363d15baf00c4` adds `startup_stage`, safe error-type/login-code status and start-script confirmation of a fresh running build.
 - Validation: startup-observability focused `42 passed, 2 deselected`; broader regression `151 passed, 2 deselected`; final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`, exit 0. Targeted secret scan 0; diff check PASS.
-- First authorized live attempt: valid OSE session and in-window; FunctionList resolver selected `JNU2612`. Old owner was already absent. One runtime-only owner start was attempted and exited before fresh status/log. Pre-login diagnostics passed, but the exact old-code broker startup stage is unobservable. Contract requires no login retry after this failure; no GetStkTickDetail request was queued.
+- First authorized live attempt: valid OSE session and in-window; FunctionList resolver selected `JNU2612`. Old owner was already absent. One runtime-only owner start exited before fresh status/log.
+- Second new user continuation: one new runtime-only start reached `login_msg_code=0001`, `startup_stage=RUNNING`, build `ba7c0e1b9ca9d62c`, measurement gate=true, subscriptions=42 and zero pending/dropped records. The child disappeared after the one-shot Runner command returned, before any fresh callback/W1-W2 provenance. No `START_FAILED`, clean `STOPPED`, recorder stderr/stdout or crash dump was produced. Required measurement preconditions therefore failed; no GetStkTickDetail request and no second login retry occurred in that execution.
+- WebCodex continuation rule: run `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` as a long-running Runner Job and keep that exact execution alive while separate calls inspect status / queue the one measurement / send graceful shutdown. Do not use ad-hoc detachment to evade Runner lifecycle controls.
 - Actual runtime timestamp evidence = **NONE_YET**; eligible real DAILY terminal close = **NONE_YET**; ACTUAL_FORWARD_EVIDENCE = **NONE_YET**.
 
 ## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness
