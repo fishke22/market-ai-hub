@@ -70,6 +70,7 @@ def test_agent_entry_scripts_exist():
         "request_yuanta_quote.ps1",
         "request_yuanta_tick_detail_measurement.ps1",
         "get_yuanta_live_status.ps1",
+        "check_yuanta_recorder_owner.ps1",
     ):
         assert (ROOT / "scripts" / name).exists()
 
@@ -143,3 +144,19 @@ def test_maintenance_scripts_keep_measurement_runtime_only_and_shutdown_graceful
     assert "YUANTA_LIVE_START_TIMEOUT_NO_FRESH_STATUS" in start
     assert 'action = "shutdown"' in stop
     assert "Stop-Process" not in stop
+
+
+def test_owner_preflight_is_read_only_parent_child_aware_and_fail_closed():
+    text = (ROOT / "scripts" / "check_yuanta_recorder_owner.ps1").read_text(encoding="utf-8")
+    assert "status.pid" in text
+    assert "owner_invocation_pids" in text
+    assert "independent_matching_pids" in text
+    assert "SAFE_DEFAULT_OWNER_HEALTHY" in text
+    assert "BLOCKED_DUPLICATE_OWNER_RISK" in text
+    assert "BLOCKED_RUNTIME_BUILD_STALE" in text
+    assert "runtime_build_id" in text and "disk_build_id" in text
+    assert "runtime_measurement_gate" in text
+    assert "tracked_measurement_gate" in text
+    assert "broker_action_performed = $false" in text
+    for forbidden in ("Stop-Process", "Start-Process", "YuantaOrd", "logout(", ".login("):
+        assert forbidden not in text
