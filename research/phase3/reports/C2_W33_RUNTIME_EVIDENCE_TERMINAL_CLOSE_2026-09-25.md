@@ -115,5 +115,6 @@ timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock �
 - Raw artifact typed reload PASS，20 rows 的 raw clock 範圍為 15:39:47–15:45:01；control/verification metadata 不公開價格。JPX 官方交易時間為 15:40 結束 continuous trading、15:45 closing auction、17:00 night open；Yuanta 官方只將 `StickDetail.TimeStamp` 定義為 DateTime/時間，未說明 OSE auction-second/timezone convention。
 - C2.3 將 runtime evidence schema 升為 `W3.3-C2.3`、timestamp method 升為 `OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`，只接受**一秒** closing-auction print grace。`15:45:02` 反例仍 fail closed；session event timestamp 固定 15:45:00，provider timestamp 保留真實 +1 秒。
 - C2.3 build_id=`afd52f88a351541a`。focused=`59 passed`；broader=`154 passed, 2 deselected`；full offline=`1861 passed, 24 deselected, 132 warnings in 133.26s`，exit 0。
+- C2.3 source commit=`3e05af13762d430f875a35f2b288cf33188ce733`；GitHub source CI #162=SUCCESS。第一版 C2.3 handoff publication commit=`3f4dda90485cf1a86bc16114e2edec40e837eff8`。
 - C2.2 blocked result沒有持久化完整 typed callback evidence，因此不事後補造 C2.3 evidence。**RUNTIME_TIMESTAMP_VERIFIED / eligible DAILY terminal close / ACTUAL_FORWARD_EVIDENCE 仍為 NONE_YET**。
 - Foreground recorder 已透過 control-inbox graceful shutdown，Runner Job exit 0；目前 recorder NOT RUNNING。

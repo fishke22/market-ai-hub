@@ -87,6 +87,8 @@ Typed reload of that raw artifact passed. The 20 raw timestamps span 15:39:47–
 
 Current runtime evidence schema is `W3.3-C2.3`; timestamp-basis method is `OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`; current build is `afd52f88a351541a`. Final validation: focused `59 passed`; broader `154 passed, 2 deselected`; full offline `1861 passed, 24 deselected, 132 warnings in 133.26s`, exit 0. The C2.2 blocked result did not persist a complete typed verification artifact, so it is not retroactively upgraded: `RUNTIME_TIMESTAMP_VERIFIED=NONE_YET`, eligible DAILY terminal close=`NONE_YET`, and actual forward evidence=`NONE_YET`.
 
+C2.3 source commit is `3e05af13762d430f875a35f2b288cf33188ce733`; GitHub source CI #162 completed SUCCESS. First C2.3 handoff publication commit is `3f4dda90485cf1a86bc16114e2edec40e837eff8`.
+
 ## Runtime boundary
 
 Historical C2.2 engineering performed no live query in that package; the C2.3 addendum above records the later authorized live measurement. Current truth after C2.3 offline hardening: the foreground Runner path, broker login, fresh W1/W2 provenance, exact-contract request/callback plumbing and canonical raw persistence are all demonstrated. The recorder was gracefully stopped after the one measurement and is currently not running.
