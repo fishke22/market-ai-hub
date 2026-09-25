@@ -17,8 +17,8 @@ from zoneinfo import ZoneInfo
 
 from market_ai_hub.research.v2 import tick_detail_source as TD
 
-RUNTIME_EVIDENCE_SCHEMA_VERSION = "W3.3-C2.2"
-TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK = "OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V1"
+RUNTIME_EVIDENCE_SCHEMA_VERSION = TD.W3_TICK_DETAIL_RUNTIME_EVIDENCE_SCHEMA_VERSION
+TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK = "OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2"
 CALLBACK_INDEX = "GetStkTickDetail"
 CROSSCHECK_PASS = "OSE_LOCAL_CLOCK_CROSSCHECK_PASS"
 CROSSCHECK_BLOCKED = "OSE_LOCAL_CLOCK_CROSSCHECK_BLOCKED"
@@ -189,6 +189,9 @@ def crosscheck_ose_local_timestamp_basis(
 
     jst = ZoneInfo(TD.OSE_TIMEZONE)
     trading_date = request_utc.astimezone(jst).date()
+    close_print_deadline = (
+        datetime.combine(trading_date, TD.OSE_DAY_CLOSE) + TD.OSE_CLOSE_PRINT_GRACE
+    )
     valid = [
         row for row in batch.rows
         if row.raw_timestamp.date() == trading_date
@@ -203,7 +206,7 @@ def crosscheck_ose_local_timestamp_basis(
     else:
         if last.raw_timestamp.time() < CROSSCHECK_NEAR_CLOSE_START:
             blockers.append("NO_NEAR_CLOSE_TRADE_FOR_BASIS_CROSSCHECK")
-        if last.raw_timestamp.time() > TD.OSE_DAY_CLOSE:
+        if last.raw_timestamp > close_print_deadline:
             blockers.append("RAW_TRADE_AFTER_DAY_CLOSE")
         local_interpretation_utc = last.raw_timestamp.replace(tzinfo=jst).astimezone(timezone.utc)
         utc_interpretation = last.raw_timestamp.replace(tzinfo=timezone.utc)

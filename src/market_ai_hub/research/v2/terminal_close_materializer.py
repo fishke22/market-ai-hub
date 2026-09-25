@@ -97,9 +97,12 @@ def select_ose_terminal_close(
     jst = ZoneInfo(TD.OSE_TIMEZONE)
     trading_date = verification_evidence.request_time.astimezone(jst).date()
     close_local = datetime.combine(trading_date, TD.OSE_DAY_CLOSE, tzinfo=jst)
+    close_print_deadline_raw = (
+        datetime.combine(trading_date, TD.OSE_DAY_CLOSE) + TD.OSE_CLOSE_PRINT_GRACE
+    )
     after_close = [
         r for r in batch.rows
-        if r.raw_timestamp.date() == trading_date and r.raw_timestamp.time() > TD.OSE_DAY_CLOSE
+        if r.raw_timestamp.date() == trading_date and r.raw_timestamp > close_print_deadline_raw
     ]
     if after_close:
         return _blocked("TRADE_AFTER_DAY_CLOSE_BEFORE_NIGHT_OPEN", batch=batch, contract_month=month)
@@ -108,7 +111,7 @@ def select_ose_terminal_close(
     valid = [
         r for r in batch.rows
         if r.raw_timestamp.date() == trading_date
-        and r.raw_timestamp.time() <= TD.OSE_DAY_CLOSE
+        and r.raw_timestamp <= close_print_deadline_raw
         and isfinite(float(r.deal_price)) and float(r.deal_price) > 0
         and int(r.deal_volume) > 0 and int(r.seq_no) >= 0
     ]
@@ -121,8 +124,13 @@ def select_ose_terminal_close(
     last = max(valid, key=lambda r: (r.raw_timestamp, int(r.seq_no)))
     trade_utc = last.raw_timestamp.replace(tzinfo=jst).astimezone(timezone.utc)
     close_utc = close_local.astimezone(timezone.utc)
+    close_print_deadline_utc = close_utc + TD.OSE_CLOSE_PRINT_GRACE
     available = batch.received_at.astimezone(timezone.utc)
-    if trade_utc > close_utc or close_utc > available:
+    if (
+        trade_utc > close_print_deadline_utc
+        or close_utc > available
+        or trade_utc > available
+    ):
         return _blocked("TEMPORAL_ORDER_INVALID", batch=batch, contract_month=month)
 
     return TerminalCloseMaterializationResult(

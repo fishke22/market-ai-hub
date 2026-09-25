@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 import json
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from hashlib import sha256
 from math import isfinite
 from typing import Any
@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from market_ai_hub.services.calendar import is_ose_derivatives_session
 
 W3_TICK_DETAIL_SOURCE_SCHEMA_VERSION = "W3.3"
+W3_TICK_DETAIL_RUNTIME_EVIDENCE_SCHEMA_VERSION = "W3.3-C2.3"
 
 YUANTA_SPARK_TICK_DETAIL = "YUANTA_SPARK_GET_STK_TICK_DETAIL"
 TIMESTAMP_BASIS_UNVERIFIED = "UNVERIFIED_OSE_TIMESTAMP_BASIS"
@@ -29,6 +30,11 @@ OSE_MARKET_NO = 207
 OSE_TIMEZONE = "Asia/Tokyo"
 OSE_DAY_CLOSE = time(15, 45)
 OSE_NIGHT_OPEN = time(17, 0)
+# Live C2 evidence on 2026-09-25 returned the OSE closing-auction print at
+# 15:45:01 after the documented 15:40 end of continuous trading / 15:45 auction.
+# Keep the allowance evidence-bounded: one second is accepted; anything later
+# remains fail-closed until independent evidence justifies a contract change.
+OSE_CLOSE_PRINT_GRACE = timedelta(seconds=1)
 MAX_LAST_COUNT = 20
 
 STATUS_QUERY_WINDOW_READY = "QUERY_WINDOW_READY"
@@ -266,9 +272,10 @@ def runtime_verification_requirements() -> dict[str, Any]:
             "request and callback both occur after 15:45 JST and before 17:00 JST",
             "returned stock_code/market_no match request",
             "StickDetail.TimeStamp basis cross-checked against verified OSE session/local clock",
+            "closing-auction print may be at most one second after the 15:45 session boundary",
             "canonical raw snapshot and typed runtime evidence persisted and reload-validated",
         ],
-        "runtime_evidence_schema_version": "W3.3-C2.2",
+        "runtime_evidence_schema_version": W3_TICK_DETAIL_RUNTIME_EVIDENCE_SCHEMA_VERSION,
         "controlled_measurement_default_enabled": False,
         "current_timestamp_basis_status": TIMESTAMP_BASIS_UNVERIFIED,
         "terminal_close_materialization_allowed": False,

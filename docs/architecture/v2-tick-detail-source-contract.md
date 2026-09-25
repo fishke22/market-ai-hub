@@ -86,7 +86,7 @@ probe must establish all of the following on the existing single-owner quote con
 6. no second broker owner/login is created.
 
 The reviewed C2 materializer now exists in `terminal_close_materializer.py`. It still cannot promote
-a real row until a persisted, valid `W3.3-C2.2` runtime evidence artifact is present. The raw
+a real row until a persisted, valid `W3.3-C2.3` runtime evidence artifact is present. The raw
 `TickDetailBatch` never self-upgrades its verification status.
 
 
@@ -108,10 +108,23 @@ C2 adds a control-inbox action that can run `GetStkTickDetail` only inside the a
 - raw trade values remain local in a canonical raw artifact; control results and typed verification
   evidence are metadata-only and expose no prices.
 
-The runtime-basis cross-check is deliberately conservative. A valid same-day near-close trade
-(`15:30 <= raw clock <= 15:45`) must be causal when interpreted as `Asia/Tokyo`, while interpreting
-the same raw clock as UTC must be inconsistent with the callback time. UTC-like and Taipei-like
-clock examples are rejected in offline adversarial tests.
+The runtime-basis cross-check is deliberately conservative. A valid same-day near-close trade must
+be causal when interpreted as `Asia/Tokyo`, while interpreting the same raw clock as UTC must be
+inconsistent with the callback time. UTC-like and Taipei-like clock examples are rejected in
+offline adversarial tests.
+
+`W3.3-C2.3` adds one narrowly bounded closing-auction print rule. JPX documents Nikkei 225 micro
+continuous trading through 15:40 and the closing auction at 15:45. Yuanta's official
+`GetStkTickDetail` documentation exposes `StickDetail.TimeStamp` as a `DateTime` but does not
+document an OSE timezone/auction-second convention. The first real 2026-09-25 JNU2612 C2 probe
+returned a canonical batch whose last regular-session row was 15:40:00 and terminal row was
+15:45:01. Therefore C2.3 permits **only one second** after the 15:45 session boundary as an
+evidence-bounded closing-auction print. `15:45:02` or later remains blocked. The session event
+timestamp remains exactly 15:45:00; provider trade timestamp is preserved separately.
+
+References:
+- JPX OSE derivatives trading hours: https://www.jpx.co.jp/english/derivatives/rules/trading-hours/
+- Yuanta Spark API `GetStkTickDetail`: https://www.yuanta.com.tw/file-repository/content/sparkapi_docs/%E8%A1%8C%E6%83%85/%E7%95%B6%E6%97%A5%E5%88%86%E6%99%82%E6%98%8E%E7%B4%B0%E6%9F%A5%E8%A9%A2/index.html
 
 Persisted raw/evidence artifacts are reloadable. On reload, canonical raw snapshot identity,
 evidence integrity ID, exact request/callback binding, build provenance, market/code and controlled

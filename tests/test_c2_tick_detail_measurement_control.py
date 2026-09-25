@@ -170,6 +170,40 @@ def test_ose_local_timestamp_crosscheck_distinguishes_near_close_local_clock():
     assert check["values_exposed"] is False
 
 
+def test_ose_local_timestamp_crosscheck_accepts_one_second_closing_auction_print():
+    batch = TD.parse_tick_detail_result(
+        _Result([
+            _Row(15, 40, 0, 65900.0, 100),
+            _Row(15, 45, 1, 65905.0, 101, volume=1844),
+        ]),
+        received_at=_dt(6, 46),
+    )
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        batch,
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_PASS
+    assert check["timestamp_crosscheck_passed"] is True
+
+
+def test_ose_local_timestamp_crosscheck_rejects_two_seconds_after_close():
+    batch = TD.parse_tick_detail_result(
+        _Result([
+            _Row(15, 40, 0, 65900.0, 100),
+            _Row(15, 45, 2, 65905.0, 101, volume=1844),
+        ]),
+        received_at=_dt(6, 46),
+    )
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        batch,
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_BLOCKED
+    assert "RAW_TRADE_AFTER_DAY_CLOSE" in check["reason"]
+
+
 def test_ose_local_timestamp_crosscheck_rejects_utc_like_raw_clock():
     check = TV.crosscheck_ose_local_timestamp_basis(
         _batch(raw_hour=6, raw_minute=44),
@@ -442,9 +476,9 @@ def test_measurement_does_not_retry_same_contract_in_one_process(tmp_path, monke
     assert rt.calls == []
 
 
-def test_runtime_verification_requirements_include_c2_2_provenance():
+def test_runtime_verification_requirements_include_c2_3_provenance():
     req = TD.runtime_verification_requirements()
-    assert req["runtime_evidence_schema_version"] == "W3.3-C2.2"
+    assert req["runtime_evidence_schema_version"] == "W3.3-C2.3"
     assert req["controlled_measurement_default_enabled"] is False
     joined = " ".join(req["required_checks"])
     assert "runtime process build id" in joined

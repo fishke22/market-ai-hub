@@ -224,10 +224,21 @@ def test_evidence_creation_does_not_mutate_raw_snapshot_identity():
     assert evidence.source_snapshot_id == before
 
 
-def test_trade_after_day_close_blocks_fail_closed(tmp_path):
+def test_one_second_closing_auction_print_is_allowed_but_event_stays_at_close(tmp_path):
     batch = _batch(rows=[
-        _row(15, 44, 58, 42000.0, 101),
-        _row(15, 45, 1, 42005.0, 102),
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    result = _materialize(batch, tmp_path, evidence=_evidence(batch))
+    assert result.status == TCM.STATUS_MATERIALIZED
+    assert result.source_trade_timestamp == _dt(24, 6, 45, 1)
+    assert result.session_close_timestamp == _dt(24, 6, 45)
+
+
+def test_trade_two_seconds_after_day_close_blocks_fail_closed(tmp_path):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 2, 42005.0, 102, volume=1844),
     ])
     forged = _rehash(_evidence(_batch()), source_snapshot_id=batch.source_snapshot_id)
     result = _materialize(batch, tmp_path, evidence=forged)
