@@ -1,7 +1,7 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C2 third maintenance attempt captured real raw evidence; C2.3 offline PASS, runtime re-verification pending.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C2.3→W3.2 cross-module bridge regression PASS; runtime re-verification still pending.
 
 ## Current repair checkpoint
 
@@ -12,6 +12,7 @@ Runtime evidence schema is now `W3.3-C2.3` and carries the frozen process `runti
 Validation for the latest C2.3 source: focused `59 passed`; broader W2/W3/C1/quote regression `154 passed, 2 deselected`; final offline profile `1861 passed, 24 deselected, 132 warnings in 133.26s`, exit 0, excluding only `test_single_instance_lock_releases_after_error`. C2.3 accepts only the observed `15:45:01` closing-auction print and keeps `15:45:02+` fail-closed.
 C2.3 source commit = `3e05af13762d430f875a35f2b288cf33188ce733`; GitHub source CI #162 = SUCCESS. The first C2.3 handoff publication commit is `3f4dda90485cf1a86bc16114e2edec40e837eff8`; this reconciliation commit supersedes that handoff text only.
 Post-publication regression hardening commit `0d2693f` adds an end-to-end C2.3 positive case using a `15:45:01` closing-auction print: same-owner measurement persists raw + typed evidence, reload validation passes, and exact-contract terminal-close materialization keeps provider trade time at 15:45:01 while the session event remains 15:45:00. Focused measurement/materializer = `38 passed`; broader W2/W3/C1/quote = `155 passed, 2 deselected`; full offline = `1862 passed, 24 deselected, 132 warnings in 135.52s`, exit 0. Product source/build remains `afd52f88a351541a`.
+Bridge regression commit `3ce826817834b20d26d671cd24a0aec8c1821e4a` connects the existing modules without changing product source: verified C2.3 DAILY materialization → canonical Feature Store → W3.2 candidate/precommit, enforces callback `available_at` visibility, then exercises a second-session C2.3 DAILY close → exact-contract settlement → W3.1 evaluation. Focused materializer/W3.2 = `45 passed`; broader W2/W3/C1/quote = `158 passed, 2 deselected`; full offline = `1865 passed, 24 deselected, 132 warnings in 144.28s`, exit 0. The synthetic evaluation explicitly remains `CALIBRATED=false`, `PREDICTIVE_EVIDENCE=NOT_ESTABLISHED`, `TRADING_EDGE=NOT_ESTABLISHED`; this is engineering evidence only. Product source/build remains `afd52f88a351541a`.
 
 Live truth changed during the first authorized maintenance attempt. At 15:56 JST the date was a valid OSE derivatives session. Before any new owner was started, both old recorder PIDs `6432/14952` were already absent; the last stale status had heartbeat `2026-09-25T06:46:17.888693Z`, `DEGRADED`, `pending_records=772`, `dropped_records=0`, so a buffered-data gap is possible and must not be hidden. No same-day tick-detail control/evidence artifact existed. FunctionList resolver uniquely selected the nearest valid OSE micro contract `JNU2612` (market 207, verified=true); old runtime subscriptions also contained next `JNU2703`, which was not treated as the active contract.
 
@@ -23,7 +24,7 @@ Third maintenance attempt proved the foreground Runner Job path. Recorder PID `1
 
 C2.3 (`afd52f88a351541a`) changes the evidence schema to `W3.3-C2.3` and timestamp method to `OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`. It permits only the observed one-second closing-auction print grace; `15:45:02+` remains blocked and the session event timestamp remains 15:45. Because the C2.2 blocked result did not persist a complete typed verification artifact, **RUNTIME_TIMESTAMP_VERIFIED remains NONE_YET**; do not retroactively manufacture evidence.
 
-Next bounded step is one new C2.3 maintenance measurement in a valid 15:45–17:00 JST window using the proven foreground Runner Job pattern. Typed evidence must persist and reload successfully before any exact-contract DAILY close is materialized.
+Next bounded step is one new C2.3 maintenance measurement in a valid 15:45–17:00 JST window using the proven foreground Runner Job pattern. Typed evidence must persist and reload successfully before any exact-contract DAILY close is materialized. Once that real DAILY row exists, the C2.3→Feature Store→W3.2 precommit/settlement/evaluation path is now regression-covered and requires no manual glue.
 
 2026-09-25 C2 offline correctness implementation is commit `92e178e4ea6cad632d071747efe1c273bcc79efc`; source build is `b6cfc2ceae89d221`. Raw W3.3 tick-detail batches now remain permanently UNVERIFIED, canonical raw snapshot identity excludes verification state, SPARK records bounded request/callback correlation metadata, and terminal-close materialization requires a separate typed runtime verification artifact bound to the exact request, callback, returned market/code and canonical source snapshot. Ambiguous duplicate outstanding requests do not guess correlation. The controlled window is checked from actual request time (and callback time), not callback receipt substituted for request time.
 

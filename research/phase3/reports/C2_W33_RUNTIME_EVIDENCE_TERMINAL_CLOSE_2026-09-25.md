@@ -127,3 +127,13 @@ timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock �
 - materializer 必須成功建立 exact-contract DAILY terminal close；provider source trade timestamp 保留 `15:45:01`，session close/event timestamp 固定 `15:45:00`。
 - 驗證：measurement/materializer focused `38 passed`；broader W2/W3/C1/quote `155 passed, 2 deselected`；full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`，exit 0；`git diff --check` PASS；targeted secret scan 0。
 - 這只證明離線正向鏈已被 regression 鎖住；沒有產生新的真實 runtime evidence，也不改變 `RUNTIME_TIMESTAMP_VERIFIED=NONE_YET`。
+
+## C2.3 → W3.2 cross-module bridge regression
+
+- test-only commit `3ce826817834b20d26d671cd24a0aec8c1821e4a` 不改產品 source/build，只把已存在的 C2.3 materializer、canonical Feature Store、W3.2 forward-cycle 與 W3.1 evaluation 串成一條可回歸的工程鏈。
+- source-day：verified C2.3 `15:45:01` closing-auction print materialize 成 exact-contract DAILY close；W3.2 adapter 必須讀到同一 contract/month、DAILY、PIT-safe、raw snapshot id + typed evidence id，並可 precommit。
+- leakage 反例：在 callback/`available_at` 之前查詢同一 DAILY row 必須 `NO_ELIGIBLE_ROWS`，不能把收盤後才收到的資料回填到較早 forecast origin。
+- target-day：第二個 C2.3 DAILY close 必須用相同 `JNU2612`/`202612` lineage 完成 settlement，再由 W3.1 evaluation 讀到恰好一個 settled forward sample。
+- synthetic evaluation 明確維持 `CALIBRATED=false`、`PREDICTIVE_EVIDENCE=NOT_ESTABLISHED`、`TRADING_EDGE=NOT_ESTABLISHED`；不能把測試 fixture 當真實市場 evidence。
+- 驗證：focused materializer/W3.2 `45 passed`；broader W2/W3/C1/quote `158 passed, 2 deselected`；full offline `1865 passed, 24 deselected, 132 warnings in 144.28s`，exit 0；`git diff --check` PASS；targeted secret scan 0。
+- 產品 source/config build 未變，仍為 `afd52f88a351541a`。真正下一 gate 仍是一筆有效 OSE 15:45–17:00 JST 視窗內的 C2.3 typed runtime remeasurement。
