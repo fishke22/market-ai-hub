@@ -241,6 +241,11 @@ class SparkRuntime:
             "callbacks": [asdict(x) for x in self._tick_detail_callbacks],
         }
 
+    def latest_tick_detail_request(self):
+        """Return the latest typed tick-detail request trace, if any."""
+        self._ensure_tick_detail_trace_state()
+        return self._tick_detail_requests[-1] if self._tick_detail_requests else None
+
     def latest_tick_detail_exchange(self):
         """Return latest correlated typed request/callback pair when complete."""
         self._ensure_tick_detail_trace_state()

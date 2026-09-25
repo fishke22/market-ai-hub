@@ -22,6 +22,12 @@ dynamic_requests:
   processed: control/processed
   failed: control/failed
   allowed_markets: [1, 2, 3, 202, 203, 204, 207, 209, 215]
+tick_detail_measurements:
+  enabled: false
+  timeout_seconds: 5
+  max_last_count: 20
+  raw_dir: evidence/tick_detail/raw
+  evidence_dir: evidence/tick_detail/verification
 subscriptions:
   - key: taifex_tmf
     factor: TW_INDEX

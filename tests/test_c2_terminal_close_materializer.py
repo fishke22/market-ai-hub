@@ -57,6 +57,7 @@ def _evidence(
     return TV.build_ose_runtime_verification_evidence(
         batch,
         runtime_request_id="tick_detail_test_1",
+        runtime_build_id="TEST_BUILD_C2",
         request_time=request_time or _dt(24, 6, 45, 30),
         callback_received_at=batch.received_at,
         requested_market_no=TD.OSE_MARKET_NO,
@@ -159,6 +160,7 @@ def test_callback_after_night_open_blocks_even_if_request_was_in_window(tmp_path
     batch = _batch(received_at=_dt(24, 8, 0, 1))  # 17:00:01 JST
     base = TV.TickDetailRuntimeVerificationEvidence(
         runtime_request_id="tick_detail_test_1",
+        runtime_build_id="TEST_BUILD_C2",
         request_time=_dt(24, 7, 59, 59),
         callback_received_at=batch.received_at,
         requested_market_no=TD.OSE_MARKET_NO,
@@ -298,6 +300,7 @@ def test_runtime_exchange_builder_binds_matching_request_callback():
         batch,
         request_trace=request,
         callback_trace=callback,
+        runtime_build_id="TEST_BUILD_C2",
         timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
         timestamp_basis_method=TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK,
         timestamp_crosscheck_passed=True,
@@ -330,6 +333,7 @@ def test_runtime_exchange_builder_rejects_uncorrelated_callback():
             batch,
             request_trace=request,
             callback_trace=callback,
+            runtime_build_id="TEST_BUILD_C2",
             timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
             timestamp_basis_method=TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK,
             timestamp_crosscheck_passed=True,

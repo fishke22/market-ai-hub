@@ -32,6 +32,7 @@ from market_ai_hub.integrations.yuanta.spark_runtime import SparkRuntime
 
 CONFIG_PATH = project_root() / "config" / "yuanta_live_recorder.yaml"
 _SYMBOL_RE = re.compile(r"^[A-Za-z0-9_./-]{1,40}$")
+_JNU_CONTRACT_RE = re.compile(r"^JNU\d{4}$")
 _QUOTE_FIELDS = (
     "YstPrice", "OpenRefPrice", "UpStopPrice", "DownStopPrice", "YstVol",
     "OpenPrice", "HighPrice", "LowPrice", "BuyPrice", "SellPrice", "DealPrice",
@@ -46,6 +47,11 @@ _QUOTE_FIELDS = (
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _current_build_id() -> str:
+    from market_ai_hub.services.build_info import build_fingerprint
+    return str(build_fingerprint()["build_id"])
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -303,8 +309,138 @@ def _subscribe(rt: SparkRuntime, account: str, pairs: list[tuple[int, str, str]]
         rt._last_subscription_at = time.monotonic()
 
 
+
+def _tick_detail_measurement(
+    root: Path,
+    cfg: dict,
+    rt: SparkRuntime,
+    account: str,
+    req: dict,
+    runtime_build_id: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Run one bounded same-owner OSE tick-detail measurement; never logs account/prices."""
+    from market_ai_hub.research.v2 import tick_detail_source as TD
+    from market_ai_hub.research.v2 import tick_detail_verification as TV
+
+    mc = cfg.get("tick_detail_measurements", {})
+    if not mc.get("enabled", False):
+        return False, {"status": "TICK_DETAIL_MEASUREMENT_DISABLED", "values_exposed": False}
+    market = int(req.get("market_no", -1))
+    symbol = str(req.get("symbol", "") or "").strip().upper()
+    last_count = int(req.get("last_count", TD.MAX_LAST_COUNT))
+    if market != TD.OSE_MARKET_NO:
+        return False, {"status": "TICK_DETAIL_MEASUREMENT_MARKET_NOT_OSE", "values_exposed": False}
+    if not _JNU_CONTRACT_RE.fullmatch(symbol):
+        return False, {"status": "TICK_DETAIL_MEASUREMENT_INVALID_CONTRACT", "values_exposed": False}
+    max_count = min(int(mc.get("max_last_count", TD.MAX_LAST_COUNT)), TD.MAX_LAST_COUNT)
+    if last_count < 1 or last_count > max_count:
+        return False, {"status": "TICK_DETAIL_MEASUREMENT_LAST_COUNT_BLOCKED", "values_exposed": False}
+    raw_dir = _within(root, str(mc.get("raw_dir", "evidence/tick_detail/raw")))
+    evidence_dir = _within(root, str(mc.get("evidence_dir", "evidence/tick_detail/verification")))
+    loaded_build_id = str(runtime_build_id or _current_build_id())
+    if not loaded_build_id or loaded_build_id != _current_build_id():
+        return False, {
+            "status": "TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE",
+            "runtime_build_id": loaded_build_id,
+            "values_exposed": False,
+        }
+    window = TD.ose_close_query_window(_utcnow())
+    if window["status"] != TD.STATUS_QUERY_WINDOW_READY:
+        return False, {
+            "status": "TICK_DETAIL_MEASUREMENT_OUTSIDE_WINDOW",
+            "reason": window["reason"],
+            "values_exposed": False,
+        }
+
+    traces = rt.tick_detail_runtime_traces()
+    matched = {x.get("request_id") for x in traces.get("callbacks", []) if x.get("request_id")}
+    outstanding = [x for x in traces.get("requests", []) if x.get("request_id") not in matched]
+    if outstanding:
+        return False, {"status": "TICK_DETAIL_MEASUREMENT_REQUEST_ALREADY_PENDING", "values_exposed": False}
+
+    captured: dict[str, Any] = {}
+    previous_hook = rt.on_tick_detail_callback
+
+    def capture(mark, obj):
+        captured["mark"] = int(mark)
+        captured["obj"] = obj
+        if previous_hook is not None:
+            previous_hook(mark, obj)
+
+    rt.on_tick_detail_callback = capture
+    try:
+        if not rt.request_tick_detail_last(account, market, symbol, last_count):
+            return False, {"status": "TICK_DETAIL_MEASUREMENT_REQUEST_NOT_ACCEPTED", "values_exposed": False}
+        request_trace = rt.latest_tick_detail_request()
+        if request_trace is None:
+            return False, {"status": "TICK_DETAIL_MEASUREMENT_REQUEST_TRACE_MISSING", "values_exposed": False}
+        timeout_seconds = max(0.5, min(float(mc.get("timeout_seconds", 5.0)), 5.0))
+        deadline = time.monotonic() + timeout_seconds
+        exchange = None
+        while time.monotonic() < deadline:
+            rt.pump(0.1)
+            pair = rt.latest_tick_detail_exchange()
+            if pair is not None and pair[0].request_id == request_trace.request_id:
+                exchange = pair
+                break
+        if exchange is None or "obj" not in captured:
+            return False, {
+                "status": "TICK_DETAIL_MEASUREMENT_CALLBACK_TIMEOUT",
+                "runtime_request_id": request_trace.request_id,
+                "values_exposed": False,
+            }
+        request_trace, callback_trace = exchange
+        batch = TD.parse_tick_detail_result(
+            captured["obj"],
+            received_at=callback_trace.callback_received_at_utc,
+        )
+        raw_path = raw_dir / f"{batch.source_snapshot_id}.json"
+        _atomic_json(raw_path, {
+            **batch.identity_payload(),
+            "timestamp_basis_status": batch.timestamp_basis_status,
+            "source_snapshot_id": batch.source_snapshot_id,
+        })
+        crosscheck = TV.crosscheck_ose_local_timestamp_basis(
+            batch,
+            request_time=request_trace.request_time_utc,
+            callback_received_at=callback_trace.callback_received_at_utc,
+        )
+        if not crosscheck["timestamp_crosscheck_passed"]:
+            return False, {
+                "status": "TICK_DETAIL_TIMESTAMP_BASIS_BLOCKED",
+                "reason": crosscheck["reason"],
+                "runtime_request_id": request_trace.request_id,
+                "source_snapshot_id": batch.source_snapshot_id,
+                "raw_artifact": raw_path.relative_to(root).as_posix(),
+                "values_exposed": False,
+            }
+        evidence = TV.build_ose_runtime_verification_from_exchange(
+            batch,
+            request_trace=request_trace,
+            callback_trace=callback_trace,
+            runtime_build_id=loaded_build_id,
+            timestamp_basis_status=crosscheck["timestamp_basis_status"],
+            timestamp_basis_method=crosscheck["timestamp_basis_method"],
+            timestamp_crosscheck_passed=True,
+        )
+        evidence_path = evidence_dir / f"{evidence.evidence_id}.json"
+        _atomic_json(evidence_path, evidence.model_dump())
+        return True, {
+            "status": "TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED",
+            "runtime_request_id": request_trace.request_id,
+            "source_snapshot_id": batch.source_snapshot_id,
+            "evidence_id": evidence.evidence_id,
+            "raw_artifact": raw_path.relative_to(root).as_posix(),
+            "evidence_artifact": evidence_path.relative_to(root).as_posix(),
+            "values_exposed": False,
+        }
+    finally:
+        rt.on_tick_detail_callback = previous_hook
+
+
 def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
-                      subscribed: dict[tuple[int, str], str]) -> None:
+                      subscribed: dict[tuple[int, str], str],
+                      runtime_build_id: str = "") -> None:
     dc = cfg.get("dynamic_requests", {})
     if not dc.get("enabled"):
         return
@@ -324,25 +460,37 @@ def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
                 req_path.unlink()  # already recorded by this ID, do not resubmit
                 continue
             req = json.loads(req_path.read_text(encoding="utf-8-sig"))
-            if req.get("action") != "subscribe":
-                raise ValueError("unsupported action")
-            market = int(req["market_no"])
-            symbol = str(req["symbol"])
-            if market not in allowed or not _SYMBOL_RE.fullmatch(symbol):
-                raise ValueError("market/symbol not allowed")
-            if (market, symbol) not in subscribed:
-                if sum(k == "dynamic" for k in subscribed.values()) >= int(cfg["recording"].get("max_dynamic_subscriptions", 200)):
-                    raise ValueError("dynamic subscription limit")
-                if len(subscribed) >= 2000:
-                    raise ValueError("total subscription limit")
-                _subscribe(rt, account, [(market, symbol, "dynamic")])
-                subscribed[(market, symbol)] = "dynamic"
+            action = str(req.get("action", ""))
+            result_payload: dict[str, Any]
+            if action == "subscribe":
+                market = int(req["market_no"])
+                symbol = str(req["symbol"])
+                if market not in allowed or not _SYMBOL_RE.fullmatch(symbol):
+                    raise ValueError("market/symbol not allowed")
+                if (market, symbol) not in subscribed:
+                    if sum(k == "dynamic" for k in subscribed.values()) >= int(cfg["recording"].get("max_dynamic_subscriptions", 200)):
+                        raise ValueError("dynamic subscription limit")
+                    if len(subscribed) >= 2000:
+                        raise ValueError("total subscription limit")
+                    _subscribe(rt, account, [(market, symbol, "dynamic")])
+                    subscribed[(market, symbol)] = "dynamic"
+                else:
+                    result = "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
+                result_payload = {"status": result}
+            elif action == "tick_detail_measurement":
+                ok, result_payload = _tick_detail_measurement(
+                    root, cfg, rt, account, req,
+                    runtime_build_id=runtime_build_id or _current_build_id(),
+                )
+                if not ok:
+                    dest = failed
             else:
-                result = "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
+                raise ValueError("unsupported action")
         except Exception as exc:
             dest = failed
-            result = "REJECTED_" + type(exc).__name__
-        _atomic_json(dest / (req_path.stem + ".result.json"), {"status": result, "processed_at": _utcnow().isoformat()})
+            result_payload = {"status": "REJECTED_" + type(exc).__name__}
+        result_payload["processed_at"] = _utcnow().isoformat()
+        _atomic_json(dest / (req_path.stem + ".result.json"), result_payload)
         os.replace(req_path, dest / req_path.name)
 
 
@@ -381,6 +529,7 @@ def run(config_path: Path = CONFIG_PATH) -> int:
 
 def _run_locked(config_path: Path, root: Path) -> int:
     cfg = _load_config(config_path)
+    runtime_build_id = _current_build_id()
     rec = cfg["recording"]
     status_path = _within(root, str(cfg["storage"].get("status_file", "status.json")))
     latest_path = _within(root, str(cfg["storage"].get("latest_file", "latest.json")))
@@ -428,7 +577,10 @@ def _run_locked(config_path: Path, root: Path) -> int:
         while True:
             rt.pump(0.2)
             now = time.time()
-            _dynamic_requests(root, cfg, rt, cred.username, subscribed)
+            _dynamic_requests(
+                root, cfg, rt, cred.username, subscribed,
+                runtime_build_id=runtime_build_id,
+            )
             latest, pending, dropped = buffer.snapshot()
             if now - last_latest >= float(rec.get("latest_snapshot_seconds", 1)):
                 _atomic_json(latest_path, {"updated_at": _utcnow().isoformat(), "quotes": latest})
@@ -453,7 +605,7 @@ def _run_locked(config_path: Path, root: Path) -> int:
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
-                    "heartbeat_at": _utcnow().isoformat(),
+                    "heartbeat_at": _utcnow().isoformat(), "runtime_build_id": runtime_build_id,
                 })
                 last_status = now
             if rec.get("normalized_parquet") and now - last_parquet >= float(rec.get("parquet_flush_seconds", 30)):

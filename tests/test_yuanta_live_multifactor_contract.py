@@ -59,12 +59,15 @@ def test_persistent_recorder_contract_is_single_login_and_parquet_first():
     assert rec["normalized_parquet"] is True
     assert rec["raw_jsonl"] is False
     assert cfg["dynamic_requests"]["enabled"] is True
+    assert cfg["tick_detail_measurements"]["enabled"] is False
+    assert cfg["tick_detail_measurements"]["max_last_count"] == 20
 
 
 def test_agent_entry_scripts_exist():
     for name in (
         "start_yuanta_live_recorder.ps1",
         "request_yuanta_quote.ps1",
+        "request_yuanta_tick_detail_measurement.ps1",
         "get_yuanta_live_status.ps1",
     ):
         assert (ROOT / "scripts" / name).exists()
