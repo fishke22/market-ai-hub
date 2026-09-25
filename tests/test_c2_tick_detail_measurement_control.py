@@ -288,6 +288,53 @@ def test_same_owner_measurement_records_raw_and_typed_evidence(tmp_path, monkeyp
     )
 
 
+def test_c2_3_one_second_closing_auction_measurement_persists_and_materializes(
+    tmp_path, monkeypatch,
+):
+    rt = _FakeRuntime(
+        result=_Result([
+            _Row(15, 40, 0, 65900.0, 100),
+            _Row(15, 45, 1, 65905.0, 101, volume=1844),
+        ]),
+        request_time=_dt(6, 45, 30),
+        callback_time=_dt(6, 46),
+    )
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+
+    assert ok is True
+    assert result["status"] == "TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED"
+    raw = tmp_path / result["raw_artifact"]
+    evidence = tmp_path / result["evidence_artifact"]
+    loaded_batch, loaded_evidence = TV.load_runtime_measurement(raw, evidence)
+
+    assert loaded_evidence.schema_version == "W3.3-C2.3"
+    assert (
+        loaded_evidence.timestamp_basis_method
+        == TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK
+    )
+    assert loaded_evidence.timestamp_crosscheck_passed is True
+    assert loaded_batch.rows[-1].raw_timestamp == datetime(2026, 9, 25, 15, 45, 1)
+
+    materialized = TCM.materialize_ose_terminal_close(
+        loaded_batch,
+        contract_month="202612",
+        verification_evidence=loaded_evidence,
+        store=FeatureStore(root=tmp_path / "feature-store-c2-3"),
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+    assert materialized.source_trade_timestamp == _dt(6, 45, 1)
+    assert materialized.session_close_timestamp == _dt(6, 45)
+    assert materialized.source_snapshot_ids == (
+        loaded_batch.source_snapshot_id,
+        loaded_evidence.evidence_id,
+    )
+
+
 def test_dynamic_control_action_writes_metadata_only_result(tmp_path, monkeypatch):
     rt = _FakeRuntime()
     monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
