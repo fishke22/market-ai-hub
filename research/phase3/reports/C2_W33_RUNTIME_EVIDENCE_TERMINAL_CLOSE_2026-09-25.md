@@ -118,3 +118,12 @@ timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock �
 - C2.3 source commit=`3e05af13762d430f875a35f2b288cf33188ce733`；GitHub source CI #162=SUCCESS。第一版 C2.3 handoff publication commit=`3f4dda90485cf1a86bc16114e2edec40e837eff8`。
 - C2.2 blocked result沒有持久化完整 typed callback evidence，因此不事後補造 C2.3 evidence。**RUNTIME_TIMESTAMP_VERIFIED / eligible DAILY terminal close / ACTUAL_FORWARD_EVIDENCE 仍為 NONE_YET**。
 - Foreground recorder 已透過 control-inbox graceful shutdown，Runner Job exit 0；目前 recorder NOT RUNNING。
+
+## C2.3 post-publication positive-chain regression
+
+- test-only commit `0d2693f` 補上一個完整 C2.3 正向案例，不改產品 source 或 build fingerprint。
+- 模擬 same-owner measurement 回傳有效 `15:45:01` closing-auction print；`_tick_detail_measurement` 必須成功落地 canonical raw artifact + typed evidence artifact。
+- `load_runtime_measurement` 必須重新驗 schema=`W3.3-C2.3`、timestamp method=`OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`、cross-check=true 與 canonical bindings。
+- materializer 必須成功建立 exact-contract DAILY terminal close；provider source trade timestamp 保留 `15:45:01`，session close/event timestamp 固定 `15:45:00`。
+- 驗證：measurement/materializer focused `38 passed`；broader W2/W3/C1/quote `155 passed, 2 deselected`；full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`，exit 0；`git diff --check` PASS；targeted secret scan 0。
+- 這只證明離線正向鏈已被 regression 鎖住；沒有產生新的真實 runtime evidence，也不改變 `RUNTIME_TIMESTAMP_VERIFIED=NONE_YET`。

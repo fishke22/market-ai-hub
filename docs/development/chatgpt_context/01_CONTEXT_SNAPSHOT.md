@@ -29,6 +29,7 @@ maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tra
 
 第三次 maintenance 已證明 foreground Runner Job 路徑可用：recorder RUNNING/login `0001`、fresh W1/W2 provenance、exact JNU2612，並只送出一筆 measurement。C2.2 取得 canonical raw snapshot `w33_tick_cbce3cba39291cd1f14e`，但因 raw terminal timestamp=`15:45:01` 被 `RAW_TRADE_AFTER_DAY_CLOSE` fail closed。raw typed reload PASS，未產生 verification artifact。C2.3 只新增 **1 秒** closing-auction grace；`15:45:02+` 仍拒絕，session event timestamp 仍為 15:45。C2.3 build=`afd52f88a351541a`；focused 59、broader 154/2 deselected、full offline 1861/24 deselected/132 warnings in 133.26s，全部 exit 0。舊 C2.2 failed result不事後補造 evidence，因此 runtime timestamp verification 仍 NONE_YET。
 C2.3 source commit=`3e05af13762d430f875a35f2b288cf33188ce733`，GitHub source CI #162=SUCCESS；第一版 C2.3 handoff publication commit=`3f4dda90485cf1a86bc16114e2edec40e837eff8`。
+後續 test-only hardening commit `0d2693f` 補上真正的 C2.3 正向端到端 regression：模擬 `15:45:01` closing-auction print，要求 measurement 落 raw/evidence、typed reload 通過，再 materialize exact-contract DAILY close，provider trade time 保持 15:45:01、session event 固定 15:45:00。focused measurement/materializer `38 passed`；broader `155 passed, 2 deselected`；full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`，exit 0；product build 仍是 `afd52f88a351541a`。
 
 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 歷史交接：
 

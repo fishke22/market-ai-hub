@@ -35,6 +35,7 @@
 - Third attempt: foreground Runner Job PASS; fresh RUNNING/login `0001`/W1-W2 provenance. Exactly one JNU2612 request `tick-detail-01892509e2e742619eef0c0d07349d39` produced raw snapshot `w33_tick_cbce3cba39291cd1f14e`; C2.2 result = `TICK_DETAIL_TIMESTAMP_BASIS_BLOCKED / RAW_TRADE_AFTER_DAY_CLOSE`. Raw reload PASS; no typed evidence artifact was created.
 - C2.3 offline validation: focused `59 passed`; broader `154 passed, 2 deselected`; full offline `1861 passed, 24 deselected, 132 warnings in 133.26s`, exit 0. Foreground recorder graceful-shutdown PASS; current recorder NOT RUNNING.
 - C2.3 source commit `3e05af13762d430f875a35f2b288cf33188ce733`; source CI #162 SUCCESS. First C2.3 handoff publication commit `3f4dda90485cf1a86bc16114e2edec40e837eff8`.
+- Post-publication regression commit `0d2693f` covers the complete valid C2.3 path for a `15:45:01` print: measurement → persisted raw/evidence → typed reload → exact-contract DAILY materializer. Regression: `38 passed`; broader `155 passed, 2 deselected`; full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`, exit 0. Source/config build is unchanged at `afd52f88a351541a`.
 - Actual runtime timestamp evidence = **NONE_YET**; eligible real DAILY terminal close = **NONE_YET**; ACTUAL_FORWARD_EVIDENCE = **NONE_YET**.
 
 ## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness
