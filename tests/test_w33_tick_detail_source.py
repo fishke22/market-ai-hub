@@ -73,6 +73,15 @@ def test_parse_is_deterministic_for_same_payload():
     assert a.source_snapshot_id == b.source_snapshot_id
 
 
+def test_raw_snapshot_identity_excludes_verification_state():
+    batch = TD.parse_tick_detail_result(
+        _Result(rows=[_Row(datetime(2026, 9, 24, 15, 45), 42000.0, seq=10)]),
+        received_at=_dt(24, 6, 50),
+    )
+    assert "timestamp_basis_status" not in batch.identity_payload()
+    assert TD.canonical_tick_detail_snapshot_id(batch) == batch.source_snapshot_id
+
+
 def test_invalid_nonfinite_tick_rejected():
     with pytest.raises(ValueError):
         TD.parse_tick_detail_result(
@@ -107,7 +116,7 @@ def test_terminal_candidate_stays_blocked_until_runtime_timezone_verification():
     )
     status = TD.assess_ose_terminal_trade_candidate(batch, request_time=_dt(24, 6, 50))
     assert status["status"] == TD.STATUS_CANDIDATE_BLOCKED
-    assert "TIMESTAMP_BASIS_RUNTIME_VERIFICATION_REQUIRED" in status["reason"]
+    assert "RUNTIME_VERIFICATION_EVIDENCE_REQUIRED" in status["reason"]
     assert status["terminal_close_materialization_allowed"] is False
     assert status["values_exposed"] is False
     assert "deal_price" not in status
@@ -207,3 +216,56 @@ def test_spark_runtime_invalid_symbol_does_not_call_api():
     with pytest.raises(ValueError):
         rt.request_tick_detail_last("MASKED_TEST_ACCOUNT", 207, "JNU\n2612", 20)
     assert rt._api.calls == []
+
+
+def test_spark_runtime_correlates_request_time_separately_from_callback_time():
+    rt = _runtime_for_query()
+    rt._callbacks = deque(maxlen=10)
+    rt._system_messages = deque(maxlen=10)
+    rt._login_event = threading.Event()
+    rt._system_event = threading.Event()
+    rt.on_tick_detail_callback = None
+    rt.on_quote_callback = None
+    times = iter([
+        datetime(2026, 9, 24, 6, 44, 59, tzinfo=UTC),
+        datetime(2026, 9, 24, 6, 45, 1, tzinfo=UTC),
+    ])
+    rt._clock = lambda: next(times)
+
+    assert rt.request_tick_detail_last("MASKED_TEST_ACCOUNT", 207, "JNU2612", 20) is True
+    rt._on_response(1, 0, "GetStkTickDetail", None, _Result(market=207, stock="JNU2612"))
+
+    pair = rt.latest_tick_detail_exchange()
+    assert pair is not None
+    request, callback = pair
+    assert request.request_time_utc == datetime(2026, 9, 24, 6, 44, 59, tzinfo=UTC)
+    assert callback.callback_received_at_utc == datetime(2026, 9, 24, 6, 45, 1, tzinfo=UTC)
+    assert request.market_no == callback.returned_market_no == 207
+    assert request.stock_code == callback.returned_stock_code == "JNU2612"
+    assert request.accepted is True
+    traces = rt.tick_detail_runtime_traces()
+    assert "MASKED_TEST_ACCOUNT" not in repr(traces)
+
+
+def test_spark_runtime_does_not_guess_between_ambiguous_tick_detail_requests():
+    rt = _runtime_for_query()
+    rt._callbacks = deque(maxlen=10)
+    rt._system_messages = deque(maxlen=10)
+    rt._login_event = threading.Event()
+    rt._system_event = threading.Event()
+    rt.on_tick_detail_callback = None
+    rt.on_quote_callback = None
+    times = iter([
+        datetime(2026, 9, 24, 6, 45, 10, tzinfo=UTC),
+        datetime(2026, 9, 24, 6, 45, 20, tzinfo=UTC),
+        datetime(2026, 9, 24, 6, 45, 30, tzinfo=UTC),
+    ])
+    rt._clock = lambda: next(times)
+
+    assert rt.request_tick_detail_last("MASKED_TEST_ACCOUNT", 207, "JNU2612", 20) is True
+    assert rt.request_tick_detail_last("MASKED_TEST_ACCOUNT", 207, "JNU2612", 20) is True
+    rt._on_response(1, 0, "GetStkTickDetail", None, _Result(market=207, stock="JNU2612"))
+
+    traces = rt.tick_detail_runtime_traces()
+    assert traces["callbacks"][-1]["request_id"] == ""
+    assert rt.latest_tick_detail_exchange() is None

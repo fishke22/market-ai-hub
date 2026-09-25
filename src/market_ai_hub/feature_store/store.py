@@ -23,6 +23,7 @@ from market_ai_hub.config.runtime_paths import feature_store_root
 
 SCHEMA_VERSION = 2
 QUOTE_FEATURE_VERSION = "v2a2-quote-1"
+DERIVED_DAILY_FEATURE_GATE = "ELIGIBLE_DERIVED_DAILY"
 
 
 class FeatureStoreError(ValueError):
@@ -151,6 +152,53 @@ def _model_feature_gate(obs: Any, as_of: datetime) -> str:
     return "ELIGIBLE"
 
 
+def _derived_daily_feature_gate(obs: Any, as_of: datetime) -> str:
+    """Strict gate for reviewed derived DAILY session-close features."""
+    cutoff = _aware(as_of)
+    try:
+        value = float(getattr(obs, "value", None))
+    except Exception:
+        return "BLOCKED_INVALID_VALUE"
+    if not math.isfinite(value):
+        return "BLOCKED_INVALID_VALUE"
+    if getattr(obs, "availability_status", "") != "AVAILABLE":
+        return "BLOCKED_NOT_AVAILABLE"
+    event_timestamp = getattr(obs, "event_timestamp", None)
+    available_at = getattr(obs, "available_at", None)
+    if event_timestamp is None or available_at is None:
+        return "BLOCKED_TIMESTAMP_UNKNOWN"
+    if _aware(event_timestamp) > _aware(available_at):
+        return "BLOCKED_EVENT_AFTER_AVAILABLE"
+    if _aware(available_at) > cutoff:
+        return "BLOCKED_FUTURE_AVAILABLE_AT"
+    if getattr(obs, "timestamp_precision", "") != "BAR_CLOSE_TIMESTAMP":
+        return "BLOCKED_TIMESTAMP_PRECISION"
+    if str(getattr(obs, "source_frequency", "")).upper() not in ("DAILY", "1D"):
+        return "BLOCKED_DERIVED_DAILY_FREQUENCY"
+    if getattr(obs, "resolved_role", "") != "PREVIOUS_SESSION_REFERENCE":
+        return "BLOCKED_DERIVED_DAILY_ROLE"
+    if not bool(getattr(obs, "point_in_time_safe", False)):
+        return "BLOCKED_POINT_IN_TIME_UNSAFE"
+    if not list(getattr(obs, "source_snapshot_ids", []) or []):
+        return "BLOCKED_SOURCE_SNAPSHOT_IDS"
+    session = getattr(obs, "session", None)
+    if session is None or not getattr(session, "trading_date", ""):
+        return "BLOCKED_SESSION_CONTEXT"
+    close_ts = getattr(session, "session_close_timestamp", None)
+    if close_ts is None or _aware(close_ts) != _aware(event_timestamp):
+        return "BLOCKED_SESSION_CLOSE_MISMATCH"
+    if getattr(obs, "instrument_type", "") == "FUTURE":
+        if getattr(obs, "series_semantics", "") != "CONTRACT":
+            return "BLOCKED_FUTURE_SERIES_SEMANTICS"
+        if getattr(obs, "roll_status", "") != "NONE":
+            return "BLOCKED_FUTURE_ROLL"
+        if not getattr(obs, "contract_code", "") or not getattr(obs, "contract_month", ""):
+            return "BLOCKED_CONTRACT_UNKNOWN"
+    if not getattr(obs, "provider", "") or not getattr(obs, "source_type", ""):
+        return "BLOCKED_SOURCE_IDENTITY"
+    return DERIVED_DAILY_FEATURE_GATE
+
+
 class FeatureStore:
     def __init__(self, root: Path | None = None) -> None:
         # Explicit root preserves the old test/API meaning (<root>/data/feature_store).
@@ -254,7 +302,8 @@ class FeatureStore:
     def put_observation(self, obs: Any, *, as_of: datetime,
                         materialize_feature: bool = True,
                         feature_name: str = "quote_value",
-                        feature_version: str = QUOTE_FEATURE_VERSION) -> dict:
+                        feature_version: str = QUOTE_FEATURE_VERSION,
+                        materialization_mode: str = "LIVE") -> dict:
         """Persist immutable V2-A.2 provenance and optionally a gated model feature."""
         from market_ai_hub.research.v2.prediction_audit import (
             canonical_json,
@@ -278,7 +327,13 @@ class FeatureStore:
 
         lineage = lineage_from_observation(obs)
         payload_json = canonical_json(lineage_payload(lineage))
-        gate = _model_feature_gate(obs, cutoff)
+        mode = str(materialization_mode or "LIVE").upper()
+        if mode == "LIVE":
+            gate = _model_feature_gate(obs, cutoff)
+        elif mode == "DERIVED_DAILY":
+            gate = _derived_daily_feature_gate(obs, cutoff)
+        else:
+            raise FeatureStoreError("BLOCKED_UNKNOWN_MATERIALIZATION_MODE")
         session = getattr(obs, "session", None)
         source_ids_json = _json_ids(getattr(obs, "source_snapshot_ids", []))
 
@@ -318,7 +373,7 @@ class FeatureStore:
                 snapshot_status = "STORED"
 
         feature_status = gate
-        if materialize_feature and gate == "ELIGIBLE":
+        if materialize_feature and gate in ("ELIGIBLE", DERIVED_DAILY_FEATURE_GATE):
             symbol = (getattr(obs, "contract_code", "") or getattr(obs, "instrument", "")
                       or getattr(obs, "representation_id", ""))
             with self._conn() as con:

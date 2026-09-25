@@ -14,7 +14,8 @@ import sys
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 # 官方 enum 值（2026-09-19 由 installed DLL runtime 反射確認）
@@ -38,6 +39,26 @@ class LoginOutcome:
     received: bool = False
 
 
+@dataclass
+class TickDetailRequestTrace:
+    request_id: str
+    request_time_utc: datetime
+    market_no: int
+    stock_code: str
+    last_count: int
+    accepted: bool | None = None
+
+
+@dataclass(frozen=True)
+class TickDetailCallbackTrace:
+    request_id: str
+    callback_received_at_utc: datetime
+    callback_mark: int
+    callback_index: str
+    returned_market_no: int | None
+    returned_stock_code: str
+
+
 class SparkRuntime:
     """官方 pythonnet 載入 + YuantaSparkAPITrader 生命周期。"""
 
@@ -52,6 +73,10 @@ class SparkRuntime:
         self._system_messages = deque(maxlen=100)
         self.on_quote_callback = None  # optional callable(intMark, strIndex, objValue)
         self.on_tick_detail_callback = None  # optional typed GetStkTickDetail result hook
+        self._tick_detail_request_seq = 0
+        self._tick_detail_requests = deque(maxlen=32)
+        self._tick_detail_callbacks = deque(maxlen=32)
+        self._clock = lambda: datetime.now(timezone.utc)
         self.enum_values: dict = {}
         self._load()
 
@@ -124,6 +149,7 @@ class SparkRuntime:
                 )
                 self._login_event.set()
             elif str(strIndex) == "GetStkTickDetail":
+                self._record_tick_detail_callback(int(intMark), str(strIndex), objValue)
                 if self.on_tick_detail_callback is not None:
                     self.on_tick_detail_callback(int(intMark), objValue)
             elif self.on_quote_callback is not None:
@@ -167,9 +193,67 @@ class SparkRuntime:
         except Exception:
             return None
 
+    def _ensure_tick_detail_trace_state(self) -> None:
+        if not hasattr(self, "_tick_detail_request_seq"):
+            self._tick_detail_request_seq = 0
+        if not hasattr(self, "_tick_detail_requests"):
+            self._tick_detail_requests = deque(maxlen=32)
+        if not hasattr(self, "_tick_detail_callbacks"):
+            self._tick_detail_callbacks = deque(maxlen=32)
+        if not hasattr(self, "_clock"):
+            self._clock = lambda: datetime.now(timezone.utc)
+
+    def _record_tick_detail_callback(self, mark: int, index: str, obj_value) -> None:
+        self._ensure_tick_detail_trace_state()
+        received = self._clock().astimezone(timezone.utc)
+        try:
+            returned_market = int(getattr(obj_value, "MarketNo"))
+        except Exception:
+            returned_market = None
+        returned_code = str(getattr(obj_value, "StockCode", "") or "").strip()
+        used_ids = {x.request_id for x in self._tick_detail_callbacks if x.request_id}
+        candidates = []
+        for req in self._tick_detail_requests:
+            if req.request_id in used_ids:
+                continue
+            if returned_market is not None and req.market_no != returned_market:
+                continue
+            if returned_code and req.stock_code != returned_code:
+                continue
+            candidates.append(req)
+        # GetStkTickDetail callback does not expose our local request id.  Never
+        # guess when two outstanding requests have the same returned identity.
+        request_id = candidates[0].request_id if len(candidates) == 1 else ""
+        self._tick_detail_callbacks.append(TickDetailCallbackTrace(
+            request_id=request_id,
+            callback_received_at_utc=received,
+            callback_mark=int(mark),
+            callback_index=str(index),
+            returned_market_no=returned_market,
+            returned_stock_code=returned_code,
+        ))
+
+    def tick_detail_runtime_traces(self) -> dict:
+        """Return bounded request/callback metadata only; never includes account or prices."""
+        self._ensure_tick_detail_trace_state()
+        return {
+            "requests": [asdict(x) for x in self._tick_detail_requests],
+            "callbacks": [asdict(x) for x in self._tick_detail_callbacks],
+        }
+
+    def latest_tick_detail_exchange(self):
+        """Return latest correlated typed request/callback pair when complete."""
+        self._ensure_tick_detail_trace_state()
+        requests = {x.request_id: x for x in self._tick_detail_requests}
+        for callback in reversed(self._tick_detail_callbacks):
+            request = requests.get(callback.request_id)
+            if request is not None and request.accepted is not None:
+                return request, callback
+        return None
+
     def request_tick_detail_last(self, account: str, market_no: int, stock_code: str,
                                  last_count: int = 20) -> bool:
-        """Submit bounded read-only GetStkTickDetail(last N); callback proves result, bool only acceptance."""
+        """Submit bounded read-only GetStkTickDetail and retain correlation metadata."""
         if not str(account or "").strip():
             raise ValueError("account required")
         code = str(stock_code or "").strip()
@@ -178,16 +262,32 @@ class SparkRuntime:
         count = int(last_count)
         if count < 1 or count > 20:
             raise ValueError("last_count must be 1..20")
-        return bool(self._api.GetStkTickDetail(
-            account,
-            self.enumMarketType(int(market_no)),
-            code,
-            self.enumStkTickSelectType(1),
-            "00:00:00",
-            "23:59:59",
-            count,
-            self.enumLangType.UTF8,
-        ))
+        self._ensure_tick_detail_trace_state()
+        self._tick_detail_request_seq += 1
+        trace = TickDetailRequestTrace(
+            request_id=f"tick_detail_{self._tick_detail_request_seq}",
+            request_time_utc=self._clock().astimezone(timezone.utc),
+            market_no=int(market_no),
+            stock_code=code,
+            last_count=count,
+        )
+        self._tick_detail_requests.append(trace)
+        try:
+            accepted = bool(self._api.GetStkTickDetail(
+                account,
+                self.enumMarketType(int(market_no)),
+                code,
+                self.enumStkTickSelectType(1),
+                "00:00:00",
+                "23:59:59",
+                count,
+                self.enumLangType.UTF8,
+            ))
+        except Exception:
+            trace.accepted = False
+            raise
+        trace.accepted = accepted
+        return accepted
 
     def login(self, account: str, password: str) -> bool:
         """Login() 回傳 True 只代表 accepted；真正結果來自 OnResponse。"""

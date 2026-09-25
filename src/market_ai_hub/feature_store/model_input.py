@@ -170,7 +170,7 @@ def build_model_input(
               AND f.available_at <= ?
               AND f.point_in_time_safe=TRUE
               AND f.availability_status='AVAILABLE'
-              AND o.model_feature_gate_at_ingest='ELIGIBLE'
+              AND o.model_feature_gate_at_ingest IN ('ELIGIBLE','ELIGIBLE_DERIVED_DAILY')
         """
         params: list[Any] = [rep, feature_name, feature_version, cutoff_db]
         if contract:

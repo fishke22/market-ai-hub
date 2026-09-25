@@ -131,6 +131,8 @@ class TickDetailBatch:
         )
         if not self.stock_code:
             raise ValueError("stock_code required")
+        if self.timestamp_basis_status != TIMESTAMP_BASIS_UNVERIFIED:
+            raise ValueError("raw TickDetailBatch must remain timestamp-basis UNVERIFIED")
 
     def identity_payload(self) -> dict[str, Any]:
         return {
@@ -144,7 +146,6 @@ class TickDetailBatch:
                 for r in self.rows
             ],
             "received_at": _aware(self.received_at).isoformat(),
-            "timestamp_basis_status": self.timestamp_basis_status,
             "provider": self.provider,
             "source_type": self.source_type,
         }
@@ -175,6 +176,11 @@ def parse_tick_detail_result(obj: Any, *, received_at: datetime) -> TickDetailBa
         rows=rows,
         received_at=received,
     )
+    return replace(batch, source_snapshot_id=canonical_tick_detail_snapshot_id(batch))
+
+
+def canonical_tick_detail_snapshot_id(batch: TickDetailBatch) -> str:
+    """Canonical raw-source identity; verification state is deliberately excluded."""
     encoded = json.dumps(
         batch.identity_payload(),
         sort_keys=True,
@@ -183,7 +189,7 @@ def parse_tick_detail_result(obj: Any, *, received_at: datetime) -> TickDetailBa
         default=str,
     ).encode("utf-8")
     digest = sha256(encoded).hexdigest()[:20]
-    return replace(batch, source_snapshot_id=f"w33_tick_{digest}")
+    return f"w33_tick_{digest}"
 
 
 def ose_close_query_window(request_time: datetime) -> dict[str, Any]:
@@ -224,8 +230,9 @@ def assess_ose_terminal_trade_candidate(batch: TickDetailBatch, *, request_time:
     ]
     if not valid_trade_rows:
         blockers.append("NO_VALID_TRADE_ROWS")
-    if batch.timestamp_basis_status != TIMESTAMP_BASIS_RUNTIME_VERIFIED:
-        blockers.append("TIMESTAMP_BASIS_RUNTIME_VERIFICATION_REQUIRED")
+    # Raw batches never self-upgrade verification state.  A separate C2 runtime
+    # evidence artifact is required by the terminal-close materializer.
+    blockers.append("RUNTIME_VERIFICATION_EVIDENCE_REQUIRED")
     return {
         "status": STATUS_CANDIDATE_ONLY if not blockers else STATUS_CANDIDATE_BLOCKED,
         "reason": ";".join(sorted(set(blockers))),
@@ -234,6 +241,7 @@ def assess_ose_terminal_trade_candidate(batch: TickDetailBatch, *, request_time:
         "row_count": len(batch.rows),
         "valid_trade_row_count": len(valid_trade_rows),
         "timestamp_basis_status": batch.timestamp_basis_status,
+        "verification_artifact_required": True,
         "source_snapshot_id": batch.source_snapshot_id,
         "query_window_status": window["status"],
         "trading_date": window["trading_date"],
