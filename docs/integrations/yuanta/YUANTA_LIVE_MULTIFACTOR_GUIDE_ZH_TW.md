@@ -261,6 +261,7 @@ Legacy規則相反：
 2. 直接讀 `data/live/yuanta/latest.json` 取得最新快照。
 3. 若需要額外商品，使用：
    `scripts/request_yuanta_quote.ps1 -MarketNo <market> -Symbol <symbol>`
+   此入口會先跑 owner preflight；只有健康 `SAFE_DEFAULT_OWNER_HEALTHY` 或 `MAINTENANCE_OWNER_RUNNING` 且 status=RUNNING/health 無異常時才會進一步建立 inbox request，否則在 broker mutation 前 fail closed。
 4. recorder 會在**既有 SPARK connection**上追加 `SubscribeWatchlistAll`；agent 不讀密碼、不 Login、不 Logout。
 5. request 會移到 `control/processed` 或 `control/failed`，fail-closed。
 
@@ -270,7 +271,7 @@ Legacy規則相反：
 - **WebCodex 特例：** one-shot Runner command 結束後，其背景 child 不保證能繼續存活。受控 measurement 必須用 `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` 啟動成 long-running Runner Job；保持該 Job 存活，再從另一個工具呼叫檢查 status / queue measurement / queue shutdown。不要用 shell detachment trick 繞過 Runner lifecycle。
 - 正常維護停機使用 `scripts/stop_yuanta_live_recorder.ps1`；它先跑 owner preflight。若 `NO_RUNNING_OWNER`，直接回 `YUANTA_LIVE_NOT_RUNNING`，不會留下 stale shutdown request；若有 duplicate/unverified owner，fail closed。只有單一可識別 owner 才送 control-inbox `shutdown`，讓 recorder 自己走 close/dispose + pending flush。不要把 `Stop-Process` 當正常維護流程。
 - 啟用後仍只由**同一個 recorder owner**執行；agent 不自行 Login/Logout。
-- 受控入口：`scripts/request_yuanta_tick_detail_measurement.ps1 -Symbol JNU<YYMM> [-LastCount 20]`。
+- 受控入口：`scripts/request_yuanta_tick_detail_measurement.ps1 -Symbol JNU<YYMM> [-LastCount 20]`。此入口在 queue 前強制 owner preflight：必須是 `MAINTENANCE_OWNER_RUNNING`、status=RUNNING、runtime measurement gate=true、tracked gate=false、runtime/disk build一致且 health 無異常；任何一項不成立都 fail closed，不建立 measurement request。
 - request 只允許 OSE market 207、exact `JNU\d{4}`、`LastCount<=20`，且 request/callback 都必須落在 15:45–17:00 JST。
 - recorder 啟動時凍結 `runtime_build_id`；measurement 會重新計算目前磁碟 fingerprint，若與 process build 不同就在碰 API 前 fail closed。
 - evidence builder / materializer 會重新從 raw batch + request/callback times 驗證 timestamp basis，不接受 caller 自行聲稱 cross-check 成功。
