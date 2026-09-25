@@ -250,8 +250,10 @@ Legacy規則相反：
 ### 啟動與 single-instance
 - 手動：`scripts/start_yuanta_live_recorder.ps1`
 - 前景診斷：`scripts/start_yuanta_live_recorder.ps1 -Foreground`
+- 啟動/maintenance 前只讀 owner preflight：`scripts/check_yuanta_recorder_owner.ps1`。
 - Windows 使用者 Startup 已配置自動呼叫同一啟動腳本。
 - 啟動腳本會先讀 `data/live/yuanta/status.json` 並檢查 PID；已有 RUNNING process 時只回 `YUANTA_LIVE_ALREADY_RUNNING`，不得建立第二個登入。
+- preflight 以 `status.json` 的 PID 為 owner truth，會把 venv wrapper parent + actual interpreter child 視為同一 invocation chain；只有獨立第二條 recorder process chain 才報 `BLOCKED_DUPLICATE_OWNER_RISK`。它同時核對 heartbeat、runtime/disk build、runtime measurement gate 與 tracked safe default，且不執行 broker action。
 
 ### Agent 讀取與追加訂閱
 任何 agent 需要即時行情時：
@@ -273,7 +275,7 @@ Legacy規則相反：
 - recorder 啟動時凍結 `runtime_build_id`；measurement 會重新計算目前磁碟 fingerprint，若與 process build 不同就在碰 API 前 fail closed。
 - evidence builder / materializer 會重新從 raw batch + request/callback times 驗證 timestamp basis，不接受 caller 自行聲稱 cross-check 成功。
 - raw tick 值只寫本機 `evidence/tick_detail/raw`；control result 與 verification evidence 不公開價格。
-- 2026-09-25 maintenance-window 授權已取得；current startup-observability build_id = `ba7c0e1b9ca9d62c`。第二次 WebCodex attempt 已實證 SPARK login `0001` 與 current-build RUNNING，但背景 child 在 one-shot launcher 結束後消失；未送 tick-detail measurement。下一次須走上述 foreground Runner Job 路徑。
+- 2026-09-25 maintenance-window 授權已取得。第三次 foreground Runner Job 已成功取得 JNU2612 real raw evidence；C2.3 current source/config build_id=`afd52f88a351541a`。後續 safe-default recorder 已以同一 build RUNNING，measurement runtime gate=false。下一次 live remeasurement 前先跑 owner preflight，再安全 handover 唯一 owner；不得因看到 parent+child 兩個 Python PID 就誤判成兩個 broker owners。owner-preflight commit=`bef25d54ebea22bcb93d8466f657fe7d460496e9`。
 
 ### 長期資料
 - 主訓練格式：`data/live/yuanta/parquet/YYYY-MM-DD/*.parquet`
