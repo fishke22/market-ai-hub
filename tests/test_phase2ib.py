@@ -59,6 +59,29 @@ def test_mcp_json_no_secret():
             assert kw not in txt
 
 
+def test_render_mcp_config_uses_explicit_relocated_root_from_non_repo_cwd(tmp_path):
+    relocated = tmp_path / "新 MCP 路徑" / "MARKET_AI_HUB"
+    command = relocated / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / (
+        "market-ai-mcp.exe" if sys.platform == "win32" else "market-ai-mcp"
+    )
+    command.parent.mkdir(parents=True)
+    command.write_bytes(b"")
+    script = ROOT / "scripts" / "render_mcp_config.py"
+    for client in ("generic", "cherry"):
+        result = subprocess.run(
+            [sys.executable, "-B", str(script), "--client", client,
+             "--project-root", str(relocated), "--require-command"],
+            cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        payload = json.loads(result.stdout)
+        server = payload["mcpServers"]["market-ai"]
+        assert Path(server["command"]) == command
+        assert server["args"] == []
+        assert "<PROJECT>" not in result.stdout
+        assert str(ROOT) not in result.stdout
+
+
 # --- 5/6: skills ---
 def test_skill_files_present():
     for name in ("osaka-micro-analysis", "taiwan-stock-v28", "model-validation-audit"):

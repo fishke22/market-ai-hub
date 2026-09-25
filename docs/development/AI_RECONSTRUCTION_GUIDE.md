@@ -71,7 +71,12 @@ python -m market_ai_hub.mcp.server
 ```
 
 ## STEP 11 — Install / import MCP config
-用 `examples/mcp/generic-stdio.json` 或 `cherry-studio.json`（改 `<PROJECT>` 路徑）。
+不要手動替換 `<PROJECT>`。先由目前 checkout 產生 relocation-safe client JSON：
+```powershell
+python scripts\render_mcp_config.py --client generic --require-command
+python scripts\render_mcp_config.py --client cherry --require-command
+```
+預設只輸出 stdout；若要寫到暫存/匯入檔，明確加 `--output <path>`。`--project-root <path>` 可用於搬移驗收。產生器只建立 JSON，不會自動修改 Cherry Studio 或其他 MCP client 設定。
 
 ## STEP 12 — Install Skills
 複製 `skills/{name}/` 到你的 Agent 平台（Cherry Studio / 手動當 instruction reference）。
