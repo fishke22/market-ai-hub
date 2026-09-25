@@ -11,12 +11,22 @@ import hashlib
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
-ROOTS = [
-    r"C:\Users\fishk\Documents\元大期貨API",
-    r"C:\Users\fishk\Downloads\元大期貨元件",
-    r"C:\Users\fishk\Downloads\元大證券元件",
-]
+
+def sdk_roots() -> list[str]:
+    override = os.environ.get("MARKET_AI_YUANTA_SDK_ROOTS", "").strip()
+    if override:
+        return [part for part in override.split(os.pathsep) if part]
+    home = Path.home()
+    return [
+        str(home / "Documents" / "元大期貨API"),
+        str(home / "Downloads" / "元大期貨元件"),
+        str(home / "Downloads" / "元大證券元件"),
+    ]
+
+
+ROOTS = sdk_roots()
 
 INTERESTING = {".dll", ".ocx", ".tlb", ".exe", ".py", ".cs", ".cpp", ".h", ".pdf",
                ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".ini", ".cfg",

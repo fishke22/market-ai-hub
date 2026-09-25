@@ -96,8 +96,8 @@ MCP 呼叫 `get_analysis_archive_status` / `get_forward_test_status`。
 4. Import certificate into Windows 11 when required（`docs/YUANTA_CERTIFICATE_WINDOWS11.md`）
 5. Verify certificate（`scripts/check_yuanta_certificate.ps1`）
 6. Setup WinCred account preset（`MARKET_AI_HUB/YUANTA/FUTURES`、`/SECURITIES`）
-7. Setup x86 legacy quote sidecar if used（`scripts/setup_yuanta_futures_x86.ps1`）
-8. Run diagnostics（`scripts/check_yuanta_futures_com.ps1` → READY_FOR_AUTH）
+7. Setup x86 legacy quote sidecar if used（`scripts/setup_yuanta_futures_x86.ps1`）。預設透過 Windows `py -3.11-32` 找 32-bit Python；若 launcher 不可用，可設定 `MARKET_AI_PYTHON_X86` 或傳 `-PythonX86 <path>`，不得寫死特定使用者目錄。
+8. Run diagnostics（`scripts/check_yuanta_futures_com.ps1` → READY_FOR_AUTH）。診斷 script 以自己的 repo root 建 `PYTHONPATH`，不得依賴 `D:\MARKET_AI_HUB`。
 9. Manual getpass auth（`scripts/yuanta_futures_auth.ps1` / `auth_probe --profile securities`）
 10. Verify quote capability（auth 成功後）
 

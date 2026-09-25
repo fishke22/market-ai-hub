@@ -78,8 +78,8 @@ UAT 測試憑證：
 穩定做法：永遠先以官方下載頁為 source of truth，不把舊 ZIP URL 當永久版本鎖。
 
 本機原始資料備份：
-- `C:\Users\fishk\Documents\元大期貨API`
-- `C:\Users\fishk\Documents\元大憑證`
+- 放在目前 Windows 使用者自己的私人目錄；不得把特定使用者名稱或憑證私鑰路徑寫死在 repo。
+- `scripts/yuanta_sdk_forensics.py` 預設以目前使用者的 `Documents` / `Downloads` 尋找官方元件；若元件放在其他位置，可用 `MARKET_AI_YUANTA_SDK_ROOTS`（Windows 以 `;` 分隔多個根目錄）指定。憑證、PFX 與密碼仍不得進 Git/chat。
 
 ## 3. API 權限規則
 
@@ -201,6 +201,12 @@ canonical targets：
 repo：
 - `scripts/setup_yuanta_futures_x86.ps1`
 - `scripts/check_yuanta_futures_com.ps1`
+
+可移植規則：
+- setup 不再搜尋特定 `C:\Users\<name>` 路徑；預設使用 `py -3.11-32`，也可用 `MARKET_AI_PYTHON_X86` 或 `-PythonX86 <path>` 指定 32-bit Python。
+- 指定的 interpreter 必須存在且實測為 32-bit，否則在建立 venv / 安裝套件前 fail closed。
+- `venv` 建立與 `pip install` 都檢查 exit code；不得把失敗安裝誤報 READY。
+- COM check 以 script 所在 repo root 建立 `PYTHONPATH`，不依賴 D 槽或固定 checkout 路徑。
 
 目前實測：
 - ProgID: `YUANTAQUOTE.YuantaQuoteCtrl.1`

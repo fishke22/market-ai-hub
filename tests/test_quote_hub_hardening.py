@@ -1,4 +1,5 @@
 """Offline fault injection. Never loads a SDK, reads credentials, or opens a broker."""
+import importlib.util
 import json
 import os
 import subprocess
@@ -123,6 +124,30 @@ def test_relative_data_root_does_not_depend_on_cwd(tmp_path, monkeypatch):
     assert paths.data_root() == paths.project_root() / "relative-data"
 
 
+def test_yuanta_maintenance_scripts_have_no_machine_specific_project_or_user_paths(tmp_path, monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    check_text = (root / "scripts/check_yuanta_futures_com.ps1").read_text(encoding="utf-8")
+    setup_text = (root / "scripts/setup_yuanta_futures_x86.ps1").read_text(encoding="utf-8")
+    for text in (check_text, setup_text):
+        assert r"D:\MARKET_AI_HUB" not in text
+        assert r"C:\Users\fishk" not in text
+    assert '$env:PYTHONPATH = Join-Path $Root "src"' in check_text
+    assert "MARKET_AI_PYTHON_X86" in setup_text
+    assert "py -3.11-32" in setup_text
+    assert "create sidecar venv failed" in setup_text
+    assert "install minimal deps failed" in setup_text
+
+    sdk_roots = [tmp_path / "SDK 一", tmp_path / "SDK 二"]
+    monkeypatch.setenv("MARKET_AI_YUANTA_SDK_ROOTS", os.pathsep.join(str(p) for p in sdk_roots))
+    module_path = root / "scripts/yuanta_sdk_forensics.py"
+    spec = importlib.util.spec_from_file_location("yuanta_sdk_forensics_portability_test", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.ROOTS == [str(p) for p in sdk_roots]
+    assert "fishk" not in module_path.read_text(encoding="utf-8")
+
+
 def test_build_identity_tracks_new_runtime_configs(tmp_path, monkeypatch):
     from market_ai_hub.services import build_info as build
     monkeypatch.setattr(build, "SOURCE_ROOT", tmp_path)
@@ -136,6 +161,23 @@ def test_build_identity_tracks_new_runtime_configs(tmp_path, monkeypatch):
     lf = build._compute_build_id()
     config.write_bytes(b"enabled: true\r\n")
     assert build._compute_build_id() == lf
+
+
+@pytest.mark.skipif(os.name != "nt", reason="PowerShell installer")
+def test_yuanta_x86_setup_parses_and_invalid_override_fails_before_install():
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts/setup_yuanta_futures_x86.ps1"
+    missing = root / "definitely-missing-x86-python.exe"
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script),
+         "-PythonX86", str(missing)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert result.returncode != 0
+    combined = result.stdout + result.stderr
+    assert "configured 32-bit Python not found" in combined
+    assert "ParserError" not in combined
+    assert "install minimal deps" not in combined
 
 
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell installer")
