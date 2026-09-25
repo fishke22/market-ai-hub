@@ -252,7 +252,7 @@ Legacy規則相反：
 - 前景診斷：`scripts/start_yuanta_live_recorder.ps1 -Foreground`
 - 啟動/maintenance 前只讀 owner preflight：`scripts/check_yuanta_recorder_owner.ps1`。
 - Windows 使用者 Startup 已配置自動呼叫同一啟動腳本。
-- 啟動腳本會先讀 `data/live/yuanta/status.json` 並檢查 PID；已有 RUNNING process 時只回 `YUANTA_LIVE_ALREADY_RUNNING`，不得建立第二個登入。
+- 啟動腳本會先跑 owner preflight；健康既有 owner 只回 `YUANTA_LIVE_ALREADY_RUNNING`，不得建立第二個登入。duplicate/unverified owner、runtime/disk build mismatch 或 tracked measurement gate 被誤開時會在新 process 前 fail closed。
 - preflight 以 `status.json` 的 PID 為 owner truth，會把 venv wrapper parent + actual interpreter child 視為同一 invocation chain；只有獨立第二條 recorder process chain 才報 `BLOCKED_DUPLICATE_OWNER_RISK`。它同時核對 heartbeat、runtime/disk build、runtime measurement gate 與 tracked safe default，且不執行 broker action。
 
 ### Agent 讀取與追加訂閱
@@ -268,7 +268,7 @@ Legacy規則相反：
 - `config/yuanta_live_recorder.yaml` 的 `tick_detail_measurements.enabled` 預設為 `false`。
 - 只有明確 maintenance-window 授權後，才可受控重啟 recorder 到已發布 current build。不要把 tracked safe default 改成 true；一般本機維護可使用 `scripts/start_yuanta_live_recorder.ps1 -EnableTickDetailMeasurements` 做 runtime-only 啟用。
 - **WebCodex 特例：** one-shot Runner command 結束後，其背景 child 不保證能繼續存活。受控 measurement 必須用 `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` 啟動成 long-running Runner Job；保持該 Job 存活，再從另一個工具呼叫檢查 status / queue measurement / queue shutdown。不要用 shell detachment trick 繞過 Runner lifecycle。
-- 正常維護停機使用 `scripts/stop_yuanta_live_recorder.ps1`；它送 control-inbox `shutdown`，讓 recorder 自己走 close/dispose + pending flush。不要把 `Stop-Process` 當正常維護流程。
+- 正常維護停機使用 `scripts/stop_yuanta_live_recorder.ps1`；它先跑 owner preflight。若 `NO_RUNNING_OWNER`，直接回 `YUANTA_LIVE_NOT_RUNNING`，不會留下 stale shutdown request；若有 duplicate/unverified owner，fail closed。只有單一可識別 owner 才送 control-inbox `shutdown`，讓 recorder 自己走 close/dispose + pending flush。不要把 `Stop-Process` 當正常維護流程。
 - 啟用後仍只由**同一個 recorder owner**執行；agent 不自行 Login/Logout。
 - 受控入口：`scripts/request_yuanta_tick_detail_measurement.ps1 -Symbol JNU<YYMM> [-LastCount 20]`。
 - request 只允許 OSE market 207、exact `JNU\d{4}`、`LastCount<=20`，且 request/callback 都必須落在 15:45–17:00 JST。
