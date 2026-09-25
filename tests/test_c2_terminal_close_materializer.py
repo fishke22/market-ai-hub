@@ -12,6 +12,8 @@ from market_ai_hub.integrations.yuanta.spark_runtime import (
     TickDetailCallbackTrace,
     TickDetailRequestTrace,
 )
+from market_ai_hub.research.v2 import forward_cycle as FC
+from market_ai_hub.research.v2 import prediction_audit as PA
 from market_ai_hub.research.v2 import terminal_close_materializer as TCM
 from market_ai_hub.research.v2 import tick_detail_source as TD
 from market_ai_hub.research.v2 import tick_detail_verification as TV
@@ -24,9 +26,9 @@ def _dt(day: int, hour: int, minute: int = 0, second: int = 0) -> datetime:
 
 
 def _row(hour: int, minute: int, second: int, price: float, seq: int,
-         volume: int = 1) -> TD.TickDetailRow:
+         volume: int = 1, *, day: int = 24) -> TD.TickDetailRow:
     return TD.TickDetailRow(
-        raw_timestamp=datetime(2026, 9, 24, hour, minute, second),
+        raw_timestamp=datetime(2026, 9, day, hour, minute, second),
         deal_price=price,
         deal_volume=volume,
         buy_price=price - 5,
@@ -233,6 +235,169 @@ def test_one_second_closing_auction_print_is_allowed_but_event_stays_at_close(tm
     assert result.status == TCM.STATUS_MATERIALIZED
     assert result.source_trade_timestamp == _dt(24, 6, 45, 1)
     assert result.session_close_timestamp == _dt(24, 6, 45)
+
+
+def test_c2_3_materialized_daily_close_flows_into_w3_2_precommit(
+    tmp_path, monkeypatch,
+):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    evidence = _evidence(batch)
+    store = FeatureStore(root=tmp_path / "feature-store")
+
+    materialized = TCM.materialize_ose_terminal_close(
+        batch,
+        contract_month="202612",
+        verification_evidence=evidence,
+        store=store,
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+
+    snapshot, status = FC.osaka_forward_input_from_feature_store(
+        as_of=_dt(24, 7, 0),
+        contract_code="JNU2612",
+        store=store,
+    )
+    assert status["status"] == "READY"
+    assert status["forward_input_status"] == "CANDIDATE"
+    assert snapshot is not None
+    assert snapshot.trading_date == "2026-09-24"
+    assert snapshot.session_close_timestamp == _dt(24, 6, 45)
+    assert snapshot.available_at == batch.received_at
+    assert snapshot.contract_code == "JNU2612"
+    assert snapshot.contract_month == "202612"
+    assert snapshot.source_frequency == "DAILY"
+    assert snapshot.source_snapshot_ids == [
+        batch.source_snapshot_id,
+        evidence.evidence_id,
+    ]
+
+    audit = PA.PredictionAuditDB(tmp_path / "audit.duckdb")
+    monkeypatch.setattr(FC, "_now_utc", lambda: _dt(24, 7, 0))
+    precommit = FC.precommit_osaka_from_feature_store(
+        contract_code="JNU2612",
+        db=audit,
+        store=store,
+    )
+    assert precommit.status == FC.STATUS_PRECOMMITTED
+    pred = audit.get_prediction(precommit.prediction_id)
+    assert pred is not None
+    assert pred.feature_cutoff_timestamp == batch.received_at
+    assert pred.label_window_id == "2026-09-25"
+    lineage = audit.get_lineage(precommit.prediction_id)
+    assert len(lineage) == 1
+    assert lineage[0].source_snapshot_ids == [
+        batch.source_snapshot_id,
+        evidence.evidence_id,
+    ]
+
+
+def test_c2_3_daily_close_is_not_visible_before_callback_availability(tmp_path):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    evidence = _evidence(batch)
+    store = FeatureStore(root=tmp_path / "feature-store")
+    materialized = TCM.materialize_ose_terminal_close(
+        batch,
+        contract_month="202612",
+        verification_evidence=evidence,
+        store=store,
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+
+    snapshot, status = FC.osaka_forward_input_from_feature_store(
+        as_of=_dt(24, 6, 45, 59),
+        contract_code="JNU2612",
+        store=store,
+    )
+    assert snapshot is None
+    assert status["status"] == "NO_ELIGIBLE_ROWS"
+    assert status["forward_input_status"] == "NOT_READY"
+
+
+def test_c2_3_daily_closes_drive_full_w3_2_forward_cycle(tmp_path, monkeypatch):
+    store = FeatureStore(root=tmp_path / "feature-store")
+    audit = PA.PredictionAuditDB(tmp_path / "audit.duckdb")
+
+    source_batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    source_evidence = _evidence(source_batch)
+    source_close = TCM.materialize_ose_terminal_close(
+        source_batch,
+        contract_month="202612",
+        verification_evidence=source_evidence,
+        store=store,
+    )
+    assert source_close.status == TCM.STATUS_MATERIALIZED
+
+    monkeypatch.setattr(FC, "_now_utc", lambda: _dt(24, 7, 0))
+    precommit = FC.precommit_osaka_from_feature_store(
+        contract_code="JNU2612",
+        db=audit,
+        store=store,
+    )
+    assert precommit.status == FC.STATUS_PRECOMMITTED
+    assert precommit.target_trading_date == "2026-09-25"
+
+    outcome_batch = TD.TickDetailBatch(
+        market_no=TD.OSE_MARKET_NO,
+        stock_code="JNU2612",
+        rows=[
+            _row(15, 40, 0, 42080.0, 201, day=25),
+            _row(15, 45, 1, 42105.0, 202, volume=1500, day=25),
+        ],
+        received_at=_dt(25, 6, 46),
+    )
+    outcome_batch = replace(
+        outcome_batch,
+        source_snapshot_id=TD.canonical_tick_detail_snapshot_id(outcome_batch),
+    )
+    outcome_evidence = _evidence(
+        outcome_batch,
+        request_time=_dt(25, 6, 45, 30),
+    )
+    outcome_close = TCM.materialize_ose_terminal_close(
+        outcome_batch,
+        contract_month="202612",
+        verification_evidence=outcome_evidence,
+        store=store,
+    )
+    assert outcome_close.status == TCM.STATUS_MATERIALIZED
+
+    monkeypatch.setattr(FC, "_now_utc", lambda: _dt(25, 7, 0))
+    settled = FC.settle_osaka_from_feature_store(
+        precommit.prediction_id,
+        db=audit,
+        store=store,
+    )
+    assert settled.status == FC.STATUS_SETTLED
+    outcomes = audit.get_outcomes(precommit.prediction_id)
+    assert len(outcomes) == 1
+    assert outcomes[0].actual_value == pytest.approx(42105.0)
+    assert outcomes[0].source_snapshot_ids == [
+        outcome_batch.source_snapshot_id,
+        outcome_evidence.evidence_id,
+    ]
+
+    manifest, evaluation, readiness = FC.build_forward_evaluation(
+        db=audit,
+        evaluation_as_of=_dt(25, 8, 0),
+        window_start=_dt(24, 0, 0),
+        window_end=_dt(26, 0, 0),
+    )
+    assert len(manifest.members) == 1
+    assert evaluation.status == "EVALUATED"
+    assert evaluation.sample_count == 1
+    assert evaluation.point.mae == pytest.approx(100.0)
+    assert readiness["CALIBRATED"] is False
+    assert readiness["PREDICTIVE_EVIDENCE"] == "NOT_ESTABLISHED"
+    assert readiness["TRADING_EDGE"] == "NOT_ESTABLISHED"
 
 
 def test_trade_two_seconds_after_day_close_blocks_fail_closed(tmp_path):
