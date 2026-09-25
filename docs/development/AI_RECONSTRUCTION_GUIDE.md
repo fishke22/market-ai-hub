@@ -81,9 +81,17 @@ MCP 呼叫 `get_analysis_packet(market="osaka", target="OSE_NIKKEI225_MICRO_FUTU
 - expected：`execution_target = OSE_NIKKEI225_MICRO_FUTURES`、`reference_price_type = SETTLEMENT`（若有官方 settlement）。
 
 ## STEP 14 — Enable optional Research Scheduler
+先用 dry-run 檢查搬移後的 task action 是否已綁定目前 checkout：
+```powershell
+scripts\register_research_tasks.ps1 -DryRun
+scripts\register_forward_shadow_task.ps1 -DryRun
+```
+確認 JSON 內 `repo_root`、`execute` / `arguments`、`working_directory` 都指向目前專案路徑，且沒有舊 checkout 後，再由使用者明確執行：
 ```powershell
 scripts\register_research_tasks.ps1   # OPT-IN（不自動註冊）
+scripts\register_forward_shadow_task.ps1   # OPT-IN；重新執行預設會刷新舊 task 路徑
 ```
+若特別要保留已存在的 forward-shadow task，可加 `-PreserveExisting`；搬移驗收時不要使用此選項，否則可能保留舊路徑。
 
 ## STEP 15 — Verify Prediction Registry / Archive
 MCP 呼叫 `get_analysis_archive_status` / `get_forward_test_status`。

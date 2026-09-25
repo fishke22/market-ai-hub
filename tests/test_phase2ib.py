@@ -1,6 +1,8 @@
 """Phase 2I-B — reconstruction pack / documentation / portability tests。"""
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -143,6 +145,51 @@ def test_reconstruct_verify_is_independent_of_caller_cwd_and_uses_runtime_build_
     assert '$m -eq "runtime_introspected"' in text
     assert "from market_ai_hub.services.build_info import build_fingerprint" in text
     assert '$runtimeBuild -match "^[0-9a-f]{16}$"' in text
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Scheduled Task scripts")
+def test_scheduled_task_dry_run_rebinds_to_relocated_repo(tmp_path):
+    relocated = tmp_path / "搬移 路徑" / "MARKET_AI_HUB"
+    scripts = relocated / "scripts"
+    scripts.mkdir(parents=True)
+    for name in ("register_research_tasks.ps1", "register_forward_shadow_task.ps1"):
+        shutil.copy2(ROOT / "scripts" / name, scripts / name)
+    (scripts / "run_daily_forward_cycle.ps1").write_text("# dry-run fixture\n", encoding="utf-8")
+    py = relocated / ".venv" / "Scripts" / "python.exe"
+    py.parent.mkdir(parents=True)
+    py.write_bytes(b"")
+
+    research = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(scripts / "register_research_tasks.ps1"), "-DryRun"],
+        cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert research.returncode == 0, research.stdout + research.stderr
+    research_plan = json.loads(research.stdout.lstrip("\ufeff"))
+    assert Path(research_plan["repo_root"]) == relocated
+    assert len(research_plan["tasks"]) == 2
+    assert all(Path(task["working_directory"]) == relocated for task in research_plan["tasks"])
+    assert all(str(relocated) in task["execute"] for task in research_plan["tasks"])
+    assert str(ROOT) not in research.stdout
+
+    forward = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(scripts / "register_forward_shadow_task.ps1"), "-DryRun"],
+        cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert forward.returncode == 0, forward.stdout + forward.stderr
+    forward_plan = json.loads(forward.stdout.lstrip("\ufeff"))
+    assert Path(forward_plan["repo_root"]) == relocated
+    assert str(relocated / "scripts" / "run_daily_forward_cycle.ps1") in forward_plan["arguments"]
+    assert str(ROOT) not in forward.stdout
+
+
+def test_forward_shadow_registration_refreshes_existing_path_by_default():
+    text = _read("scripts/register_forward_shadow_task.ps1")
+    assert "[switch]$DryRun" in text
+    assert "[switch]$PreserveExisting" in text
+    assert "Register-ScheduledTask" in text and "-Force" in text
+    assert "if ($existing -and $PreserveExisting)" in text
 
 
 def test_reconstruction_required_files():
