@@ -597,15 +597,46 @@ def _run_locked(
     write_error = None
     started_at = _utcnow()
     recording_day = started_at.date()
+    startup_stage = "PRE_BROKER_READY"
+    fatal_error = None
+    login_msg_code = None
+    exit_code = 0
     if rec.get("raw_jsonl") or not rec.get("normalized_parquet"):
         raise ValueError("persistent recorder requires Parquet; raw_jsonl is unsupported")
     last_latest = last_parquet = last_status = 0.0
+
+    def write_startup_status(stage: str) -> None:
+        _atomic_json(status_path, {
+            "status": "STARTING",
+            "pid": os.getpid(),
+            "provider": "SPARK_SECURITIES_PROFILE",
+            "started_at": started_at.isoformat(),
+            "startup_stage": stage,
+            "runtime_build_id": runtime_build_id,
+            "tick_detail_measurements_runtime_enabled": bool(
+                cfg.get("tick_detail_measurements", {}).get("enabled", False)
+            ),
+            "heartbeat_at": _utcnow().isoformat(),
+        })
+
+    write_startup_status(startup_stage)
     try:
+        startup_stage = "INSTANTIATE"
+        write_startup_status(startup_stage)
         rt.instantiate()
+        startup_stage = "OPEN_PROD"
+        write_startup_status(startup_stage)
         rt.open_prod()
+        startup_stage = "WAIT_CONNECTED"
+        write_startup_status(startup_stage)
         rt.wait_connected(timeout=15.0)
+        startup_stage = "LOGIN_REQUEST"
+        write_startup_status(startup_stage)
         rt.login(cred.username, secret)
+        startup_stage = "WAIT_LOGIN"
+        write_startup_status(startup_stage)
         outcome = rt.wait_login(timeout=25.0)
+        login_msg_code = outcome.msg_code
         secret = None
         if not outcome.received or outcome.msg_code not in ("0001", "00001"):
             raise RuntimeError(f"SPARK login failed: {outcome.msg_code}")
@@ -621,7 +652,10 @@ def _run_locked(
             buffer.append(payload)
 
         rt.on_quote_callback = on_quote
+        startup_stage = "SUBSCRIBE"
+        write_startup_status(startup_stage)
         _subscribe(rt, cred.username, defaults)
+        startup_stage = "RUNNING"
         while True:
             rt.pump(0.2)
             now = time.time()
@@ -654,6 +688,7 @@ def _run_locked(
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
+                    "startup_stage": startup_stage,
                     "tick_detail_measurements_runtime_enabled": bool(
                         cfg.get("tick_detail_measurements", {}).get("enabled", False)
                     ),
@@ -668,7 +703,10 @@ def _run_locked(
                     write_error = type(exc).__name__  # no provider/credential text
                 last_parquet = now
     except KeyboardInterrupt:
-        return 0
+        startup_stage = "INTERRUPTED"
+    except Exception as exc:
+        fatal_error = type(exc).__name__
+        exit_code = 1
     finally:
         secret = None
         # Recorder lifetime owns the login. Agents never logout it. Process/OS exit closes the socket.
@@ -684,12 +722,22 @@ def _run_locked(
         except Exception as exc:
             write_error = type(exc).__name__
         _atomic_json(status_path, {
-            "status": "STOPPED_WITH_UNFLUSHED_DATA" if write_error else "STOPPED",
+            "status": (
+                "START_FAILED" if fatal_error
+                else ("STOPPED_WITH_UNFLUSHED_DATA" if write_error else "STOPPED")
+            ),
             "pid": os.getpid(), "stopped_at": _utcnow().isoformat(),
+            "runtime_build_id": runtime_build_id,
+            "startup_stage": startup_stage,
+            "fatal_error": fatal_error,
+            "login_msg_code": login_msg_code,
+            "tick_detail_measurements_runtime_enabled": bool(
+                cfg.get("tick_detail_measurements", {}).get("enabled", False)
+            ),
             "pending_records": buffer.snapshot()[1], "dropped_records": buffer.snapshot()[2],
             "persistence_error": write_error,
         })
-    return 0
+    return exit_code
 
 
 def main() -> int:

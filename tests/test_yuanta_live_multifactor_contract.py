@@ -138,5 +138,8 @@ def test_maintenance_scripts_keep_measurement_runtime_only_and_shutdown_graceful
     stop = (ROOT / "scripts" / "stop_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
     assert "EnableTickDetailMeasurements" in start
     assert "--enable-tick-detail-measurements" in start
+    assert "YUANTA_LIVE_RUNNING" in start
+    assert "START_FAILED" in start
+    assert "YUANTA_LIVE_START_TIMEOUT_NO_FRESH_STATUS" in start
     assert 'action = "shutdown"' in stop
     assert "Stop-Process" not in stop

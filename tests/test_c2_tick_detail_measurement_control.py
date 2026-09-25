@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
+import yaml
 
 from market_ai_hub.feature_store.store import FeatureStore
 from market_ai_hub.integrations.yuanta import live_quote_recorder as R
@@ -355,6 +356,67 @@ def test_measurement_blocks_when_running_process_build_is_stale(tmp_path, monkey
     assert ok is False
     assert result["status"] == "TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE"
     assert rt.calls == []
+
+
+def test_run_locked_records_safe_startup_failure_stage(tmp_path, monkeypatch):
+    cfg = {
+        "enabled": True,
+        "recording": {
+            "max_buffer_records": 10,
+            "raw_jsonl": False,
+            "normalized_parquet": True,
+        },
+        "storage": {
+            "status_file": "status.json",
+            "latest_file": "latest.json",
+        },
+        "dynamic_requests": {"enabled": False},
+        "tick_detail_measurements": {"enabled": False},
+    }
+    config_path = tmp_path / "recorder.yaml"
+    config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    class _Guard:
+        def scan(self):
+            return {"gate": "PASS", "findings": []}
+
+    class _FailRuntime:
+        def instantiate(self):
+            raise RuntimeError("synthetic instantiate failure")
+
+        def close(self):
+            return None
+
+        def dispose(self):
+            return None
+
+    monkeypatch.setattr(
+        "market_ai_hub.integrations.yuanta.order_api_guard.OrderApiExposureGuard",
+        _Guard,
+    )
+    monkeypatch.setattr(
+        R, "read_profile_credential",
+        lambda _profile: SimpleNamespace(username="MASKED_TEST_ACCOUNT"),
+    )
+    monkeypatch.setattr(R, "read_profile_password", lambda _profile: "MASKED_TEST_SECRET")
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg: [])
+    monkeypatch.setattr(R, "SparkRuntime", _FailRuntime)
+
+    rc = R._run_locked(
+        config_path,
+        tmp_path,
+        enable_tick_detail_measurements=True,
+    )
+    assert rc == 1
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "START_FAILED"
+    assert status["startup_stage"] == "INSTANTIATE"
+    assert status["fatal_error"] == "RuntimeError"
+    assert status["runtime_build_id"]
+    assert status["tick_detail_measurements_runtime_enabled"] is True
+    serialized = json.dumps(status)
+    assert "MASKED_TEST_SECRET" not in serialized
+    assert "MASKED_TEST_ACCOUNT" not in serialized
 
 
 def test_measurement_does_not_retry_same_contract_in_one_process(tmp_path, monkeypatch):
