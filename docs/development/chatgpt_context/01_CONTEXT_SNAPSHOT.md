@@ -38,7 +38,7 @@ C2 implementation commit = `92e178e4ea6cad632d071747efe1c273bcc79efc`；source b
 
 驗證：C2/W3.3 focused `35 passed`；related W2/W3/C1 `134 passed`；final offline profile `1834 passed, 24 deselected, 132 warnings in 140.87s`，exit 0（只排除現場 recorder owner 造成的 global mutex test）。changed-file secret scan 0；diff check PASS。三個 stale build-id freeze assertions 只更新為新 fingerprint，沒有刪除測試。
 
-**C2_OFFLINE_CORRECTNESS_PASS != RUNTIME_TIMESTAMP_VERIFIED != DATA READY != ACTUAL_FORWARD_EVIDENCE != CALIBRATED != TRADING EDGE。** 本棒沒有 broker login/logout/restart/subscription/order/account 操作；actual runtime timestamp verification = NONE_YET；eligible real DAILY terminal close = NONE_YET；W3.2 actual forward evidence = NONE_YET。受控 live measurement 仍需明確 maintenance-window 授權。
+**C2_OFFLINE_CORRECTNESS_PASS != RUNTIME_TIMESTAMP_VERIFIED != DATA READY != ACTUAL_FORWARD_EVIDENCE != CALIBRATED != TRADING EDGE。** 這一段是歷史 C2 offline checkpoint：當時沒有 broker login/logout/restart/subscription/order/account 操作，且 live measurement 尚待授權；其後授權已於 2026-09-25 給出，第一次 live attempt 則如上方最新段落所記錄，在 measurement 前 fail closed。actual runtime timestamp verification = NONE_YET；eligible real DAILY terminal close = NONE_YET；W3.2 actual forward evidence = NONE_YET。
 
 C1 歷史交接仍有效如下：
 W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `50f209a095a151b6ae42c6db5d0d462d11fd2395`；工作分支 `codex/quote-hub-correctness`；runtime build_id = `c64b98bd4a09d576`。C1 把每個 forecast origin 分成 VALID / FAILED / ABSTAINED / NONFINITE / INVALID_TARGET，pairwise 只用共同有效 origins 且同時揭露雙方 full coverage；store C1.1 fail-closed 拒絕非有限值與缺失/矛盾 accounting，舊 leaderboard 依 schema 隔離、不重寫歷史。
@@ -49,7 +49,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
 
 **這仍不是 DATA READY、CALIBRATED、PREDICTIVE EVIDENCE 或 TRADING EDGE。** 本包未做 calibration fitting、未建立真實 forward prediction/outcome、未重跑真實市場排行榜，也沒有新增模型。
 
-**現場 recorder 仍由既有 owner 持有。** C1 與本次 C2 offline 包都沒有 broker login/訂閱/登出/重啟/下單/帳務操作。開工時已有兩個 staged W3.3 contract/report 檔，持續完整保留且未帶入 C2 implementation commit。C2 的剩餘 controlled runtime timestamp measurement 仍需使用者明確維護窗口授權。
+**這一段是歷史 C1/C2 offline 記錄。** 當時 recorder 仍由既有 owner 持有，C1 與 C2 offline 包沒有 broker login/訂閱/登出/重啟/下單/帳務操作；目前 live truth 以本檔最上方 2026-09-25 maintenance attempt 段落為準：舊 owner 已不存在，第一次新 owner 啟動 fail closed，recorder 現在 NOT RUNNING。
 
 ## 2. 查核深度與限制
 
@@ -139,4 +139,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。C2 maintenance-window 授權已取得，不需再次詢問。下一包是 runtime adoption + controlled measurement：在有效 OSE 15:45–17:00 JST 視窗內，確保舊 owner 完全停止後，以 current published build + runtime-only tick-detail enable 啟動唯一 recorder，取得 matched request/callback + timestamp-basis evidence，再由既有 materializer 建立第一筆 eligible DAILY terminal close；完成後恢復 safe-default recorder。C3/C4 仍等待真實 C1/C2 輸入。
+先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與 recorder process/status。W2、W3.1、W3.2、W3.3 engines 不要重做。第一次 C2 maintenance attempt 已 fail closed；**同一 execution 不得自動 retry broker login**。下一次必須由新的使用者 continuation 觸發，並使用已發布 current build 的 startup telemetry；只有 fresh current-build owner 成功 RUNNING/DEGRADED 且位於有效 OSE 15:45–17:00 JST 視窗時，才可送唯一一筆 `JNU2612` measurement。C3/C4 仍等待真實 C1/C2 輸入。

@@ -33,7 +33,7 @@ The earlier `ea29c12...` credibility correction and W3.2 checkpoint remain histo
 
 W3.3 tick-detail source code already exists; OSE timestamp basis and terminal-close materialization still require runtime evidence. Pre-existing staged W3.3 contract/report files were preserved and are not part of commit `50f209a`. Do not redo W3.1/W3.2/W3.3 engines. No live broker action was taken.
 
-Historical C1 handoff named C2 as the next package. Its offline correctness portion is now complete as recorded above; the remaining C2 step is controlled live timestamp-basis measurement and still requires explicit maintenance-window authorization before any recorder restart/login. C3/C4 remain gated on real C1/C2 inputs.
+Historical C1 handoff named C2 as the next package. Its offline correctness portion is now complete as recorded above. The maintenance authorization that was pending at that historical checkpoint was granted on 2026-09-25; the first live attempt then failed closed before measurement, as recorded in the current section. C3/C4 remain gated on real C1/C2 inputs.
 
 The W3.2 checkpoint below is historical, including its runtime build, not the latest source identity.
 
@@ -43,7 +43,7 @@ Historical W2 handoff recorded recorder adoption as pending. Current read-only i
 
 Offline W2 reader/replay now maps trade/bid/ask independently from per-field provenance into the existing V2-A.2 `FactorRepresentationObservation`, preserves V2-H lineage/source IDs, rejects market/contract/session mismatches, out-of-order receipts, partial files and persistence/overflow truth, and never combines source time-of-day with a fabricated date. Old schema without per-field provenance is explicitly downgraded to `LEGACY_TOP_LEVEL_RECEIPT_ONLY` and cannot become DIRECT_LIVE.
 
-W2 offline contract and W3.1 governance remain **PASS**. W3.2 now adds a minimal OSAKA_MICRO/JNU 1-session `last_price_naive` forward cycle: only contract-specific DAILY/PIT-safe/source-snapshotted closes can precommit between the verified 15:45 JST source close and 17:00 JST target night open; settlement must use the same contract and exact sealed target close, then W3.1/2I.1 evaluate it. Current runtime probe found no eligible W3.2 DAILY Feature Store candidate, so **actual forward evidence remains NONE_YET and no real prediction was inserted**. Recorder handover still requires explicit maintenance-window authorization.
+W2 offline contract and W3.1 governance remain **PASS**. W3.2 now adds a minimal OSAKA_MICRO/JNU 1-session `last_price_naive` forward cycle: only contract-specific DAILY/PIT-safe/source-snapshotted closes can precommit between the verified 15:45 JST source close and 17:00 JST target night open; settlement must use the same contract and exact sealed target close, then W3.1/2I.1 evaluate it. Current runtime probe found no eligible W3.2 DAILY Feature Store candidate, so **actual forward evidence remains NONE_YET and no real prediction was inserted**. The first authorized recorder handover attempt failed closed; recorder is currently not running, and the next attempt must use startup telemetry rather than auto-retry the failed login path.
 
 ## Read first (order)
 
