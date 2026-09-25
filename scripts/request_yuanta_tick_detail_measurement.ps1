@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory=$true)]
-  [ValidatePattern('^JNU\d{4}
+  [ValidatePattern('^JNU\d{4}$')]
   [string]$Symbol,
   [ValidateRange(1,20)]
   [int]$LastCount = 20
