@@ -12,7 +12,7 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 2026-09-25 C2 W3.3 controlled-measurement path 最新交接：
 
-controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、`873e6bd9697efe1bc2c67d1767c708b23af2df10`；maintenance-control source = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；current source/config build_id = `351267947f7f468d`。
+controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、`873e6bd9697efe1bc2c67d1767c708b23af2df10`；maintenance-control = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；request-script repair = `1452a45cf0c4de631d213eaa8648c3eae3b90211`；startup-observability source = `b9cfcb0e302e1520027d2c69adf363d15baf00c4`；current source/config build_id = `ba7c0e1b9ca9d62c`。
 新增的 `tick_detail_measurement` 只會在既有 single-owner recorder 內執行，
 而且 `tick_detail_measurements.enabled=false` 預設關閉。它只允許 OSE 207 + exact JNU contract
 + LastCount<=20，actual request/callback 都必須在 15:45–17:00 JST，遇到 outstanding ambiguity、
@@ -21,14 +21,14 @@ unsafe evidence path 或 running-process build 與 disk build 不一致，都會
 runtime evidence schema 現為 `W3.3-C2.2`，綁定 recorder 啟動時凍結的 `runtime_build_id`。
 timestamp-basis cross-check 對 UTC-like / Taipei-like raw clock 都有反例拒絕，而且 evidence validation 會從 raw batch + request/callback times 重新計算，不接受 caller 自行宣稱成功。Feature Store optional provenance query 遇 DuckDB/IO 錯誤回空集合；`LEGACY_TOP_LEVEL_RECEIPT_ONLY` 不會再被 packet 標成 FRESH。raw tick 值只留本機 evidence raw artifact；control result / verification evidence 不公開價格。
 
-maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tracked config 仍維持 `enabled:false`。驗證：focused `41 passed, 2 deselected`；broader regression `106 passed, 2 deselected`；final offline profile `1857 passed, 24 deselected, 132 warnings in 136.18s`，exit 0；targeted secret scan 0；diff check PASS。沒有新增 dependency 或 license surface。
+maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tracked config 仍維持 `enabled:false`。startup-observability 再補 `startup_stage`、安全的 error type/login code 與 start script fresh-status confirmation。驗證：focused `42 passed, 2 deselected`；broader regression `151 passed, 2 deselected`；final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`，exit 0；targeted secret scan 0；diff check PASS。沒有新增 dependency 或 license surface。
 
-現場 recorder 現在已有 W1/W2 `PER_FIELD_ONLY` provenance，表示 W1/W2 runtime adoption 已發生；
-但 process 在 build `351267947f7f468d` 前已啟動，所以 **C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING**。使用者已明確授權 maintenance window；授權當時仍早於 15:45 JST。舊 hidden process 無法 AttachConsole 接收 Ctrl+C，因此沒有硬殺，也沒有建立第二 owner。尚未
-queue `request_yuanta_tick_detail_measurement.ps1`。真實 OSE
+第一次已授權 maintenance 在有效 OSE session 的 15:56 JST 進行。當時舊 recorder PID `6432/14952` 已經消失；最後 stale status 為 `DEGRADED`、heartbeat `2026-09-25T06:46:17.888693Z`、`pending_records=772`，所以可能存在 buffered-data gap。FunctionList resolver 唯一選出目前最近有效 OSE micro contract = `JNU2612`；舊 runtime 同時訂閱的 `JNU2703` 只是下一月份，不拿來冒充 active contract。
+
+只嘗試一次 current-build runtime-only owner start；launcher PID `9060` 隨即消失，沒有 fresh status/log，recorder stdout/stderr 為空。依 fail-closed 契約沒有 retry broker login、沒有 queue `request_yuanta_tick_detail_measurement.ps1`。非登入診斷確認 build/guard/credential existence/FunctionList/default subscriptions/SparkRuntime constructor/Start-Process CLI mechanics 都通過，因此第一次 live attempt 狀態 = **FAIL_CLOSED_STARTUP_UNOBSERVED**。**目前 recorder NOT RUNNING。** 真實 OSE
 timestamp-basis evidence、eligible DAILY terminal close、W3.2 actual forward evidence 均仍為 NONE_YET。
 
-下一步**不需要再次詢問 maintenance-window 授權**。接近/進入有效 OSE session 的 15:45 <= JST < 17:00 後，先用 graceful control-inbox shutdown 停掉唯一 owner，再以 current build + runtime-only tick-detail enable 啟動，核對 runtime_build_id / heartbeat / gate flag，送出一筆 exact JNU measurement；完成後恢復 safe-default recorder。
+下一步是新的 maintenance start attempt，不是同一失敗嘗試的自動 retry。必須使用已發布 build `ba7c0e1b9ca9d62c`，讓 startup telemetry 能指出 `INSTANTIATE/OPEN_PROD/WAIT_CONNECTED/LOGIN_REQUEST/WAIT_LOGIN/SUBSCRIBE` 中的實際失敗階段。只有 fresh status 顯示 current build owner 已 RUNNING/DEGRADED 且 measurement runtime gate=true，才可在有效 15:45–17:00 JST window 送唯一一筆 `JNU2612` measurement；任何 `START_FAILED` 都停止，不做第二次 login retry。
 
 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 歷史交接：
 

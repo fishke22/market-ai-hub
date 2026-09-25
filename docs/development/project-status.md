@@ -1,12 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **C2 W3.3 MAINTENANCE WINDOW AUTHORIZED / RUNTIME_ADOPTION_PENDING（live timestamp verification / actual DAILY input / forward evidence pending）**
+- Current phase: **C2 W3.3 FIRST MAINTENANCE ATTEMPT FAIL_CLOSED / RECORDER_NOT_RUNNING / RUNTIME_ADOPTION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**351267947f7f468d**（C2 controlled-measurement + graceful-maintenance source/config fingerprint；不證明常駐 recorder process 已載入或已產生 runtime evidence）
+- build_id：**ba7c0e1b9ca9d62c**（C2 startup-observability source/config fingerprint；不證明 recorder 已成功啟動或已產生 runtime evidence）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets. Current 2026-09-25 inspection shows the old live recorder still emits W1/W2 `PER_FIELD_ONLY` provenance. **C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING** remains because that process predates build `351267947f7f468d`. Maintenance-window authorization is granted; controlled measurement has not yet been sent.
+- Live quote capability：2026-09-24 local quote matrix reports matching callbacks across multiple markets. The old 2026-09-25 recorder later disappeared before the authorized C2 measurement attempt; last stale heartbeat was `2026-09-25T06:46:17.888693Z` with `pending_records=772`, so buffered-data loss is possible. The attempted current-build owner did not reach a fresh status/log and exited; **recorder currently NOT RUNNING**. No tick-detail measurement was sent.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
@@ -20,16 +20,16 @@
 
 ## 2026-09-25 C2 same-owner controlled measurement path
 
-- Initial implementation: `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening: `9496eb9afa65e647b5fceca86610247ff24e258e`; review fixes: `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, latest source `873e6bd9697efe1bc2c67d1767c708b23af2df10`; current build_id `d0f179c3460497e7`.
+- Initial implementation: `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening: `9496eb9afa65e647b5fceca86610247ff24e258e`; review fixes: `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, `873e6bd9697efe1bc2c67d1767c708b23af2df10`; maintenance control `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`; request-script repair `1452a45cf0c4de631d213eaa8648c3eae3b90211`; startup observability `b9cfcb0e302e1520027d2c69adf363d15baf00c4`; current build_id `ba7c0e1b9ca9d62c`.
 - New recorder control action `tick_detail_measurement` runs only inside the existing owner. Config default remains `enabled: false`; the queue script does not login/logout.
 - OSE market 207 + exact JNU contract + LastCount<=20 only. Actual request and callback must both be inside 15:45–17:00 JST; ambiguous outstanding requests and unsafe evidence paths block before a broker call.
 - Recorder freezes `runtime_build_id` at startup and compares it to current disk fingerprint before measurement. Stale process/disk mismatch returns `TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE`.
 - Runtime evidence schema `W3.3-C2.2` binds process build, request/callback identity and canonical raw snapshot. UTC-like/Taipei-like timestamp-basis alternatives fail closed, and evidence validation recomputes the cross-check from batch + request/callback rather than trusting asserted success fields.
 - Raw tick values stay in local evidence storage. Control/evidence metadata expose IDs/paths/status, not prices. Persisted artifacts are reloadable and canonical IDs/bindings are checked again before terminal-close materialization.
 - Review hardening also makes optional Feature Store provenance queries return [] on DuckDB/IO failure and prevents `LEGACY_TOP_LEVEL_RECEIPT_ONLY` rows from being presented as FRESH in public packet freshness.
-- Maintenance-control commit `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c` adds runtime-only tick-detail enable and control-inbox graceful shutdown while keeping tracked `enabled: false`.
-- Validation: maintenance focused `41 passed, 2 deselected`; broader regression `106 passed, 2 deselected`; final offline profile `1857 passed, 24 deselected, 132 warnings in 136.18s`, exit 0. Targeted secret scan 0; diff check PASS.
-- Live recorder currently has W1/W2 per-field provenance, but started before build `351267947f7f468d`; C2 control action has not been adopted. Maintenance authorization is now explicit. Old owner was not hard-killed after console Ctrl+C attachment failed; no second owner/login and no tick-detail request occurred.
+- Maintenance-control commit `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c` adds runtime-only tick-detail enable and control-inbox graceful shutdown while keeping tracked `enabled: false`. Startup-observability commit `b9cfcb0e302e1520027d2c69adf363d15baf00c4` adds `startup_stage`, safe error-type/login-code status and start-script confirmation of a fresh running build.
+- Validation: startup-observability focused `42 passed, 2 deselected`; broader regression `151 passed, 2 deselected`; final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`, exit 0. Targeted secret scan 0; diff check PASS.
+- First authorized live attempt: valid OSE session and in-window; FunctionList resolver selected `JNU2612`. Old owner was already absent. One runtime-only owner start was attempted and exited before fresh status/log. Pre-login diagnostics passed, but the exact old-code broker startup stage is unobservable. Contract requires no login retry after this failure; no GetStkTickDetail request was queued.
 - Actual runtime timestamp evidence = **NONE_YET**; eligible real DAILY terminal close = **NONE_YET**; ACTUAL_FORWARD_EVIDENCE = **NONE_YET**.
 
 ## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness
