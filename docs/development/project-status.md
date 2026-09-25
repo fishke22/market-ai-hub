@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **C1 MODEL_EVALUATION_CORRECTNESS_PASS / W3 Forward Evidence Engineering（W3.3 source code present；timestamp verification / eligible DAILY input / actual forward evidence pending）**
+- Current phase: **C2 W3.3 RUNTIME-EVIDENCE / TERMINAL-CLOSE OFFLINE_CORRECTNESS_PASS（controlled live timestamp verification / actual DAILY input / forward evidence pending）**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**c64b98bd4a09d576**（C1 model-evaluation correctness；source fingerprint，不證明常駐 recorder process 已升級）
+- build_id：**b6cfc2ceae89d221**（C2 source fingerprint；不證明常駐 recorder process 已升級或已產生 runtime evidence）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -17,6 +17,18 @@
 - V2-I：**EVALUATION_FOUNDATION_PASS**（evaluation engine only；CALIBRATION FITTING NOT STARTED）
 - Yuanta SPARK securities profile：PR #53 had no callbacks; later local 2026-09-24 matrix records matching TAIFEX/OSE/CME/CBOT/CBOE/NYBOT callbacks. Preserve account_profile=SECURITIES. Source hardening does not re-certify those live observations.
 - Yuanta SPARK futures profile：0112 → **SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED**（不 retry）
+
+## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness
+
+- Implementation commit: `92e178e4ea6cad632d071747efe1c273bcc79efc`; build_id `b6cfc2ceae89d221`.
+- Raw `TickDetailBatch` cannot self-assert runtime verification. Raw canonical snapshot identity is independent of verification state.
+- SPARK runtime records bounded request/callback metadata without account/prices. Exact request time is separate from callback receipt. Identical concurrent outstanding requests are left uncorrelated rather than guessed.
+- `TickDetailRuntimeVerificationEvidence` binds request id/time/acceptance, callback time/index/returned market+code, canonical raw snapshot id and timestamp-basis cross-check into a deterministic integrity id. The id is not a broker signature.
+- Terminal-close materialization requires valid typed evidence. Request and callback must both fall in the controlled 15:45 <= JST < 17:00 window; request-before-close/callback-after-close is rejected.
+- Derived DAILY Feature Store materialization is a separate strict gate. Exact contract/month, CONTRACT series, roll NONE, PIT-safe source IDs, session close equality and DAILY frequency are required; TICK does not silently impersonate DAILY.
+- Validation: C2/W3.3 35 passed; related W2/W3/C1 134 passed; final offline profile 1834 passed / 24 deselected / 132 warnings in 140.87s, exit 0, excluding only the live-owner mutex test. Changed-file secret scan 0; diff check PASS.
+- Actual runtime timestamp verification = **NONE_YET**. Eligible real DAILY terminal-close evidence = **NONE_YET**. ACTUAL_FORWARD_EVIDENCE = **NONE_YET**. No broker/login/restart/subscription/order/account action occurred.
+- Pre-existing staged W3.3 contract/report files are not part of implementation commit `92e178e`. Full details: `research/phase3/reports/C2_W33_RUNTIME_EVIDENCE_TERMINAL_CLOSE_2026-09-25.md`.
 
 ## 2026-09-24 correctness hardening
 

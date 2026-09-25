@@ -10,8 +10,17 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
-2026-09-25 C1 模型評估比較可信度交接：
+2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 交接：
 
+C2 implementation commit = `92e178e4ea6cad632d071747efe1c273bcc79efc`；source build_id = `b6cfc2ceae89d221`。Raw tick-detail snapshot 永遠保持 UNVERIFIED，verification 狀態不再參與 raw canonical identity；SPARK runtime 分開保留實際 request time 與 callback receive time，並只在 request/callback 唯一可關聯時產生 correlation。terminal-close materializer 不再信任一個 status 字串，必須吃綁定 request/callback/market/code/canonical snapshot/timestamp-basis cross-check 的 typed runtime evidence。
+
+受控時間窗以 request time 驗證 15:45 <= JST < 17:00，callback 也必須在同一 controlled window；15:44:59 request / 15:45:01 callback 會拒絕。Feature Store 新增獨立 DERIVED_DAILY gate，只有 exact contract/month、CONTRACT、roll NONE、PIT-safe、source IDs、DAILY frequency 與 session-close timestamp 一致的資料可 materialize；TICK 仍不能冒充 DAILY。
+
+驗證：C2/W3.3 focused `35 passed`；related W2/W3/C1 `134 passed`；final offline profile `1834 passed, 24 deselected, 132 warnings in 140.87s`，exit 0（只排除現場 recorder owner 造成的 global mutex test）。changed-file secret scan 0；diff check PASS。三個 stale build-id freeze assertions 只更新為新 fingerprint，沒有刪除測試。
+
+**C2_OFFLINE_CORRECTNESS_PASS != RUNTIME_TIMESTAMP_VERIFIED != DATA READY != ACTUAL_FORWARD_EVIDENCE != CALIBRATED != TRADING EDGE。** 本棒沒有 broker login/logout/restart/subscription/order/account 操作；actual runtime timestamp verification = NONE_YET；eligible real DAILY terminal close = NONE_YET；W3.2 actual forward evidence = NONE_YET。受控 live measurement 仍需明確 maintenance-window 授權。
+
+C1 歷史交接仍有效如下：
 W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `50f209a095a151b6ae42c6db5d0d462d11fd2395`；工作分支 `codex/quote-hub-correctness`；runtime build_id = `c64b98bd4a09d576`。C1 把每個 forecast origin 分成 VALID / FAILED / ABSTAINED / NONFINITE / INVALID_TARGET，pairwise 只用共同有效 origins 且同時揭露雙方 full coverage；store C1.1 fail-closed 拒絕非有限值與缺失/矛盾 accounting，舊 leaderboard 依 schema 隔離、不重寫歷史。
 
 另外修正 random-walk horizon、缺 train labels 時 classification baseline 偷看 test labels、rates regime 對齊與 20-session lookback；CLI run 會持久化 pairwise，compare 不再拿不同成功子集直接比 MAE。舊 tournament 排名必須重跑，不能挪用舊績效。
@@ -20,7 +29,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
 
 **這仍不是 DATA READY、CALIBRATED、PREDICTIVE EVIDENCE 或 TRADING EDGE。** 本包未做 calibration fitting、未建立真實 forward prediction/outcome、未重跑真實市場排行榜，也沒有新增模型。
 
-**現場 recorder 仍由既有 owner 持有。** 本包沒有 broker login/訂閱/登出/重啟/下單/帳務操作。開工時已有兩個 staged W3.3 contract/report 檔，本包完整保留且未提交。C2 若要做 runtime timestamp/terminal-close 證據，仍需使用者明確維護窗口授權。
+**現場 recorder 仍由既有 owner 持有。** C1 與本次 C2 offline 包都沒有 broker login/訂閱/登出/重啟/下單/帳務操作。開工時已有兩個 staged W3.3 contract/report 檔，持續完整保留且未帶入 C2 implementation commit。C2 的剩餘 controlled runtime timestamp measurement 仍需使用者明確維護窗口授權。
 
 ## 2. 查核深度與限制
 
@@ -110,4 +119,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。下一包是 C2：在明確維護窗口授權下驗證 OSE tick-detail 日期/時區/逐合約/terminal-close 語義，建立可追溯 contract DAILY terminal close 後接既有 W3.2；沒有授權就不 restart/login/retry broker。C3/C4 仍等待真實 C1/C2 輸入；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。
+先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。下一包是 C2 controlled runtime measurement：只有在明確維護窗口授權下，使用既有單一 owner 路徑取得 matched request/callback 與 OSE timestamp-basis cross-check evidence，再由已通過 offline correctness 的 materializer 建立第一筆 eligible contract DAILY terminal close；沒有授權就不 restart/login/retry broker。C3/C4 仍等待真實 C1/C2 輸入；不因 tests PASS 或 recorder RUNNING 就宣稱 DATA READY、CALIBRATED 或可準確交易。

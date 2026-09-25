@@ -1,9 +1,17 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C1 model-evaluation comparison correctness after W3.2/W3.3 engineering.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness.
 
 ## Current repair checkpoint
+
+2026-09-25 C2 offline correctness implementation is commit `92e178e4ea6cad632d071747efe1c273bcc79efc`; source build is `b6cfc2ceae89d221`. Raw W3.3 tick-detail batches now remain permanently UNVERIFIED, canonical raw snapshot identity excludes verification state, SPARK records bounded request/callback correlation metadata, and terminal-close materialization requires a separate typed runtime verification artifact bound to the exact request, callback, returned market/code and canonical source snapshot. Ambiguous duplicate outstanding requests do not guess correlation. The controlled window is checked from actual request time (and callback time), not callback receipt substituted for request time.
+
+C2 also adds a reviewed `DERIVED_DAILY` Feature Store gate for exact contract-specific OSE terminal closes. Trade timestamp remains provider timestamp; the event timestamp is the verified 15:45 JST session-close boundary. TICK does not silently become DAILY. Focused C2/W3.3 = 35 passed; related W2/W3/C1 = 134 passed; final offline profile = 1834 passed / 24 deselected / 132 warnings in 140.87s, exit 0, excluding only the live-owner-conflicting `test_single_instance_lock_releases_after_error`. Changed-file secret scan = 0; diff check PASS. Three stale build-id freeze assertions were updated to the new source fingerprint; no safety gate or test was removed.
+
+Evidence boundary: **C2_OFFLINE_CORRECTNESS_PASS != RUNTIME_TIMESTAMP_VERIFIED != DATA READY != ACTUAL_FORWARD_EVIDENCE != CALIBRATED != TRADING EDGE**. No broker login/logout/restart/subscription/order/account action occurred. Actual runtime timestamp evidence remains **NONE_YET** and W3.2 actual forward evidence remains **NONE_YET**. Read `research/phase3/reports/C2_W33_RUNTIME_EVIDENCE_TERMINAL_CLOSE_2026-09-25.md`.
+
+Pre-existing staged W3.3 contract/report files remain staged and were deliberately excluded from commit `92e178e`. Next bounded package is controlled live runtime measurement only after explicit maintenance-window authorization; otherwise remain offline.
 
 2026-09-25 C1 evaluation-comparison package is implemented in commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`; runtime build is `c64b98bd4a09d576`. It adds explicit VALID/FAILED/ABSTAINED/NONFINITE/INVALID_TARGET accounting, common-origin pairwise metrics plus each model's full coverage, fail-closed finite/accounting persistence, C1.1 leaderboard version isolation, horizon-aware random walk, train-only classification majority baseline, and aligned 20-session rates lookback. CLI run now persists pairwise rows and compare reads those rows instead of comparing different success subsets.
 
@@ -13,7 +21,7 @@ The earlier `ea29c12...` credibility correction and W3.2 checkpoint remain histo
 
 W3.3 tick-detail source code already exists; OSE timestamp basis and terminal-close materialization still require runtime evidence. Pre-existing staged W3.3 contract/report files were preserved and are not part of commit `50f209a`. Do not redo W3.1/W3.2/W3.3 engines. No live broker action was taken.
 
-Next bounded package: C2 controlled W3.3 source/runtime evidence and contract-specific DAILY terminal-close semantics. It requires explicit maintenance-window authorization before recorder restart/login; otherwise remain offline and do not fabricate DATA READY. C3/C4 remain gated on real C1/C2 inputs.
+Historical C1 handoff named C2 as the next package. Its offline correctness portion is now complete as recorded above; the remaining C2 step is controlled live timestamp-basis measurement and still requires explicit maintenance-window authorization before any recorder restart/login. C3/C4 remain gated on real C1/C2 inputs.
 
 The W3.2 checkpoint below is historical, including its runtime build, not the latest source identity.
 
