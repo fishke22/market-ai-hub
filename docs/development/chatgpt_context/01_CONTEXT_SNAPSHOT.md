@@ -139,4 +139,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。下一包是 C2 runtime adoption + controlled measurement：只有在明確 maintenance-window 授權下，受控重啟唯一 recorder 到已發布 current build、顯式啟用 tick_detail_measurements，並於 15:45–17:00 JST 取得 matched request/callback + timestamp-basis evidence；再由既有 materializer 建立第一筆 eligible DAILY terminal close。沒有授權就不 restart/login/queue request。C3/C4 仍等待真實 C1/C2 輸入。
+先核對 C1 commit `50f209a095a151b6ae42c6db5d0d462d11fd2395`、最新 HEAD/dirty/remote SHA、PR #55 與現場 recorder owner。W2、W3.1、W3.2、W3.3 engines 不要重做。C2 maintenance-window 授權已取得，不需再次詢問。下一包是 runtime adoption + controlled measurement：在有效 OSE 15:45–17:00 JST 視窗內，確保舊 owner 完全停止後，以 current published build + runtime-only tick-detail enable 啟動唯一 recorder，取得 matched request/callback + timestamp-basis evidence，再由既有 materializer 建立第一筆 eligible DAILY terminal close；完成後恢復 safe-default recorder。C3/C4 仍等待真實 C1/C2 輸入。
