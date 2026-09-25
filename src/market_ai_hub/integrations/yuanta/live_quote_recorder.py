@@ -7,6 +7,7 @@ requests. No order/account/position/balance API is exposed here.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 import os
 import re
@@ -223,6 +224,14 @@ def _load_config(path: Path) -> dict:
     if not isinstance(data, dict) or not data.get("enabled"):
         raise RuntimeError("Yuanta live recorder config is disabled or invalid")
     return data
+
+
+def _runtime_config(cfg: dict, *, enable_tick_detail_measurements: bool = False) -> dict:
+    """Apply maintenance-only overrides without changing tracked safe defaults."""
+    out = deepcopy(cfg)
+    if enable_tick_detail_measurements:
+        out.setdefault("tick_detail_measurements", {})["enabled"] = True
+    return out
 
 
 def _yyyymm(order_code: str) -> str:
@@ -455,10 +464,10 @@ def _tick_detail_measurement(
 
 def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
                       subscribed: dict[tuple[int, str], str],
-                      runtime_build_id: str = "") -> None:
+                      runtime_build_id: str = "") -> bool:
     dc = cfg.get("dynamic_requests", {})
     if not dc.get("enabled"):
-        return
+        return False
     inbox = _within(root, str(dc.get("inbox", "control/inbox")))
     processed = _within(root, str(dc.get("processed", "control/processed")))
     failed = _within(root, str(dc.get("failed", "control/failed")))
@@ -499,6 +508,11 @@ def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
                 )
                 if not ok:
                     dest = failed
+            elif action == "shutdown":
+                result_payload = {
+                    "status": "SHUTDOWN_ACCEPTED",
+                    "values_exposed": False,
+                }
             else:
                 raise ValueError("unsupported action")
         except Exception as exc:
@@ -507,6 +521,9 @@ def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
         result_payload["processed_at"] = _utcnow().isoformat()
         _atomic_json(dest / (req_path.stem + ".result.json"), result_payload)
         os.replace(req_path, dest / req_path.name)
+        if action == "shutdown" and dest == processed:
+            return True
+    return False
 
 
 def _write_parquet(root: Path, records: list[dict]) -> str | None:
@@ -526,7 +543,11 @@ def _write_parquet(root: Path, records: list[dict]) -> str | None:
     return str(p)
 
 
-def run(config_path: Path = CONFIG_PATH) -> int:
+def run(
+    config_path: Path = CONFIG_PATH,
+    *,
+    enable_tick_detail_measurements: bool = False,
+) -> int:
     root = recorder_root(config_path)
     root.mkdir(parents=True, exist_ok=True)
     with _single_instance(root):
@@ -539,11 +560,23 @@ def run(config_path: Path = CONFIG_PATH) -> int:
                 if heartbeat and status.get("pid") != os.getpid():
                     if (_utcnow() - datetime.fromisoformat(heartbeat)).total_seconds() < 60:
                         raise RuntimeError("YUANTA_LIVE_ALREADY_RUNNING")
-        return _run_locked(config_path, root)
+        return _run_locked(
+            config_path,
+            root,
+            enable_tick_detail_measurements=enable_tick_detail_measurements,
+        )
 
 
-def _run_locked(config_path: Path, root: Path) -> int:
-    cfg = _load_config(config_path)
+def _run_locked(
+    config_path: Path,
+    root: Path,
+    *,
+    enable_tick_detail_measurements: bool = False,
+) -> int:
+    cfg = _runtime_config(
+        _load_config(config_path),
+        enable_tick_detail_measurements=enable_tick_detail_measurements,
+    )
     runtime_build_id = _current_build_id()
     rec = cfg["recording"]
     status_path = _within(root, str(cfg["storage"].get("status_file", "status.json")))
@@ -592,10 +625,11 @@ def _run_locked(config_path: Path, root: Path) -> int:
         while True:
             rt.pump(0.2)
             now = time.time()
-            _dynamic_requests(
+            if _dynamic_requests(
                 root, cfg, rt, cred.username, subscribed,
                 runtime_build_id=runtime_build_id,
-            )
+            ):
+                break
             latest, pending, dropped = buffer.snapshot()
             if now - last_latest >= float(rec.get("latest_snapshot_seconds", 1)):
                 _atomic_json(latest_path, {"updated_at": _utcnow().isoformat(), "quotes": latest})
@@ -620,6 +654,9 @@ def _run_locked(config_path: Path, root: Path) -> int:
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
+                    "tick_detail_measurements_runtime_enabled": bool(
+                        cfg.get("tick_detail_measurements", {}).get("enabled", False)
+                    ),
                     "heartbeat_at": _utcnow().isoformat(), "runtime_build_id": runtime_build_id,
                 })
                 last_status = now
@@ -658,8 +695,16 @@ def _run_locked(config_path: Path, root: Path) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(prog="yuanta.live_quote_recorder")
     ap.add_argument("--config", type=Path, default=CONFIG_PATH)
+    ap.add_argument(
+        "--enable-tick-detail-measurements",
+        action="store_true",
+        help="maintenance-only runtime override; tracked config stays disabled by default",
+    )
     args = ap.parse_args()
-    return run(args.config)
+    return run(
+        args.config,
+        enable_tick_detail_measurements=args.enable_tick_detail_measurements,
+    )
 
 
 if __name__ == "__main__":

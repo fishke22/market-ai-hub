@@ -1,4 +1,4 @@
-param([switch]$Foreground)
+param([switch]$Foreground, [switch]$EnableTickDetailMeasurements)
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
@@ -15,13 +15,17 @@ if (Test-Path $Status) {
   } catch {}
 }
 Set-Location $Root
+$RecorderArgs = @("-m", "market_ai_hub.integrations.yuanta.live_quote_recorder")
+if ($EnableTickDetailMeasurements) {
+  $RecorderArgs += "--enable-tick-detail-measurements"
+}
 if ($Foreground) {
-  & $Python -m market_ai_hub.integrations.yuanta.live_quote_recorder
+  & $Python @RecorderArgs
   exit $LASTEXITCODE
 }
 $LogDir = Join-Path $Base "logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $Out = Join-Path $LogDir "recorder.out.log"
 $Err = Join-Path $LogDir "recorder.err.log"
-$p = Start-Process -FilePath $Python -ArgumentList "-m","market_ai_hub.integrations.yuanta.live_quote_recorder" -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $Out -RedirectStandardError $Err -PassThru
+$p = Start-Process -FilePath $Python -ArgumentList $RecorderArgs -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $Out -RedirectStandardError $Err -PassThru
 Write-Host "YUANTA_LIVE_STARTING pid=$($p.Id)"

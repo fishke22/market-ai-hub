@@ -66,6 +66,7 @@ def test_persistent_recorder_contract_is_single_login_and_parquet_first():
 def test_agent_entry_scripts_exist():
     for name in (
         "start_yuanta_live_recorder.ps1",
+        "stop_yuanta_live_recorder.ps1",
         "request_yuanta_quote.ps1",
         "request_yuanta_tick_detail_measurement.ps1",
         "get_yuanta_live_status.ps1",
@@ -128,3 +129,12 @@ def test_tick_detail_request_script_uses_single_regex_escape():
     text = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
     assert r"[ValidatePattern('^JNU\d{4}$')]" in text
     assert r"[ValidatePattern('^JNU\\d{4}$')]" not in text
+
+
+def test_maintenance_scripts_keep_measurement_runtime_only_and_shutdown_graceful():
+    start = (ROOT / "scripts" / "start_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    stop = (ROOT / "scripts" / "stop_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    assert "EnableTickDetailMeasurements" in start
+    assert "--enable-tick-detail-measurements" in start
+    assert 'action = "shutdown"' in stop
+    assert "Stop-Process" not in stop

@@ -130,6 +130,33 @@ def _cfg(enabled=True):
     }
 
 
+def test_runtime_measurement_override_does_not_mutate_safe_default():
+    base = _cfg(enabled=False)
+    runtime = R._runtime_config(base, enable_tick_detail_measurements=True)
+    assert base["tick_detail_measurements"]["enabled"] is False
+    assert runtime["tick_detail_measurements"]["enabled"] is True
+
+
+def test_shutdown_control_is_acknowledged_without_broker_request(tmp_path):
+    rt = _FakeRuntime()
+    inbox = tmp_path / "control/inbox"
+    inbox.mkdir(parents=True)
+    (inbox / "shutdown.json").write_text(
+        json.dumps({"action": "shutdown", "reason": "MAINTENANCE_WINDOW"}),
+        encoding="utf-8",
+    )
+    shutdown = R._dynamic_requests(
+        tmp_path, _cfg(enabled=False), rt, "MASKED_TEST_ACCOUNT", {}
+    )
+    assert shutdown is True
+    assert rt.calls == []
+    payload = json.loads(
+        (tmp_path / "control/processed/shutdown.result.json").read_text(encoding="utf-8")
+    )
+    assert payload["status"] == "SHUTDOWN_ACCEPTED"
+    assert payload["values_exposed"] is False
+
+
 def test_ose_local_timestamp_crosscheck_distinguishes_near_close_local_clock():
     check = TV.crosscheck_ose_local_timestamp_basis(
         _batch(),
