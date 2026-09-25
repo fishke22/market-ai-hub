@@ -98,8 +98,10 @@ powershell -ExecutionPolicy Bypass -File scripts\create_offline_backup.ps1 -Dest
 ... -Destination E:\MARKET_AI_BACKUP -IncludeModels
 ```
 
-- 會產生 `SHA256SUMS.txt` 供日後驗證完整性。
-- 還原：把備份目錄內容複製回對應位置，或依 manifest 重新安裝。
+- 會產生 `SHA256SUMS.txt`；`create_offline_backup.ps1` 會對 robocopy / pip native failure fail closed，且 SHA256 支援 Windows 深層長路徑。
+- 驗證既有備份：`powershell -ExecutionPolicy Bypass -File scripts\verify_offline_backup.ps1 -BackupRoot <backup_dir>`。除了逐檔 SHA256，也拒絕 missing、duplicate、path escape、tampered 與未列入 checksum 的額外檔案。
+- 基本 source restore drill：`powershell -ExecutionPolicy Bypass -File scripts\verify_offline_backup_restore_drill.ps1`。它會建立基本備份、驗證、還原到另一個暫存路徑，確認不帶 `.venv`/private data，並要求 restored source import 的 build_id 與目前 source 一致。
+- 還原：基本 source tier 可用上述 drill 驗證；wheel/model/private data 仍依各自 manifest/授權/一致性流程處理，不能把 basic source PASS 當完整私人資料 restore PASS。
 
 > ⚠️ **本地私人備份 ≠ 公開重新散布。**
 > TimesFM-3.0 / FinCast 的 weights 受非商業 / research-only 授權限制，
