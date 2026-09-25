@@ -4,7 +4,7 @@
 - **Parser / readiness**: `src/market_ai_hub/research/v2/tick_detail_source.py`
 - **Typed SPARK query**: `SparkRuntime.request_tick_detail_last()`
 - **Downstream consumer**: W3.2 dedicated contract DAILY terminal-close feature
-- **Current state**: source/materializer/controlled-measurement path offline PASS; OSE timestamp-basis live measurement **REQUIRED**
+- **Current state**: source/materializer/controlled-measurement path offline PASS; one authorized real raw measurement was captured; C2.3 typed runtime re-verification is still **REQUIRED** before DAILY materialization.
 - **Research only**: quote query only; no order, account balance, position, trading or calibration fitting.
 
 ## Why this source exists
@@ -142,9 +142,9 @@ Current evidence state after C2 controlled-path engineering:
 - raw/evidence persistence + reload validation: implemented; evidence validation recomputes timestamp-basis truth from canonical batch + bound request/callback rather than trusting asserted verification flags;
 - reviewed terminal-close materializer + derived DAILY gate: offline PASS;
 - same-owner control-inbox measurement path: offline PASS, **default disabled**;
-- current live recorder process: W1/W2 per-field provenance is active, but it started before
-  the C2 measurement/review commits through `873e6bd9697efe1bc2c67d1767c708b23af2df10` and therefore has **not adopted C2 measurement code**;
-- live OSE `GetStkTickDetail` measurement through this path: **NOT YET RUN**;
-- OSE timestamp basis: **UNVERIFIED**;
+- the mutation entry scripts (start/stop/quote/tick-detail request) now consume the read-only owner preflight before mutation; duplicate/unverified owners, stale build identity, or an invalid measurement gate fail closed;
+- one authorized live OSE `GetStkTickDetail` measurement was run through the same-owner foreground path for `JNU2612`; canonical raw snapshot `w33_tick_cbce3cba39291cd1f14e` was captured, and the then-current C2.2 rule correctly blocked its observed `15:45:01` terminal print as `RAW_TRADE_AFTER_DAY_CLOSE`;
+- C2.3 now permits only that evidence-bounded one-second closing-auction grace in offline validation, but the blocked C2.2 run did not persist a complete C2.3 typed verification artifact, so **RUNTIME_TIMESTAMP_VERIFIED remains NONE_YET** and evidence must not be retroactively manufactured;
+- the current-build safe-default recorder has been observed healthy with W1/W2 per-field provenance and measurement runtime gate=false; outside an authorized maintenance handover it must remain the single owner;
 - real eligible W3.2 terminal-close input: **NONE_YET**;
 - actual forward prediction evidence: **NONE_YET**.
