@@ -31,6 +31,7 @@ maintenance-control 另外新增 runtime-only enable 與 graceful shutdown；tra
 C2.3 source commit=`3e05af13762d430f875a35f2b288cf33188ce733`，GitHub source CI #162=SUCCESS；第一版 C2.3 handoff publication commit=`3f4dda90485cf1a86bc16114e2edec40e837eff8`。
 後續 test-only hardening commit `0d2693f` 補上真正的 C2.3 正向端到端 regression：模擬 `15:45:01` closing-auction print，要求 measurement 落 raw/evidence、typed reload 通過，再 materialize exact-contract DAILY close，provider trade time 保持 15:45:01、session event 固定 15:45:00。focused measurement/materializer `38 passed`；broader `155 passed, 2 deselected`；full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`，exit 0；product build 仍是 `afd52f88a351541a`。
 bridge regression commit `3ce826817834b20d26d671cd24a0aec8c1821e4a` 再把既有模組真正串起來：C2.3 DAILY materializer → canonical Feature Store → W3.2 candidate/precommit，並驗證 callback `available_at` 之前不可見；下一交易日再以 C2.3 DAILY close 做 exact-contract settlement，最後進 W3.1 evaluation。focused=`45 passed`；broader=`158 passed, 2 deselected`；full offline=`1865 passed, 24 deselected, 132 warnings in 144.28s`，exit 0。這是 synthetic/offline engineering evidence；`CALIBRATED=false`、`PREDICTIVE_EVIDENCE=NOT_ESTABLISHED`、`TRADING_EDGE=NOT_ESTABLISHED`，且 product build 仍為 `afd52f88a351541a`。
+17:30 Asia/Taipei read-only inspection 又確認 current-build safe-default recorder 已在運行：venv Python parent PID `25480` → actual interpreter/status PID `26476`，status=`RUNNING`、login=`0001`、subscriptions=42、quote fresh、health_reasons=[]、dropped=0、persistence_error=null、runtime build=`afd52f88a351541a`、`tick_detail_measurements_runtime_enabled=false`。這是同一啟動鏈，不可因看到兩個 Python PID 就再開第二 broker owner；本次檢查沒有執行 broker action。
 
 2026-09-25 C2 W3.3 runtime-evidence / terminal-close offline correctness 歷史交接：
 
@@ -51,7 +52,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
 
 **這仍不是 DATA READY、CALIBRATED、PREDICTIVE EVIDENCE 或 TRADING EDGE。** 本包未做 calibration fitting、未建立真實 forward prediction/outcome、未重跑真實市場排行榜，也沒有新增模型。
 
-**這一段是歷史 C1/C2 offline 記錄。** 當時 recorder 仍由既有 owner 持有，C1 與 C2 offline 包沒有 broker login/訂閱/登出/重啟/下單/帳務操作；目前 live truth 以本檔最上方 2026-09-25 maintenance attempt 段落為準：舊 owner 已不存在，第一次新 owner 啟動 fail closed，recorder 現在 NOT RUNNING。
+**這一段是歷史 C1/C2 offline 記錄。** 當時 recorder 仍由既有 owner 持有，C1 與 C2 offline 包沒有 broker login/訂閱/登出/重啟/下單/帳務操作；目前 live truth 以本檔最上方最新 observation 為準，不要沿用這段歷史 recorder 狀態。
 
 ## 2. 查核深度與限制
 

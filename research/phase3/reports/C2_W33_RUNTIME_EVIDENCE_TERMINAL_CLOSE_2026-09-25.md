@@ -137,3 +137,11 @@ timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock �
 - synthetic evaluation 明確維持 `CALIBRATED=false`、`PREDICTIVE_EVIDENCE=NOT_ESTABLISHED`、`TRADING_EDGE=NOT_ESTABLISHED`；不能把測試 fixture 當真實市場 evidence。
 - 驗證：focused materializer/W3.2 `45 passed`；broader W2/W3/C1/quote `158 passed, 2 deselected`；full offline `1865 passed, 24 deselected, 132 warnings in 144.28s`，exit 0；`git diff --check` PASS；targeted secret scan 0。
 - 產品 source/config build 未變，仍為 `afd52f88a351541a`。真正下一 gate 仍是一筆有效 OSE 15:45–17:00 JST 視窗內的 C2.3 typed runtime remeasurement。
+
+## 17:30 Asia/Taipei read-only recorder observation
+
+- 這次只讀 process/status，沒有 broker login/logout/restart/subscription/measurement/order/account 操作。
+- process tree 顯示 venv Python parent PID `25480` → actual interpreter child PID `26476`；`status.json` 的 owner PID 是 `26476`，因此兩個 matching Python processes 屬同一啟動鏈，不應解讀為兩個 broker owners。
+- current status=`RUNNING`、login_msg_code=`0001`、subscriptions=42、quote heartbeat fresh、health_reasons=[]、dropped_records=0、persistence_error=null、runtime_build_id=`afd52f88a351541a`。
+- `tick_detail_measurements_runtime_enabled=false`，tracked config 也維持 `tick_detail_measurements.enabled=false`；目前是 safe-default quote recorder，不是 maintenance measurement owner。
+- 後續應保留這個 single owner；只有在下一個有效 OSE maintenance window 才做安全 handover，不得直接再開第二 owner。
