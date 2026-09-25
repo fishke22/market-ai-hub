@@ -50,8 +50,15 @@ def _utcnow() -> datetime:
 
 
 def _current_build_id() -> str:
+    """Build id frozen by the imported runtime process."""
     from market_ai_hub.services.build_info import build_fingerprint
     return str(build_fingerprint()["build_id"])
+
+
+def _disk_build_id() -> str:
+    """Recompute the current source/config fingerprint from disk."""
+    from market_ai_hub.services.build_info import _compute_build_id
+    return str(_compute_build_id())
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -338,7 +345,8 @@ def _tick_detail_measurement(
     raw_dir = _within(root, str(mc.get("raw_dir", "evidence/tick_detail/raw")))
     evidence_dir = _within(root, str(mc.get("evidence_dir", "evidence/tick_detail/verification")))
     loaded_build_id = str(runtime_build_id or _current_build_id())
-    if not loaded_build_id or loaded_build_id != _current_build_id():
+    disk_build_id = _disk_build_id()
+    if not loaded_build_id or loaded_build_id != disk_build_id:
         return False, {
             "status": "TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE",
             "runtime_build_id": loaded_build_id,

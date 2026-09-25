@@ -335,3 +335,74 @@ def test_scope_requires_event_identity_for_probabilities(db):
             probability_type="TOUCH",
             event_definition_id="",
         )
+
+
+@pytest.mark.parametrize(
+    "artifact_value,actual_value",
+    [(float("nan"), 100.0), (100.0, float("inf"))],
+)
+def test_nonfinite_numeric_samples_block_before_governance(db, artifact_value, actual_value):
+    lineage = [_lineage()]
+    art = PA.make_forecast_artifact(
+        artifact_type="POINT",
+        label_type="TERMINAL_CLOSE",
+        value=artifact_value,
+        generated_at=_dt(24, 7, 30),
+        calibration_status_at_origin="UNCALIBRATED",
+        source_snapshot_ids=["snap-1"],
+    )
+    pred = PA.make_prediction(
+        lineage,
+        [art],
+        target_family="OSAKA_MICRO",
+        instrument="JNU",
+        instrument_role="DIRECT",
+        calendar_id="OSE_DERIVATIVES",
+        frequency="DAILY",
+        horizon="1d",
+        sample_origin="FORWARD_PRECOMMITTED",
+        label_window_id="2026-09-25",
+        label_window_start=_dt(25, 0),
+        label_window_end=_dt(25, 6),
+        forecast_origin=_dt(24, 8),
+        feature_cutoff_timestamp=_dt(24, 7, 59),
+        build_id="build-nonfinite",
+        model="m",
+        model_version="v1",
+        v2_schema_versions=PA.v2_schema_versions(),
+    )
+    bound_art = replace(art, prediction_id=pred.prediction_id)
+    db.append_prediction_bundle(pred, lineage, [bound_art])
+    outcome = PA.make_outcome(
+        prediction_id=pred.prediction_id,
+        label_type="TERMINAL_CLOSE",
+        outcome_kind="TERMINAL",
+        target_period="2026-09-25",
+        actual_value=actual_value,
+        event_timestamp=_dt(25, 6),
+        available_at=_dt(25, 7),
+        label_schema_version="W3.2",
+        source_snapshot_ids=["out-nonfinite"],
+        forecast_artifact_id=bound_art.forecast_artifact_id,
+    )
+    db.append_outcome(outcome)
+
+    manifest = EG.build_governed_evaluation_dataset(
+        db,
+        prediction_ids=[pred.prediction_id],
+        evaluation_as_of=_dt(27),
+        target_family="OSAKA_MICRO",
+        instrument="JNU",
+        horizon="1d",
+        model="m",
+        model_version="v1",
+        artifact_type="POINT",
+        partition_role="FORWARD",
+        window_start=_dt(20),
+        window_end=_dt(30),
+        label_type="TERMINAL_CLOSE",
+        sample_origin="FORWARD_PRECOMMITTED",
+    )
+    assert manifest.members == []
+    assert {r.reason for r in manifest.base_rejected} == {"NONFINITE_VALUE"}
+    assert EG.evaluate_governed_manifest(db, manifest).status == "BLOCKED"

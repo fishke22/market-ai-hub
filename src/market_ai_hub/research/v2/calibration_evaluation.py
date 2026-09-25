@@ -47,12 +47,14 @@ PAIRING_REJECTIONS = (
     "WRONG_TARGET", "WRONG_HORIZON", "WRONG_MODEL", "WRONG_CALIBRATION_DOMAIN",
     "MISSING_OUTCOME", "AMBIGUOUS_OUTCOME", "LEAKAGE_FUTURE", "OUTSIDE_WINDOW",
     "NOT_PROBABILITY", "NON_BINARY_OUTCOME", "NOT_BOUND", "EMPTY_VALUE",
+    "NONFINITE_VALUE",
 )
 # 致命（資料集本身不合法 -> BLOCKED）vs 稀疏（缺 outcome -> 不致命）
 BLOCKING_PAIRING_REJECTIONS = frozenset({
     "CROSS_PREDICTION", "WRONG_PROBABILITY_TYPE", "WRONG_EVENT_DEFINITION",
     "WRONG_TARGET", "WRONG_HORIZON", "WRONG_MODEL", "WRONG_CALIBRATION_DOMAIN",
     "AMBIGUOUS_OUTCOME", "LEAKAGE_FUTURE", "OUTSIDE_WINDOW", "NOT_PROBABILITY",
+    "NONFINITE_VALUE",
 })
 NON_BLOCKING_PAIRING_REJECTIONS = frozenset({
     "MISSING_OUTCOME", "NON_BINARY_OUTCOME", "NOT_BOUND", "EMPTY_VALUE",
@@ -363,6 +365,33 @@ def build_evaluation_dataset(
                                                     reason="LEAKAGE_FUTURE",
                                                     detail="outcome available before forecast_origin"))
                 continue
+            if artifact_type in NUMERIC_ARTIFACT_TYPES:
+                if artifact_type == "POINT":
+                    numeric_fields = [("value", art.value)]
+                elif artifact_type == "QUANTILE":
+                    numeric_fields = [("value", art.value), ("quantile_level", art.quantile_level)]
+                else:
+                    numeric_fields = [
+                        ("lower_value", art.lower_value),
+                        ("upper_value", art.upper_value),
+                        ("nominal_coverage", art.nominal_coverage),
+                    ]
+                missing_numeric = [name for name, value in numeric_fields if value is None]
+                if missing_numeric:
+                    rejected.append(EvaluationRejection(
+                        prediction_id=pid, forecast_artifact_id=aid,
+                        reason="EMPTY_VALUE", detail="missing numeric fields: " + ",".join(missing_numeric)))
+                    continue
+                nonfinite_numeric = [
+                    name for name, value in numeric_fields
+                    if not math.isfinite(float(value))
+                ]
+                if nonfinite_numeric:
+                    rejected.append(EvaluationRejection(
+                        prediction_id=pid, forecast_artifact_id=aid,
+                        reason="NONFINITE_VALUE",
+                        detail="nonfinite artifact fields: " + ",".join(nonfinite_numeric)))
+                    continue
             if artifact_type == "EVENT_PROBABILITY":
                 if art.value is None:
                     rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
@@ -383,6 +412,11 @@ def build_evaluation_dataset(
                 rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
                                                     reason="MISSING_OUTCOME",
                                                     detail="outcome not numerically settled"))
+                continue
+            if not math.isfinite(float(out.actual_value)):
+                rejected.append(EvaluationRejection(
+                    prediction_id=pid, forecast_artifact_id=aid,
+                    reason="NONFINITE_VALUE", detail="nonfinite outcome actual_value"))
                 continue
             if artifact_type == "EVENT_PROBABILITY" and float(out.actual_value) not in (0.0, 1.0):
                 rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,

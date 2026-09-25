@@ -427,7 +427,7 @@ class FeatureStore:
         if not self.db_path.exists():
             return []
         cutoff = _utc_naive(as_of)
-        with self._conn() as con:
+        with duckdb.connect(str(self.db_path), read_only=True) as con:
             has_table = con.execute(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='factor_observations'"
             ).fetchone()[0]

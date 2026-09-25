@@ -319,7 +319,7 @@ def test_measurement_loader_rejects_non_boolean_evidence_flags(tmp_path, monkeyp
 def test_measurement_blocks_when_running_process_build_is_stale(tmp_path, monkeypatch):
     rt = _FakeRuntime()
     monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
-    monkeypatch.setattr(R, "_current_build_id", lambda: "DISK_BUILD_NEW")
+    monkeypatch.setattr(R, "_disk_build_id", lambda: "DISK_BUILD_NEW")
     ok, result = R._tick_detail_measurement(
         tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
         {"market_no": 207, "symbol": "JNU2612", "last_count": 20},

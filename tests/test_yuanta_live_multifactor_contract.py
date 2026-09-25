@@ -122,3 +122,9 @@ def test_yuanta_credential_bootstrap_is_interactive_and_no_cli_password():
     assert "--password" not in src and "--secret" not in src
     assert "write_credential" in src
     assert "CRED_TARGET_SECURITIES" in src and "CRED_TARGET_LEGACY_LOGIN_ID" in src
+
+
+def test_tick_detail_request_script_uses_single_regex_escape():
+    text = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
+    assert r"[ValidatePattern('^JNU\d{4}$')]" in text
+    assert r"[ValidatePattern('^JNU\\d{4}$')]" not in text

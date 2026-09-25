@@ -223,3 +223,24 @@ def test_packet_exposes_source_lineage_without_overriding_reference_price(tmp_pa
     assert summary["packet_freshness"] == "FRESH"
     assert summary["model_feature_gate_at_ingest"] == "ELIGIBLE"
     assert not any("probability" in key.lower() for key in summary)
+
+
+def test_latest_observations_opens_existing_store_read_only(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(tmp_path / "data"))
+    store = FeatureStore()
+    store.put_observation(_live_obs(tmp_path), as_of=ASOF)
+
+    real_connect = duckdb.connect
+    read_only_flags = []
+
+    def tracked_connect(*args, **kwargs):
+        read_only_flags.append(kwargs.get("read_only"))
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(duckdb, "connect", tracked_connect)
+    rows = store.latest_observations(
+        as_of=ASOF,
+        representation_ids=["OSE_MICRO_FUTURES"],
+    )
+    assert rows
+    assert read_only_flags == [True]
