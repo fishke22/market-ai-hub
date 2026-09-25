@@ -2,6 +2,8 @@
 
 給未來 AI Agent（ChatGPT / Codex / Claude / DeepSeek / OpenCode）重建整套系統。不假設你讀過專案歷史。
 
+可移植性目前逐格 truth 先讀 `docs/development/W7_PORTABILITY_ACCEPTANCE.yaml`。其中 `PASS` 只代表該驗收格已有證據；`UNVERIFIED_EXTERNAL_GATE`、`WAITING_TIME_WINDOW`、`IN_PROGRESS_SEPARATE_WORKSTREAM` 不得被總結成「完整移機完成」。
+
 ## STEP 1 — Clone repository
 ```bash
 git clone <repo-url> MARKET_AI_HUB

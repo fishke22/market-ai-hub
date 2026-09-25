@@ -45,6 +45,27 @@ def test_capabilities_manifest_valid():
     assert d["osaka_micro_research"]["status"] == "AVAILABLE"
 
 
+def test_w7_portability_matrix_keeps_external_gates_unverified():
+    d = yaml.safe_load(_read("docs/development/W7_PORTABILITY_ACCEPTANCE.yaml"))
+    assert d["schema"] == "W7_PORTABILITY_ACCEPTANCE_V1"
+    cells = d["cells"]
+    for name in (
+        "non_repo_cwd", "external_data_root_cjk_space",
+        "fresh_bootstrap_venv_current_windows", "source_backup_restore_different_path",
+        "scheduled_tasks_rebind_dry_run", "mcp_client_config_rebind",
+    ):
+        assert cells[name]["status"] == "PASS"
+    for name in (
+        "full_dependency_install_fresh_venv", "new_windows_clean_machine",
+        "yuanta_wincred_recreation", "yuanta_certificate_reimport",
+        "yuanta_com_registration_new_machine",
+    ):
+        assert cells[name]["status"] == "UNVERIFIED_EXTERNAL_GATE"
+    assert cells["private_research_data_consistent_restore"]["status"] == "IN_PROGRESS_SEPARATE_WORKSTREAM"
+    assert cells["c2_3_live_runtime_reverification"]["status"] == "WAITING_TIME_WINDOW"
+    assert all(cell["status"] != "COMPLETE" for cell in cells.values())
+
+
 # --- 3/4: MCP JSON ---
 def test_mcp_json_valid():
     for f in ("generic-stdio.json", "cherry-studio.json"):
