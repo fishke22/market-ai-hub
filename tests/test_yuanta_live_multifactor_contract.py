@@ -176,3 +176,20 @@ def test_start_stop_scripts_consume_owner_preflight_before_mutation():
     assert "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED" in start
     assert stop.index('classification -eq "NO_RUNNING_OWNER"') < stop.index('action = "shutdown"')
     assert "YUANTA_LIVE_NOT_RUNNING" in stop
+
+
+def test_request_scripts_require_verified_running_owner_before_queue():
+    quote = (ROOT / "scripts" / "request_yuanta_quote.ps1").read_text(encoding="utf-8")
+    tick = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
+    for text in (quote, tick):
+        assert "check_yuanta_recorder_owner.ps1" in text
+        assert text.index("$PreflightRaw") < text.index("$Inbox")
+        assert text.index("$PreflightRaw") < text.index("New-Item -ItemType Directory")
+    assert "SAFE_DEFAULT_OWNER_HEALTHY" in quote
+    assert "MAINTENANCE_OWNER_RUNNING" in quote
+    assert "YUANTA_QUOTE_REQUEST_BLOCKED_" in quote
+    assert 'classification -ne "MAINTENANCE_OWNER_RUNNING"' in tick
+    assert "-not $Preflight.runtime_measurement_gate" in tick
+    assert "$Preflight.tracked_measurement_gate" in tick
+    assert "$Preflight.runtime_build_id -ne $Preflight.disk_build_id" in tick
+    assert "YUANTA_TICK_DETAIL_REQUEST_BLOCKED_" in tick
