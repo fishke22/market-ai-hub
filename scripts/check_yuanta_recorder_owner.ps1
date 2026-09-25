@@ -72,8 +72,11 @@ if ($status -and $status.runtime_build_id -and [string]$status.runtime_build_id 
 if ($TrackedMeasurement -ne "false") { $reasons += "TRACKED_MEASUREMENT_GATE_ENABLED" }
 
 $class = "NO_RUNNING_OWNER"
-if ($status -and $ownerPid -and $byPid.ContainsKey($ownerPid)) {
+if ($matching.Count -gt 0 -and (-not $status -or -not $ownerPid -or -not $byPid.ContainsKey($ownerPid))) {
+    $class = "BLOCKED_OWNER_UNVERIFIED"
+} elseif ($status -and $ownerPid -and $byPid.ContainsKey($ownerPid)) {
     if ($independentPids.Count -gt 0) { $class = "BLOCKED_DUPLICATE_OWNER_RISK" }
+    elseif ($TrackedMeasurement -ne "false") { $class = "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED" }
     elseif ($reasons -contains "RUNTIME_BUILD_STALE") { $class = "BLOCKED_RUNTIME_BUILD_STALE" }
     elseif ($status.tick_detail_measurements_runtime_enabled) { $class = "MAINTENANCE_OWNER_RUNNING" }
     elseif ([string]$status.status -eq "RUNNING" -and -not ($reasons -contains "HEARTBEAT_STALE")) {

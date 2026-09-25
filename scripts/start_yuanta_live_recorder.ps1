@@ -5,14 +5,18 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $Base = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root; print(recorder_root())"
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve recorder data root" }
 $Status = Join-Path $Base "status.json"
-if (Test-Path $Status) {
-  try {
-    $s = Get-Content $Status -Encoding utf8 -Raw | ConvertFrom-Json
-    if ($s.status -in @("RUNNING", "DEGRADED") -and (Get-Process -Id $s.pid -ErrorAction SilentlyContinue)) {
-      Write-Host "YUANTA_LIVE_ALREADY_RUNNING pid=$($s.pid)"
-      exit 0
-    }
-  } catch {}
+$PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
+$PreflightRaw = & $PreflightScript
+if ($LASTEXITCODE -ne 0) { throw "YUANTA_LIVE_PREFLIGHT_FAILED" }
+$Preflight = ($PreflightRaw -join [Environment]::NewLine) | ConvertFrom-Json
+if ($Preflight.classification -in @("BLOCKED_DUPLICATE_OWNER_RISK", "BLOCKED_OWNER_UNVERIFIED",
+                                    "BLOCKED_RUNTIME_BUILD_STALE", "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED")) {
+  throw "YUANTA_LIVE_START_BLOCKED_$($Preflight.classification)"
+}
+if ($Preflight.classification -in @("SAFE_DEFAULT_OWNER_HEALTHY", "SAFE_DEFAULT_OWNER_DEGRADED",
+                                    "MAINTENANCE_OWNER_RUNNING")) {
+  Write-Host "YUANTA_LIVE_ALREADY_RUNNING pid=$($Preflight.status_pid) classification=$($Preflight.classification)"
+  exit 0
 }
 Set-Location $Root
 $RecorderArgs = @("-m", "market_ai_hub.integrations.yuanta.live_quote_recorder")

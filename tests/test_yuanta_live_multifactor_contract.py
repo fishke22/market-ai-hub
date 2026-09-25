@@ -153,10 +153,26 @@ def test_owner_preflight_is_read_only_parent_child_aware_and_fail_closed():
     assert "independent_matching_pids" in text
     assert "SAFE_DEFAULT_OWNER_HEALTHY" in text
     assert "BLOCKED_DUPLICATE_OWNER_RISK" in text
+    assert "BLOCKED_OWNER_UNVERIFIED" in text
     assert "BLOCKED_RUNTIME_BUILD_STALE" in text
+    assert "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED" in text
     assert "runtime_build_id" in text and "disk_build_id" in text
     assert "runtime_measurement_gate" in text
     assert "tracked_measurement_gate" in text
     assert "broker_action_performed = $false" in text
     for forbidden in ("Stop-Process", "Start-Process", "YuantaOrd", "logout(", ".login("):
         assert forbidden not in text
+
+
+def test_start_stop_scripts_consume_owner_preflight_before_mutation():
+    start = (ROOT / "scripts" / "start_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    stop = (ROOT / "scripts" / "stop_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    for text in (start, stop):
+        assert "check_yuanta_recorder_owner.ps1" in text
+        assert "BLOCKED_DUPLICATE_OWNER_RISK" in text
+        assert "BLOCKED_OWNER_UNVERIFIED" in text
+    assert start.index("$PreflightRaw") < start.index("$RecorderArgs")
+    assert "BLOCKED_RUNTIME_BUILD_STALE" in start
+    assert "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED" in start
+    assert stop.index('classification -eq "NO_RUNNING_OWNER"') < stop.index('action = "shutdown"')
+    assert "YUANTA_LIVE_NOT_RUNNING" in stop
