@@ -50,7 +50,7 @@ The W3.2 checkpoint below is historical, including its runtime build, not the la
 
 Read `research/phase3/reports/W32_PRECOMMITTED_FORWARD_CYCLE_2026-09-25.md` first, then the W3.1 governance and W2 reports. W3.2 implementation commit is `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; runtime build_id is `81f02a25847b9e65`.
 
-Historical W2 handoff recorded recorder adoption as pending. Current read-only inspection on 2026-09-25 shows the running recorder now emits `PER_FIELD_ONLY` provenance, so W1/W2 runtime adoption is present. C2 measurement adoption is separately pending because the process predates the C2 measurement/review commits through `873e6bd`. Do not use a disk build_id as evidence for an already-running process.
+Historical W2 handoff recorded recorder adoption as pending. That historical observation later became stale. The latest 2026-09-25 read-only inspection is the current truth: a current-build safe-default recorder is RUNNING with `PER_FIELD_ONLY` provenance, runtime build `afd52f88a351541a`, and tick-detail measurement runtime gate=false. C2.3 typed runtime re-verification is separately pending. Do not infer process build from disk alone; use the recorder's own `runtime_build_id`.
 
 Offline W2 reader/replay now maps trade/bid/ask independently from per-field provenance into the existing V2-A.2 `FactorRepresentationObservation`, preserves V2-H lineage/source IDs, rejects market/contract/session mismatches, out-of-order receipts, partial files and persistence/overflow truth, and never combines source time-of-day with a fabricated date. Old schema without per-field provenance is explicitly downgraded to `LEGACY_TOP_LEVEL_RECEIPT_ONLY` and cannot become DIRECT_LIVE.
 

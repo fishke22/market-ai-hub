@@ -74,7 +74,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。現場 recorder 尚未 adoption；真實 forward 樣本與 calibration fitting 也尚未成立。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder runtime adoption 已成立，且最新 current-build safe-default recorder 正在 RUNNING；但 C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 仍未成立。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -142,4 +142,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對最新 HEAD/remote/worktree/build/PR #55 CI 與 recorder count。W2/W3.1/W3.2/W3.3 engines 不要重做。下一次新的使用者 continuation在有效 OSE 15:45–17:00 JST 視窗內，用已證明的 foreground Runner Job 路徑啟動 current C2.3 build `afd52f88a351541a`，驗 fresh W1/W2 provenance + FunctionList exact JNU，再只送一筆 measurement。typed evidence 成立才 materialize DAILY close；否則 fail closed。C3/C4 仍等待真實 C1/C2 輸入。
+先核對最新 HEAD/remote/worktree/build/PR #55 CI、recorder process tree 與 `status.json`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 current-build safe-default recorder 已 RUNNING 且 measurement runtime gate=false，所以平時不要再開第二 owner。下一次新的使用者 continuation若落在有效 OSE 15:45–17:00 JST 視窗內，先安全交接/停止唯一 safe-default owner，再用已證明的 foreground Runner Job 路徑以 current C2.3 build `afd52f88a351541a` 啟動 maintenance owner，驗 fresh W1/W2 provenance + FunctionList exact JNU，再只送一筆 measurement。typed evidence 成立才 materialize DAILY close；否則 fail closed。C3/C4 仍等待真實 C1/C2 輸入。
