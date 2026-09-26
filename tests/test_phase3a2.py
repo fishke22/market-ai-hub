@@ -220,7 +220,7 @@ def test_calibration_metrics_interface_only():
     from market_ai_hub.research.price_probability_map import calibration_metrics_contract
 
     c = calibration_metrics_contract()
-    assert c["status"] == "INTERFACE_ONLY_NOT_FITTED"
+    assert c["status"] == "W4_FITTING_ENGINE_AVAILABLE_EVIDENCE_REQUIRED"
     assert "coverage_calibration" in c["metrics"]
 
 

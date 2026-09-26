@@ -76,7 +76,7 @@ _ARTIFACT_OUTCOME_KINDS = {
     "QUANTILE": {"RETURN", "TERMINAL", "CUSTOM"},
     "INTERVAL": {"RETURN", "TERMINAL", "CUSTOM"},
     "CLASS_SCORE": {"DIRECTION", "STATE", "CUSTOM"},
-    "EVENT_PROBABILITY": {"TOUCH", "BREAK", "ACCEPTANCE", "CUSTOM"},
+    "EVENT_PROBABILITY": {"TOUCH", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM"},
     "STATE": {"STATE", "CUSTOM"},
     "NOT_AVAILABLE": set(),
 }
@@ -866,7 +866,7 @@ class PredictionAuditDB:
 def v2_schema_versions() -> dict[str, str]:
     """Assemble the actual V2 schema versions (no hardcoding)."""
     from market_ai_hub.research.v2 import (
-        asof, calibration_evaluation, catalyst_response, evaluation_governance,
+        asof, calibration_evaluation, calibration_fitting, catalyst_response, evaluation_governance,
         extension_exhaustion, factor_representation, forward_cycle, gap_session, labels,
         sequential_update, session_truth, state_machine, tick_detail_source,
     )

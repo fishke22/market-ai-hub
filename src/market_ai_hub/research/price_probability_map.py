@@ -1135,6 +1135,7 @@ def calibration_metrics_contract() -> dict:
     return {
         "domain": "PRICE_DISTRIBUTION",
         "metrics": ["coverage_calibration", "pit_diagnostics", "brier_score",
-                    "log_score", "reliability_bins", "calibration_error"],
-        "status": "INTERFACE_ONLY_NOT_FITTED",
+                    "log_score", "reliability_bins", "calibration_error",
+                    "calibration_slope", "calibration_intercept", "paired_bootstrap_delta_ci"],
+        "status": "W4_FITTING_ENGINE_AVAILABLE_EVIDENCE_REQUIRED",
     }
