@@ -18,6 +18,13 @@ durable_spool:
   dir: spool
   max_bytes: 268435456
   max_records: 100000
+auto_reconnect:
+  enabled: false
+  max_attempts: 3
+  initial_delay_seconds: 5
+  max_delay_seconds: 30
+  connect_timeout_seconds: 15
+  login_timeout_seconds: 25
 storage:
   root: live/yuanta
   latest_file: latest.json

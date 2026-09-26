@@ -31,6 +31,11 @@ from market_ai_hub.integrations.yuanta.credential_store import (
 from market_ai_hub.integrations.yuanta.function_list import load_stock_code_rows
 from market_ai_hub.integrations.yuanta.resolver import function_list_path
 from market_ai_hub.integrations.yuanta.spark_runtime import SparkRuntime
+from market_ai_hub.integrations.yuanta.reconnect_lifecycle import (
+    ReconnectLifecycleError,
+    ReconnectPolicy,
+    recover_quote_runtime,
+)
 from market_ai_hub.integrations.yuanta.durable_spool import (
     DurableQuoteSpool, DurableSpoolError, canonical_bytes,
     durable_json_replace, durable_replace, sha256_hex,
@@ -828,6 +833,9 @@ def _run_locked(
     )
     runtime_build_id = _current_build_id()
     rec = cfg["recording"]
+    reconnect_policy = ReconnectPolicy.from_config(cfg.get("auto_reconnect", {}))
+    if reconnect_policy.enabled and cfg.get("tick_detail_measurements", {}).get("enabled", False):
+        raise ValueError("auto reconnect is disabled during tick-detail maintenance")
     status_path = _within(root, str(cfg["storage"].get("status_file", "status.json")))
     latest_path = _within(root, str(cfg["storage"].get("latest_file", "latest.json")))
     started_at = _utcnow()
@@ -847,6 +855,7 @@ def _run_locked(
                 "started_at": started_at.isoformat(),
                 "stopped_at": _utcnow().isoformat(),
                 "runtime_build_id": runtime_build_id,
+                "auto_reconnect_enabled": reconnect_policy.enabled,
                 "startup_stage": "SPOOL_RECOVERY",
                 "fatal_error": type(exc).__name__,
                 "crash_durability": "DURABLE_SPOOL_FAIL_CLOSED",
@@ -879,6 +888,11 @@ def _run_locked(
     revalidated_at = None
     revalidation_added: int | None = 0
     revalidation_removed: int | None = 0
+    reconnect_successes = 0
+    reconnect_attempts_total = 0
+    last_reconnect_at = None
+    last_reconnect_error = None
+    last_reconnect_retry_error = None
     startup_stage = "PRE_BROKER_READY"
     fatal_error = None
     login_msg_code = None
@@ -896,6 +910,7 @@ def _run_locked(
             "started_at": started_at.isoformat(),
             "startup_stage": stage,
             "runtime_build_id": runtime_build_id,
+            "auto_reconnect_enabled": reconnect_policy.enabled,
             "crash_durability": durability["mode"],
             "spool_pending_records": durability.get("pending_records"),
             "spool_pending_bytes": durability.get("pending_bytes"),
@@ -953,13 +968,50 @@ def _run_locked(
         while True:
             rt.pump(0.2)
             connection = rt.connection_snapshot()
-            if connection["faulted"]:
-                startup_stage = "RUNNING_CONNECTION_FAULT"
-                raise ConnectionError("SPARK connection fault")
             durability = buffer.durability_status()
             if durability.get("spool_error"):
                 startup_stage = "RUNNING_SPOOL_FAULT"
                 raise OSError("durable quote spool append/ack failed")
+            if connection["faulted"]:
+                if not reconnect_policy.enabled:
+                    startup_stage = "RUNNING_CONNECTION_FAULT"
+                    raise ConnectionError("SPARK connection fault")
+                startup_stage = "RUNNING_RECONNECT_FLUSH"
+                try:
+                    while buffer.snapshot()[1]:
+                        buffer.flush(root)
+                except Exception:
+                    startup_stage = "RUNNING_RECONNECT_PRECONDITION_FAILED"
+                    raise
+                desired_subscriptions = [
+                    (market, symbol, key)
+                    for (market, symbol), key in sorted(subscribed.items())
+                ]
+                startup_stage = "RUNNING_RECONNECT"
+                try:
+                    rt, reconnect_result = recover_quote_runtime(
+                        rt,
+                        policy=reconnect_policy,
+                        runtime_factory=SparkRuntime,
+                        account=cred.username,
+                        password_provider=lambda: read_profile_password("securities"),
+                        subscriptions=desired_subscriptions,
+                        subscribe_fn=_subscribe,
+                        quote_callback=on_quote,
+                    )
+                except ReconnectLifecycleError as exc:
+                    reconnect_attempts_total += int(getattr(exc, "attempts", 0))
+                    last_reconnect_error = getattr(exc, "last_error_type", None) or type(exc).__name__
+                    startup_stage = "RUNNING_RECONNECT_FAILED"
+                    raise
+                reconnect_successes += 1
+                reconnect_attempts_total += reconnect_result.attempts
+                login_msg_code = reconnect_result.login_msg_code
+                last_reconnect_retry_error = reconnect_result.last_error_type
+                last_reconnect_error = None
+                last_reconnect_at = _utcnow().isoformat()
+                startup_stage = "RUNNING"
+                continue
             now = time.time()
             if _dynamic_requests(
                 root, cfg, rt, cred.username, subscribed, dynamic_subscribed,
@@ -1004,7 +1056,7 @@ def _run_locked(
                     reasons.append("CONTRACT_REVALIDATION_FAILED")
                 _atomic_json(status_path, {
                     "status": "DEGRADED" if reasons else "RUNNING", "pid": os.getpid(), "provider": "SPARK_SECURITIES_PROFILE",
-                    "login_msg_code": outcome.msg_code, "subscriptions": len(subscribed),
+                    "login_msg_code": login_msg_code, "subscriptions": len(subscribed),
                     "dynamic_subscriptions": len(dynamic_subscribed),
                     "last_quote_at": last_quote, "quote_age_seconds": age,
                     "health_reasons": reasons, "pending_records": pending, "dropped_records": dropped,
@@ -1012,7 +1064,16 @@ def _run_locked(
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "connection_event_state": connection["state"],
                     "connection_event_code": connection["system_code"],
-                    "restart_policy": "MANUAL_SINGLE_OWNER",
+                    "restart_policy": (
+                        "BOUNDED_FULL_RUNTIME_REPLACEMENT" if reconnect_policy.enabled
+                        else "MANUAL_SINGLE_OWNER"
+                    ),
+                    "auto_reconnect_enabled": reconnect_policy.enabled,
+                    "reconnect_successes": reconnect_successes,
+                    "reconnect_attempts_total": reconnect_attempts_total,
+                    "last_reconnect_at": last_reconnect_at,
+                    "last_reconnect_error": last_reconnect_error,
+                    "last_reconnect_retry_error": last_reconnect_retry_error,
                     "crash_durability": durability["mode"],
                     "spool_pending_records": durability.get("pending_records"),
                     "spool_pending_bytes": durability.get("pending_bytes"),
@@ -1074,6 +1135,12 @@ def _run_locked(
             "connection_event_state": connection["state"],
             "connection_event_code": connection["system_code"],
             "connection_faulted": connection["faulted"],
+            "auto_reconnect_enabled": reconnect_policy.enabled,
+            "reconnect_successes": reconnect_successes,
+            "reconnect_attempts_total": reconnect_attempts_total,
+            "last_reconnect_at": last_reconnect_at,
+            "last_reconnect_error": last_reconnect_error,
+            "last_reconnect_retry_error": last_reconnect_retry_error,
             "crash_durability": durability["mode"],
             "spool_pending_records": durability.get("pending_records"),
             "spool_pending_bytes": durability.get("pending_bytes"),
