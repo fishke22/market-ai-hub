@@ -34,4 +34,4 @@ $temp = $p + ".partial"
   requested_at = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json | Set-Content -Path $temp -Encoding UTF8
 Move-Item -LiteralPath $temp -Destination $p
-Write-Host "YUANTA_TICK_DETAIL_MEASUREMENT_QUEUED $p"
+Write-Output "YUANTA_TICK_DETAIL_MEASUREMENT_QUEUED $p"
