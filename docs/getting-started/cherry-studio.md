@@ -82,6 +82,6 @@ MARKET_AI_HUB 是它的「外掛工具」，讓 AI 能查金融資料、跑模�
 一般使用者**不需要自己設定** System Prompt。
 
 技術使用者若想讓 AI 遵守更嚴謹的金融分析規則，推薦用精簡版：
-[`prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`](prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)（適合長期常駐）。
+目前 CherryStudio `market-ai` Agent 建議直接貼用 [`prompts/CHERRYSTUDIO_MARKET_AI_AGENT_2026-09-26.md`](../prompts/CHERRYSTUDIO_MARKET_AI_AGENT_2026-09-26.md)。完整通用規則仍可參考 [`prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`](../prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)。
 
 完整政策參考（Advanced）見 [`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)。

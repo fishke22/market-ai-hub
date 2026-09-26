@@ -61,3 +61,31 @@ def test_dataset_tiers_free():
 
     for ds in ("TaiwanStockPrice", "TaiwanStockPriceAdj", "TaiwanStockMonthRevenue"):
         assert DATASET_TIER[ds] == "FREE"
+
+
+def test_http_error_never_leaks_token(monkeypatch, caplog):
+    import logging
+    import httpx
+    import market_ai_hub.providers.finmind as fm_mod
+
+    secret = "SENSITIVE_TEST_TOKEN_123456"
+    monkeypatch.setattr(fm_mod, "get_secret", lambda n: secret)
+
+    def fake_get(*args, **kwargs):
+        logging.getLogger("httpx").info("GET https://example.test/?token=%s", secret)
+        request = httpx.Request("GET", f"https://example.test/?token={secret}")
+        response = httpx.Response(400, request=request)
+        raise httpx.HTTPStatusError(
+            f"400 Bad Request for url 'https://example.test/?token={secret}'",
+            request=request,
+            response=response,
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    caplog.set_level(logging.INFO)
+    with pytest.raises(Exception) as exc:
+        fm_mod.FinMindProvider().fetch_dataset("TaiwanStockPrice", "2330")
+
+    assert secret not in str(exc.value)
+    assert secret not in caplog.text
+    assert "HTTP 400 for dataset=TaiwanStockPrice" in str(exc.value)
