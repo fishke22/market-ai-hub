@@ -25,6 +25,14 @@ auto_reconnect:
   max_delay_seconds: 30
   connect_timeout_seconds: 15
   login_timeout_seconds: 25
+jnu_microstructure:
+  enabled: true
+  market_no: 207
+  code_prefix: JNU
+  max_contracts: 2
+  stock_tick: true
+  five_tick: true
+  fail_soft: true
 storage:
   root: live/yuanta
   latest_file: latest.json

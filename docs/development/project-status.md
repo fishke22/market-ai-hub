@@ -1,25 +1,25 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W1 BOUNDED_RECONNECT OFFLINE_PASS / STACKED_INTEGRATION_PENDING / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
+- Current phase: **W1 RECONNECT+JNU MERGED_OFFLINE_PASS / PR56_CI_PENDING / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**4bf516de97b2a9c9**（reconnect-only isolated fingerprint；不含 concurrent JNU workstream，也不代表 live runtime adoption）
+- build_id：**1037d45ff8e65884**（reconnect + JNU merged source/config fingerprint；OFFLINE PASS，不代表 live runtime adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix and 2026-09-25 controlled evidence remain historical capability evidence. After the latest 2026-09-26 W1 durable-spool source/config change, read-only owner preflight shows one existing invocation chain `[31808,32120]`, no independent duplicate, fresh heartbeat, status `DEGRADED`, runtime build `afd52f88a351541a` versus disk build `b7c1f3d08a383d65`, both measurement gates=false, and `BLOCKED_RUNTIME_BUILD_STALE`. **Do not start a second owner; durable-spool live adoption, C2.3 typed runtime re-verification and runtime adoption are still pending.**
+- Live quote capability：historical 2026-09-24/25 evidence remains capability evidence. Latest read-only preflight observed `NO_RUNNING_OWNER`, status `STOPPED`, no matching Python owner, broker_action_performed=false. Reconnect+JNU merged branch is offline-verified only; tracked measurement gate=false and tracked auto reconnect=false. **Do not infer start authorization from NO_RUNNING_OWNER.**
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
 
 ## 2026-09-26 W1 bounded quote reconnect lifecycle
 
-- Implementation commit `feeefe3`; branch `codex/w1-reconnect-lifecycle`; isolated build `4bf516de97b2a9c9`; stacked PR #56 OPEN; latest-head CI pending.
+- Isolated reconnect commit `feeefe3`; merged with JNU base `23504cf`; merged build `1037d45ff8e65884`; stacked PR #56 OPEN; latest-head CI pending.
 - No hidden reconnect API is assumed. Recovery is bounded full-runtime replacement: durable flush -> local retire -> fresh Open -> official Connect -> Login result -> full quote re-subscribe.
 - Cleanup/re-subscribe failure fails closed; retry/backoff is bounded. Tick-detail maintenance and auto reconnect are mutually exclusive.
-- Tracked `auto_reconnect.enabled=false`; OFFLINE PASS != LIVE ADOPTION.
-- Validation: focused `26 passed, 21 deselected`; related `147 passed, 2 deselected`; full offline `1915 passed, 7 skipped, 35 deselected, 110 warnings in 79.84s`; diff check PASS; secret scan 0.
-- Main worktree concurrently contains JNU microstructure changes on overlapping files. Read-only preflight observed `NO_RUNNING_OWNER`; this is not start authorization.
-- Next: merge/reconcile only after the JNU workstream has an owned commit, then rerun merged regressions. Live enablement is separate.
+- Tracked `auto_reconnect.enabled=false`; JNU microstructure capture remains enabled per its own config. OFFLINE PASS != LIVE ADOPTION.
+- Merged validation: focused `29 passed, 21 deselected`; related `150 passed, 2 deselected`; full offline `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`, exit 0.
+- Base PR #55 CI run `36229125508` failed only three stale build-freeze assertions (actual base build `44de914d7d625eb5` vs old expected `b7c1f3d08a383d65`). The merged branch updates frozen assertions to its observed build `1037d45ff8e65884`.
+- Next: wait for PR #56 latest-head CI/review. Live enablement/restart is separate and still requires explicit authorization.
 
 ## 2026-09-26 W1 durable crash spool/WAL
 

@@ -66,9 +66,11 @@ def policy(**overrides):
     return ReconnectPolicy.from_config(values)
 
 
-def test_policy_is_disabled_by_tracked_config():
+def test_policy_is_disabled_for_quote_only_automation():
     cfg = yaml.safe_load((Path(__file__).resolve().parents[1] / "config/yuanta_live_recorder.yaml").read_text(encoding="utf-8"))
     assert cfg["auto_reconnect"]["enabled"] is False
+    assert cfg["recording"]["secret_backend"] == "WINDOWS_CREDENTIAL_MANAGER_ONLY"
+    assert cfg["mode"] == "QUOTE_ONLY_PERSISTENT"
 
 
 def test_policy_validation_and_bounded_backoff():

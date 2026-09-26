@@ -1,24 +1,24 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 bounded reconnect lifecycle OFFLINE PASS on a stacked branch; live adoption and integration with the concurrent JNU workstream remain pending.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 reconnect + JNU merge OFFLINE PASS; PR #56 latest-head CI and live adoption remain pending.
 
 ## Current repair checkpoint
 
 ### 2026-09-26 W1 bounded quote reconnect lifecycle
 
-Implementation commit `feeefe3`; isolated source/config build=`4bf516de97b2a9c9`; branch=`codex/w1-reconnect-lifecycle`, stacked from published PR #55 head `b7bcf98` because the main worktree has concurrent JNU microstructure changes in the same recorder/config files. Publication: stacked PR #56 OPEN; latest-head CI pending.
+Isolated implementation commit `feeefe3`; merged with JNU base commit `23504cf`; merged source/config build=`1037d45ff8e65884`. Stacked PR #56 is OPEN; latest-head CI pending.
 
 Installed/public SDK evidence exposes `Open`, `Close`, `Dispose`, `Login`, `LogOut` and OnResponse connection states, but no separate `Reconnect()` method. Recovery therefore uses bounded full-runtime replacement: flush durable-spool pending data, locally retire the faulted runtime, create a fresh runtime, wait for official Connect, obtain a fresh WinCred password, wait for Login OnResponse success, then restore the complete desired quote subscription union. Close/Dispose failure blocks another runtime; failed candidates and re-subscribe failures consume bounded retries and fail closed.
 
-Tracked `auto_reconnect.enabled=false` remains the safe default, and tick-detail maintenance refuses auto reconnect. Validation on the reconnect-only isolated worktree: focused=`26 passed, 21 deselected`; related Yuanta/W1/W2/C2=`147 passed, 2 deselected`; full offline=`1915 passed, 7 skipped, 35 deselected, 110 warnings in 79.84s`, exit 0; diff check PASS; changed/untracked secret scan=0. No broker action was performed.
+Tracked `auto_reconnect.enabled=false` remains the safe default. JNU microstructure capture is preserved after merge; tick-detail maintenance still refuses auto reconnect. OFFLINE PASS != LIVE ADOPTION.
 
-Read-only main-worktree preflight at publication time observed `NO_RUNNING_OWNER`, status=`STOPPED`, no matching owner process, broker_action_performed=false. That is not authorization to start a recorder. The concurrent JNU workstream remains separate and must not be folded into this commit.
+Read-only main-worktree preflight observed `NO_RUNNING_OWNER`, status=`STOPPED`, no matching owner process, broker_action_performed=false. That is not authorization to start a recorder. Base PR #55 CI run `36229125508` failed only the three stale frozen-build assertions; this merged branch updates them to `1037d45ff8e65884`.
 
 
 ### 2026-09-26 W1 durable crash spool/WAL
 
-Implementation commit `e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`; source/config build=`b7c1f3d08a383d65`. Tracked recorder config now enables a bounded durable spool (`100000` records / `256 MiB`). Each accepted callback is first serialized to a checksummed per-record WAL file, flushed and fsynced, then atomically published; append failure does not advance `latest` and latches a spool error. Restart validates ack checksum, record checksum, contiguous sequence, partial/final conflicts and quota before credentials/runtime construction. Corruption blocks at `SPOOL_RECOVERY` before WinCred or broker access.
+Isolated implementation commit `feeefe3`; merged with JNU base commit `23504cf`; merged source/config build=`1037d45ff8e65884`. Stacked PR #56 is OPEN; latest-head CI pending.
 
 Flush uses deterministic WAL batch IDs and embeds `_wal_seq` + `_wal_record_sha256` in Parquet. A COMMITTED manifest binds record count/input hash/parquet hash; W2 replay rejects durable Parquet without a valid committed manifest. If a crash leaves Parquet before manifest/ack, restart rewrites the same deterministic path from WAL and then commits the manifest, preventing a second batch file. Ack is an atomic checksummed oldest-prefix watermark; valid-looking tampering fails closed. Windows sharing violations on atomic replace use a bounded five-attempt retry, never an unbounded loop.
 
@@ -231,7 +231,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-Reconcile stacked `codex/w1-reconnect-lifecycle` with the concurrent JNU workstream only after that workstream has an owned commit, then rerun merged regressions. Live enablement remains a separate authorized single-owner handover; tracked auto reconnect stays disabled until then.
+Wait for PR #56 latest-head CI/review. Do not enable tracked auto reconnect or start/restart a live owner without explicit authorization; `NO_RUNNING_OWNER` is not start authorization.
 
 ## Truthfulness rules
 

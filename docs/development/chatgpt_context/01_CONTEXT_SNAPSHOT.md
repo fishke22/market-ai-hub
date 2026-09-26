@@ -14,24 +14,24 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 #### reconnect-only stacked checkpoint
 
-Reconnect package commit=`feeefe3`, branch=`codex/w1-reconnect-lifecycle`, isolated build=`4bf516de97b2a9c9`, based on published PR #55 head `b7bcf98`. Publication: stacked PR #56 OPEN; latest-head CI pending. Main worktree has concurrent JNU microstructure edits in the same recorder/config files, so this package was rebuilt and validated in an isolated worktree rather than mixing ownership.
+Reconnect implementation commit=`feeefe3`; merged with JNU base commit=`23504cf` on branch=`codex/w1-reconnect-lifecycle`; merged source/config build=`1037d45ff8e65884`. Stacked PR #56 OPEN; latest-head CI pending.
 
-Reconnect uses bounded full-runtime replacement only: durable pending flush -> retire faulted runtime -> fresh Open -> official Connect -> fresh WinCred password -> Login OnResponse -> complete quote re-subscribe. No hidden `Reconnect()` API is assumed. Tracked `auto_reconnect.enabled=false`; tick-detail maintenance refuses auto reconnect.
+Merged recorder keeps JNU microstructure capture and bounded reconnect together. Reconnect remains full-runtime replacement only: durable pending flush -> local retire -> fresh Open -> official Connect -> fresh WinCred password -> Login OnResponse -> complete quote re-subscribe, then JNU microstructure subscriptions are restored. No hidden `Reconnect()` API is assumed. Tracked `auto_reconnect.enabled=false`.
 
-Validation: focused=`26 passed, 21 deselected`; related=`147 passed, 2 deselected`; full offline=`1915 passed, 7 skipped, 35 deselected, 110 warnings in 79.84s`, exit 0; diff check PASS; secret scan 0. Read-only main-worktree preflight observed `NO_RUNNING_OWNER`/`STOPPED` with no broker action; that is not start authorization.
+Merged validation: focused reconnect+JNU=`29 passed, 21 deselected`; related=`150 passed, 2 deselected`; full offline=`1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`, exit 0. Read-only main-worktree preflight observed `NO_RUNNING_OWNER`/`STOPPED` with no broker action; that is not start authorization.
 
 
-實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。最新 W1 durable crash spool/WAL implementation commit=`e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`，目前 source/config build=`b7c1f3d08a383d65`；前一個 connection-event fail-closed implementation commit=`223ddd88e3a308a21c95176992001041d1eefeb0`。
+實際 repo=`D:\MARKET_AI_HUB`；base branch 最新 owned commit=`23504cf`（JNU capture），stacked reconnect branch 已完成衝突整合。merged build=`1037d45ff8e65884`；PR #56 CI 尚待最新 head 驗收。
 
-最新核心修正：tracked config 啟用 bounded durable spool（100000 records / 256 MiB）。callback 只有在 checksummed WAL record 寫入、flush+fsync 並 atomic publish 後才算 accepted；append failure 不更新 latest 並鎖存 spool error。restart 在 credentials/runtime 之前驗 ack checksum、record checksum、連續序號、partial/final conflict 與 quota，corruption 直接 `SPOOL_RECOVERY` fail closed。Parquet 使用 deterministic WAL batch id、`_wal_seq`/record hash 與 COMMITTED manifest；W2 replay 缺/壞 manifest 即拒讀，publish-before-ack crash 由 WAL 覆寫同一路徑後再 commit，不產第二批。**這是 offline disk correctness，現有 live owner 尚未 adoption。**
+最新核心修正：durable spool/WAL、connection fail-closed、venue-local contract revalidation、JNU microstructure capture 與 bounded reconnect 已在 merged offline profile 共存。auto reconnect 實作存在但 tracked default=false；live restart/re-login 尚未 adoption。
 
-前兩包仍有效：SPARK connection-event gate 只接受 official Connect，2/3/4/5 fault fail closed；contract revalidation 每 300 秒以 venue-local date 重新解析月份/expiry，failure 下一 interval retry。auto reconnect/re-login/resubscribe 仍未實作或宣稱。
+前置保護仍有效：official Connect gate、2/3/4/5 fault semantics、300 秒 venue-local contract revalidation、durable spool/WAL 與 quote-only/order guard。JNU capture 與 reconnect 合併後 regression 已通過。
 
 API signature 查核：bundled vendor `YSendOrder.py` 的 WatchlistAll sample 省略第三參數；本機 `2.2026.0918.0` DLL reflection 顯示第三個 `Lng` 是 optional、default=`NORMAL`，因此 recorder 保留既有 explicit `enumLangType.UTF8`。subscribe/unsubscribe 共用 0.2 秒 throttle。這個查核只載入本機 assembly，沒有 instantiate/login/broker call。
 
-最新驗證：durable/reader focused=`21 passed, 40 deselected`；related Yuanta/W1/W2/C2=`138 passed, 2 deselected`；final isolated offline=`1912 passed, 1 skipped, 35 deselected, 110 warnings in 115.04s`，exit 0；compile PASS；diff check PASS（只有 line-ending warnings）；changed-file secret scan=0。build-freeze assertions 只在觀測 fingerprint=`b7c1f3d08a383d65` 後更新，沒有刪 gate。
+最新 merged 驗證：focused=`29 passed, 21 deselected`；related=`150 passed, 2 deselected`；full offline=`1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`，exit 0；merged fingerprint=`1037d45ff8e65884`。
 
-目前 recorder **尚未 adoption 新 build**。read-only preflight=`BLOCKED_RUNTIME_BUILD_STALE`：同一 invocation chain `[31808,32120]`、無 independent duplicate、heartbeat fresh、status=`DEGRADED`、runtime build=`afd52f88a351541a`、disk build=`b7c1f3d08a383d65`、runtime/tracked measurement gate=false、broker_action_performed=false。不要因 disk/runtime 不一致就啟第二 owner或直接重啟。disk/source 已有 durable spool，但 live owner 仍是舊 build，因此 live crash durability 仍是舊行為；auto reconnect 也仍未實作/驗證。
+目前 live adoption **仍未成立**。最新 read-only preflight=`NO_RUNNING_OWNER`、status=`STOPPED`、matching owner=0、broker_action_performed=false；這不是啟動授權。tracked auto reconnect=false，若要 live enable/restart 必須另有明確授權。
 
 可信度邊界不變：`ENGINE PASS != DATA READY != CALIBRATED != PREDICTIVE EVIDENCE != TRADING EDGE`；actual C2.3 typed runtime verification、eligible real DAILY close、W3.2 actual forward evidence仍未成立。
 
@@ -182,4 +182,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 stacked reconnect branch remote/CI、主 worktree dirty ownership與 JNU workstream owned commit。不要把 concurrent JNU 變更納入 reconnect commit，也不要 reset/stash/clean。Reconnect isolated OFFLINE PASS，tracked default disabled；下一工作包是 JNU workstream commit 後的 merge/conflict review 與 merged regression。Live enablement仍需另行受控 single-owner handover；`NO_RUNNING_OWNER` 本身不是啟動授權。
+先核對 PR #56 最新 head/CI 與 base PR #55 狀態。merged reconnect+JNU offline 已 PASS，下一步不是再改架構，而是通過 CI 後做 review；tracked auto reconnect 保持 disabled。任何 live enable/restart/re-login 仍需另行明確授權，`NO_RUNNING_OWNER` 不等於可自行啟動。

@@ -54,6 +54,7 @@ _QUOTE_FIELDS = (
     "OrderSellQty", "DealBuyCount", "DealSellCount", "Volatility", "TimeDiff",
     "PrincipalPercent", "UpDownDay", "BidQty", "AskQty", "PriceTrends",
     "EstDealPrice", "EstDealVol", "EstDealVolFlag",
+    "SerialNo", "DealVol", "InOutFlag", "Type",
 )
 
 
@@ -312,6 +313,54 @@ def _extract_payload(obj: Any, callback_type: str) -> dict | None:
                 x = getattr(flag29, name, None)
                 if x is not None:
                     out[name.lower()] = _scalar(x)
+
+        if callback_type == "SubscribeStockTick":
+            t = getattr(obj, "Time", None)
+            if t is not None:
+                out["source_time_of_day"] = "%02d:%02d:%02d.%03d" % (
+                    int(getattr(t, "bytHour", 0) or 0),
+                    int(getattr(t, "bytMin", 0) or 0),
+                    int(getattr(t, "bytSec", 0) or 0),
+                    int(getattr(t, "ushtMSec", 0) or 0),
+                )
+                out["timestamp_quality"] = "SOURCE_TIME_OF_DAY_ONLY"
+            for name in ("SerialNo", "BuyPrice", "SellPrice", "DealPrice", "DealVol", "InOutFlag", "Type"):
+                x = getattr(obj, name, None)
+                if x is not None:
+                    out[name] = _scalar(x)
+            out["microstructure_kind"] = "TRADE_TICK"
+
+        if callback_type == "SubscribeFiveTickA":
+            flag = int(getattr(obj, "IndexFlag", -1))
+            out["microstructure_kind"] = "DEPTH"
+            out["depth_index_flag"] = flag
+            if flag in (50, 51):
+                nested = getattr(obj, f"IndexFlag_{flag}", None)
+                level_offset = 0 if flag == 50 else 5
+                if nested is not None:
+                    for i in range(1, 6):
+                        level = level_offset + i
+                        for side, pfx in (("bid", "Buy"), ("ask", "Sell")):
+                            price = getattr(nested, f"{pfx}Price{i}", None)
+                            vol = getattr(nested, f"{pfx}Vol{i}", None)
+                            if price is not None:
+                                out[f"{side}_price_{level}"] = _scalar(price)
+                            if vol is not None:
+                                out[f"{side}_size_{level}"] = _scalar(vol)
+            elif flag in (20, 21, 42, 43):
+                nested = getattr(obj, f"IndexFlag_{flag}", None)
+                side = "bid" if flag in (20, 42) else "ask"
+                level_offset = 0 if flag in (20, 21) else 5
+                if nested is not None:
+                    for i in range(1, 6):
+                        level = level_offset + i
+                        price = getattr(nested, f"Price{i}", None)
+                        vol = getattr(nested, f"Vol{i}", None)
+                        if price is not None:
+                            out[f"{side}_price_{level}"] = _scalar(price)
+                        if vol is not None:
+                            out[f"{side}_size_{level}"] = _scalar(vol)
+
         out.setdefault("timestamp_quality", "LOCAL_RECEIVE_TIME_ONLY")
         return out
     except Exception:
@@ -433,6 +482,112 @@ def _subscribe(rt: SparkRuntime, account: str, pairs: list[tuple[int, str, str]]
         # Bundled vendor sample omits optional Lng; installed DLL also accepts explicit UTF8.
         rt._api.SubscribeWatchlistAll(account, items, enumLangType.UTF8)
         rt._last_subscription_at = time.monotonic()
+
+
+def _jnu_microstructure_pairs(cfg: dict, pairs: list[tuple[int, str, str]]) -> list[tuple[int, str, str]]:
+    mc = cfg.get("jnu_microstructure", {})
+    if not mc.get("enabled", False):
+        return []
+    market_no = int(mc.get("market_no", 207))
+    prefix = str(mc.get("code_prefix", "JNU")).upper()
+    limit = max(1, min(int(mc.get("max_contracts", 2)), 8))
+    selected = [
+        (m, code, key)
+        for m, code, key in pairs
+        if int(m) == market_no and str(code).upper().startswith(prefix)
+        and _JNU_CONTRACT_RE.fullmatch(str(code).upper())
+    ]
+    return selected[:limit]
+
+
+def _subscribe_jnu_microstructure(
+    rt: SparkRuntime,
+    account: str,
+    pairs: list[tuple[int, str, str]],
+    cfg: dict,
+) -> dict:
+    """Best-effort quote-only JNU StockTick/FiveTick subscriptions on the existing owner."""
+    mc = cfg.get("jnu_microstructure", {})
+    selected = _jnu_microstructure_pairs(cfg, pairs)
+    result = {
+        "enabled": bool(mc.get("enabled", False)),
+        "contracts": [code for _, code, _ in selected],
+        "stock_tick_requested": 0,
+        "five_tick_requested": 0,
+        "stock_tick_error": None,
+        "five_tick_error": None,
+    }
+    if not selected:
+        return result
+    from System.Collections.Generic import List as NetList
+    from YuantaOneAPI import FiveTickA, StockTick, enumLangType, enumMarketType
+
+    if mc.get("stock_tick", True):
+        items = NetList[StockTick]()
+        for market, code, _ in selected:
+            item = StockTick()
+            item.MarketType = enumMarketType(market)
+            item.StockCode = code
+            items.Add(item)
+        try:
+            rt._api.SubscribeStockTick(account, items, enumLangType.UTF8)
+            result["stock_tick_requested"] = len(selected)
+        except Exception as exc:
+            result["stock_tick_error"] = type(exc).__name__
+            if not mc.get("fail_soft", True):
+                raise
+
+    if mc.get("five_tick", True):
+        items = NetList[FiveTickA]()
+        for market, code, _ in selected:
+            item = FiveTickA()
+            item.MarketType = enumMarketType(market)
+            item.StockCode = code
+            items.Add(item)
+        try:
+            rt._api.SubscribeFiveTickA(account, items, enumLangType.UTF8)
+            result["five_tick_requested"] = len(selected)
+        except Exception as exc:
+            result["five_tick_error"] = type(exc).__name__
+            if not mc.get("fail_soft", True):
+                raise
+    return result
+
+
+def _unsubscribe_jnu_microstructure(
+    rt: SparkRuntime,
+    account: str,
+    pairs: list[tuple[int, str, str]],
+    cfg: dict,
+) -> None:
+    selected = _jnu_microstructure_pairs(cfg, pairs)
+    if not selected:
+        return
+    from System.Collections.Generic import List as NetList
+    from YuantaOneAPI import FiveTickA, StockTick, enumLangType, enumMarketType
+    mc = cfg.get("jnu_microstructure", {})
+    if mc.get("stock_tick", True):
+        try:
+            items = NetList[StockTick]()
+            for market, code, _ in selected:
+                item = StockTick()
+                item.MarketType = enumMarketType(market)
+                item.StockCode = code
+                items.Add(item)
+            rt._api.UnSubscribeStockTick(account, items, enumLangType.UTF8)
+        except Exception:
+            pass
+    if mc.get("five_tick", True):
+        try:
+            items = NetList[FiveTickA]()
+            for market, code, _ in selected:
+                item = FiveTickA()
+                item.MarketType = enumMarketType(market)
+                item.StockCode = code
+                items.Add(item)
+            rt._api.UnSubscribeFiveTickA(account, items, enumLangType.UTF8)
+        except Exception:
+            pass
 
 
 def _unsubscribe(rt: SparkRuntime, account: str, pairs: list[tuple[int, str, str]]) -> None:
@@ -893,6 +1048,16 @@ def _run_locked(
     last_reconnect_at = None
     last_reconnect_error = None
     last_reconnect_retry_error = None
+    microstructure_subscription = {
+        "enabled": bool(cfg.get("jnu_microstructure", {}).get("enabled", False)),
+        "contracts": [],
+        "stock_tick_requested": 0,
+        "five_tick_requested": 0,
+        "stock_tick_error": None,
+        "five_tick_error": None,
+    }
+    microstructure_callbacks = {"stock_tick": 0, "five_tick": 0}
+    microstructure_pairs: list[tuple[int, str, str]] = []
     startup_stage = "PRE_BROKER_READY"
     fatal_error = None
     login_msg_code = None
@@ -910,8 +1075,8 @@ def _run_locked(
             "started_at": started_at.isoformat(),
             "startup_stage": stage,
             "runtime_build_id": runtime_build_id,
-            "auto_reconnect_enabled": reconnect_policy.enabled,
             "crash_durability": durability["mode"],
+            "auto_reconnect_enabled": reconnect_policy.enabled,
             "spool_pending_records": durability.get("pending_records"),
             "spool_pending_bytes": durability.get("pending_bytes"),
             "spool_acked_seq": durability.get("acked_seq"),
@@ -950,7 +1115,8 @@ def _run_locked(
         if not outcome.received or outcome.msg_code not in ("0001", "00001"):
             raise RuntimeError(f"SPARK login failed: {outcome.msg_code}")
         def on_quote(_mark, str_index, obj):
-            payload = _extract_payload(obj, str(str_index))
+            callback_type = str(str_index)
+            payload = _extract_payload(obj, callback_type)
             if payload is None:
                 return
             key = (payload["market_no"], payload["instrument_code"])
@@ -958,12 +1124,20 @@ def _run_locked(
             if subscription_key is None:
                 return
             payload["subscription_key"] = subscription_key
+            if callback_type == "SubscribeStockTick":
+                microstructure_callbacks["stock_tick"] += 1
+            elif callback_type == "SubscribeFiveTickA":
+                microstructure_callbacks["five_tick"] += 1
             buffer.append(payload)
 
         rt.on_quote_callback = on_quote
         startup_stage = "SUBSCRIBE"
         write_startup_status(startup_stage)
         _subscribe(rt, cred.username, defaults)
+        microstructure_pairs = _jnu_microstructure_pairs(cfg, defaults)
+        microstructure_subscription = _subscribe_jnu_microstructure(
+            rt, cred.username, defaults, cfg
+        )
         startup_stage = "RUNNING"
         while True:
             rt.pump(0.2)
@@ -1010,6 +1184,9 @@ def _run_locked(
                 last_reconnect_retry_error = reconnect_result.last_error_type
                 last_reconnect_error = None
                 last_reconnect_at = _utcnow().isoformat()
+                microstructure_subscription = _subscribe_jnu_microstructure(
+                    rt, cred.username, desired_subscriptions, cfg
+                )
                 startup_stage = "RUNNING"
                 continue
             now = time.time()
@@ -1032,6 +1209,22 @@ def _run_locked(
                     revalidated_at = _utcnow().isoformat()
                     revalidation_added = int(refresh["added"])
                     revalidation_removed = int(refresh["removed"])
+                    if revalidation_added or revalidation_removed:
+                        refreshed_defaults = [
+                            (market, symbol, key)
+                            for (market, symbol), key in sorted(default_subscribed.items())
+                        ]
+                        new_micro_pairs = _jnu_microstructure_pairs(cfg, refreshed_defaults)
+                        old_ids = {(m, s) for m, s, _ in microstructure_pairs}
+                        new_ids = {(m, s) for m, s, _ in new_micro_pairs}
+                        if old_ids != new_ids:
+                            _unsubscribe_jnu_microstructure(
+                                rt, cred.username, microstructure_pairs, cfg
+                            )
+                            microstructure_pairs = new_micro_pairs
+                            microstructure_subscription = _subscribe_jnu_microstructure(
+                                rt, cred.username, refreshed_defaults, cfg
+                            )
                 except Exception as exc:
                     revalidation_error = type(exc).__name__
                     revalidation_added = None
@@ -1089,6 +1282,11 @@ def _run_locked(
                     "startup_stage": startup_stage,
                     "tick_detail_measurements_runtime_enabled": bool(
                         cfg.get("tick_detail_measurements", {}).get("enabled", False)
+                    ),
+                    "jnu_microstructure_subscription": microstructure_subscription,
+                    "jnu_microstructure_callbacks": dict(microstructure_callbacks),
+                    "jnu_microstructure_live_verified": bool(
+                        microstructure_callbacks["stock_tick"] or microstructure_callbacks["five_tick"]
                     ),
                     "heartbeat_at": _utcnow().isoformat(), "runtime_build_id": runtime_build_id,
                 })
@@ -1148,6 +1346,11 @@ def _run_locked(
             "spool_error": durability.get("spool_error"),
             "tick_detail_measurements_runtime_enabled": bool(
                 cfg.get("tick_detail_measurements", {}).get("enabled", False)
+            ),
+            "jnu_microstructure_subscription": microstructure_subscription,
+            "jnu_microstructure_callbacks": dict(microstructure_callbacks),
+            "jnu_microstructure_live_verified": bool(
+                microstructure_callbacks["stock_tick"] or microstructure_callbacks["five_tick"]
             ),
             "pending_records": buffer.snapshot()[1], "dropped_records": buffer.snapshot()[2],
             "persistence_error": write_error,

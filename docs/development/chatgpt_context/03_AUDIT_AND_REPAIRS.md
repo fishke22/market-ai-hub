@@ -89,12 +89,12 @@
 
 ## 2026-09-26 W1 bounded reconnect checkpoint
 
-Reconnect-only stacked branch `codex/w1-reconnect-lifecycle`, commit `feeefe3`, isolated build `4bf516de97b2a9c9` is OFFLINE PASS; stacked PR #56 is OPEN and latest-head CI is pending. It uses bounded full-runtime replacement, not a guessed hidden reconnect API. Tracked auto reconnect remains disabled; live adoption and integration with the concurrent JNU workstream are pending. Main-worktree read-only preflight observed `NO_RUNNING_OWNER`, which is not start authorization.
+Reconnect branch `codex/w1-reconnect-lifecycle` has been reconciled with JNU base commit `23504cf`; merged build=`1037d45ff8e65884`. Merged OFFLINE PASS: focused `29 passed, 21 deselected`, related `150 passed, 2 deselected`, full `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`. PR #56 OPEN; latest-head CI pending. Tracked auto reconnect remains disabled; live adoption is not established.
 
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
-2. session/contract runtime revalidation、SPARK connection-fault detection 與 bounded durable spool/WAL 都已在 2026-09-26 完成 disk/offline correctness。新 WAL 為 fsync-before-accept、checksummed contiguous replay、atomic ack watermark、deterministic Parquet batch + COMMITTED manifest，corruption 在 credentials/runtime 前 fail closed。**仍未完成的是 live runtime adoption、自動 reconnect/re-login/resubscribe與授權拒絕後完整生命週期。** 現有 live owner 仍跑舊 build，所以不能把 offline durable spool 說成目前 live 已零丟失，也不能把 connection detection 說成 auto reconnect。
+2. session/contract revalidation、SPARK connection-fault detection、durable spool/WAL、JNU microstructure capture 與 bounded full-runtime reconnect 已完成 merged offline correctness。Reconnect 不假設 hidden API，且 tracked default=false。**仍未完成的是 live runtime adoption / restart-relogin authorization / C2.3 runtime re-verification。** `NO_RUNNING_OWNER` 不是啟動授權。
 3. recorder→V2-A.2→V2-H→Feature Store→packet→model-input boundary 已完成離線契約；但 broker TICK 仍不相容現有 1d models，沒有 validated bar aggregation，所以 DATA READY / broker-driven inference 仍不成立。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。
 4. W3.1 governance 與 W3.2 precommit/settlement engine 已補足；**但 dedicated contract DAILY/PIT-safe input 尚未有真實來源，故 precommitted forward predictions/outcomes 尚未自然累積成證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
 5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。下一資料工作包是 dedicated contract DAILY terminal-close feature；不可把 2026-09-01 截止的 continuous bars 或 TICK 直接升格。ENGINE PASS ≠ DATA READY ≠ CALIBRATED ≠ EDGE。
@@ -106,4 +106,4 @@ Reconnect-only stacked branch `codex/w1-reconnect-lifecycle`, commit `feeefe3`, 
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對 stacked reconnect branch remote/CI、主 worktree dirty ownership與 JNU workstream commit。Reconnect isolated OFFLINE PASS；先等 overlapping JNU workstream 有 owned commit，再做 merge/conflict review 與 merged regression。tracked auto reconnect 保持 disabled；live adoption 仍需另行受控 single-owner handover，`NO_RUNNING_OWNER` 不是啟動授權。
+下一棒先核對 PR #56 最新 head/CI 與 PR #55 base 狀態。merged offline 已 PASS；若 CI 綠燈，工作包進入 review/publish-ready。tracked auto reconnect 維持 disabled，live enable/restart/re-login 仍需另行明確授權。
