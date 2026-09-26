@@ -726,7 +726,55 @@ def get_forward_test_status() -> dict:
 
     reg = PredictionRegistry()
     summary = reg.forward_summary()
-    summary["note"] = "forward paper 累積中；forward_evidence_n = settled model forecasts（非 registered/pending）"
+
+    # W3.2/W4 audit-side evidence is intentionally separate from the older paper registry.
+    # Expose counts only; raw uncalibrated probability values are never published here.
+    event_registered = 0
+    event_settled = 0
+    event_pending = 0
+    try:
+        from market_ai_hub.research.v2 import forward_cycle as FC
+        from market_ai_hub.research.v2 import prediction_audit as PA
+        audit_path = PA.default_audit_db_path()
+        if audit_path.exists():
+            audit = PA.PredictionAuditDB(audit_path, read_only=True)
+            for pid in audit.list_prediction_ids():
+                pred = audit.get_prediction(pid)
+                if pred is None or not FC._event_scope_match(pred):
+                    continue
+                event_registered += 1
+                arts = [
+                    a for a in audit.get_forecast_artifacts(pid)
+                    if a.artifact_type == FC.EVENT_ARTIFACT_TYPE
+                    and a.event_definition_id == FC.EVENT_DEFINITION_ID
+                ]
+                settled = bool(arts) and any(
+                    o.forecast_artifact_id == arts[0].forecast_artifact_id
+                    for o in audit.get_outcomes(pid)
+                )
+                if settled:
+                    event_settled += 1
+                else:
+                    event_pending += 1
+    except Exception as exc:
+        summary["w32_event_probability_status"] = "AUDIT_STATUS_UNAVAILABLE_" + type(exc).__name__
+    else:
+        summary["w32_event_probability_status"] = "ACCUMULATING" if event_registered else "NONE_YET"
+
+    summary.update({
+        "w32_event_probability_registered": event_registered,
+        "w32_event_probability_settled": event_settled,
+        "w32_event_probability_pending": event_pending,
+        "w32_event_probability_model": "beta_bernoulli_terminal_above_source_close",
+        "w32_event_probability_public_calibrated": False,
+        "w4_minimum_partition_samples": 50,
+        "w4_minimum_sequential_samples_before_fit_validation_final_oos": 150,
+        "w4_sample_count_is_not_acceptance": True,
+    })
+    summary["note"] = (
+        "forward paper 累積中；forward_evidence_n = settled model forecasts（非 registered/pending）；"
+        "W3.2 raw EVENT_PROBABILITY audit samples separately accumulate for W4 and remain UNCALIBRATED"
+    )
     return summary
 
 

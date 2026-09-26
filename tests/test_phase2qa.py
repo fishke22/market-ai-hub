@@ -313,3 +313,42 @@ def test_perf_trace_disabled_by_default():
     from market_ai_hub.services.perf_trace import enabled
 
     assert enabled() is False
+
+
+def test_forward_status_exposes_w32_raw_event_accumulation(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    from market_ai_hub.mcp import server
+    from market_ai_hub.research.v2 import forward_cycle as FC
+    from market_ai_hub.research.v2 import prediction_audit as PA
+
+    path = tmp_path / "prediction_audit.duckdb"
+    db = PA.PredictionAuditDB(path)
+    monkeypatch.setattr(PA, "default_audit_db_path", lambda: path)
+    monkeypatch.setattr(
+        FC, "_now_utc",
+        lambda: datetime(2026, 9, 24, 7, 0, tzinfo=timezone.utc),
+    )
+    snap = FC.OsakaForwardInput(
+        trading_date="2026-09-24",
+        close=42000.0,
+        session_close_timestamp=datetime(2026,9,24,6,45,tzinfo=timezone.utc),
+        available_at=datetime(2026,9,24,6,50,tzinfo=timezone.utc),
+        source_snapshot_ids=["src"],
+        provider="fixture",
+        data_grade="VERIFIED_TEST_FIXTURE",
+        point_in_time_safe=True,
+        contract_code="JNU2612",
+        contract_month="202612",
+        roll_status="NONE",
+        series_semantics="CONTRACT",
+    )
+    out = FC.precommit_osaka_event_probability(snap, db=db)
+    assert out.status == FC.STATUS_PRECOMMITTED
+
+    status = server.get_forward_test_status()
+    assert status["w32_event_probability_registered"] == 1
+    assert status["w32_event_probability_pending"] == 1
+    assert status["w32_event_probability_settled"] == 0
+    assert status["w32_event_probability_public_calibrated"] is False
+    assert status["w4_minimum_sequential_samples_before_fit_validation_final_oos"] == 150
+    assert status["w4_sample_count_is_not_acceptance"] is True

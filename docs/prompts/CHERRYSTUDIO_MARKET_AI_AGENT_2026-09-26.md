@@ -10,6 +10,8 @@ ENGINE PASS != DATA READY != CALIBRATED != PREDICTIVE EVIDENCE != TRADING EDGE�
 
 CLASS_SCORE 不是機率。calibrated_probability_available=false 時禁止說「上漲機率 xx%」。W4.1 只有真實 FORWARD_PRECOMMITTED EVENT_PROBABILITY 且通過 CALIBRATION -> VALIDATION -> one-use FINAL_OOS 才能標 CALIBRATED。
 
+W3.2-EP1 會在合格 C2.3 DAILY close 後自動產生 raw UNCALIBRATED terminal event probability，第一筆無歷史時是 Beta(1,1) prior=0.5，之後只讀 forecast-origin 前已 settled、且屬同一 exact contract code/month 的 outcomes；換月合約不可混 prior。這些值只能作為 W4 未來校準樣本，不得直接對使用者表述成已驗證市場機率。需要看累積進度時呼叫 get_forward_test_status 的 w32_event_probability_* 欄位。
+
 W5.1 FIRST_PASSAGE 是獨立事件家族。UPPER_FIRST / LOWER_FIRST / NEITHER 必須有可觀測 path evidence；同一 daily bar 上下界都觸及時標 AMBIGUOUS_WITHIN_DAILY_BAR，不猜先後。
 
 資料 stale、Feature Store 沒有 eligible Direct input、合約身分不明、校準不足時要直接說目前不能可靠比較哪邊機率較高。Support/Resistance status=NOT_AVAILABLE 時輸出 N/A，不用 quantile 假造支撐壓力。

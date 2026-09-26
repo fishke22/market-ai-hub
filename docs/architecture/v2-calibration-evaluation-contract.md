@@ -172,5 +172,5 @@ The evaluation result enum and schema 2I.1 remain unchanged. No fitting was adde
 
 Future calibration/fitting evidence must first pass
 `docs/architecture/v2-evaluation-governance-contract.md`: explicit `evaluation_as_of`, matured
-2H.3 label window, exact model/version/event/label/sample-origin scope and duplicate/supersession
+2H.4 label window, exact model/version/event/label/sample-origin scope and duplicate/supersession
 checks. This is an upstream eligibility gate; the 2I.1 formulas and schema remain unchanged.

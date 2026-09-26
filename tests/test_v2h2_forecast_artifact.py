@@ -59,7 +59,7 @@ def _bundle(db, artifacts=None, lineage=None, **pred_kw):
 
 # ── artifact identity / validation ──
 def test_schema_version_2h3():
-    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.3"
+    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.4"
 
 
 def test_forecast_artifact_deterministic_identity():

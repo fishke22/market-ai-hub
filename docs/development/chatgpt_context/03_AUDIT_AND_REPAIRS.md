@@ -4,6 +4,18 @@
 
 原始修補基準 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b；後續 W1/W2/W3/JNU/reconnect 修補累積於 PR #55，已於 2026-09-26 merge 到 main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`。Merged build=`1037d45ff8e65884`；最終 docs-only CI `36231436018` PASS；post-merge reconnect+JNU smoke `29 passed, 21 deselected`。
 
+## 2026-09-26 W3.2-EP1 / MCP / security closeout
+
+W3.2-EP1 adds a real future-facing raw EVENT_PROBABILITY producer without backfill. The event is `TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D`; the source close threshold is frozen at prediction time in 2H.4 `event_threshold_value`. Beta(1,1) history is causal (`outcome.available_at <= forecast_origin`) and exact-contract scoped (`contract_code + contract_month`, CONTRACT, roll NONE). Different rollover contracts cannot share prior counts or suppress each other's same-window prediction. Raw artifacts are always `UNCALIBRATED` and audit publication remains fail-closed.
+
+The existing C2.3 automation invokes the upgraded W3.2 operator, which settles pending POINT/event scopes then precommits both scopes from the same verified exact-contract DAILY close. MCP `get_forward_test_status` exposes event registered/settled/pending counts and W4 minimum 50/50/50 partition requirements, but never upgrades count to CALIBRATED.
+
+Machine closeout found the Feature Store DB on schema 1 with 547 existing rows. The repository's existing non-destructive `FeatureStore.init()` migration was applied after a local backup; schema 2 now exists with all 547 feature rows preserved and an empty `factor_observations` table ready for new typed data. MCP Osaka readiness changed from `SCHEMA_NOT_READY` to the truthful `NO_ELIGIBLE_ROWS`.
+
+FinMind fallback testing exposed a security defect: httpx INFO logging could include a token query parameter in the request URL. Provider calls now suppress sensitive request logging and sanitize HTTP exceptions; a fake-token regression proves the token is absent from log/exception text. Existing local `mcp.log` was scrubbed in place: 1 file / 22 occurrences; credentials were not changed. Branch-wide changed-file secret scan reports 0 real-secret hits.
+
+Validation after the final exact-contract refinement: event-focused `6 passed`; W3/W4/MCP cross `158 passed`; full CI-equivalent local `1965 passed, 1 skipped, 35 deselected, 110 warnings`, exit 0. MCP E2E passed 21 tools / 24 calls / 0 errors on the immediately preceding producer build; final exact-contract refinement is covered by the later cross/full suites. Product source/config build=`72c6f533e5ae2341`. Real market forward/event samples remain NONE_YET on 2026-09-26 because it is not an OSE session date.
+
 ## 2026-09-26 W4.1/W5.1 correctness closure
 
 W4.1 implementation `5ec760a`, PR #61 CI `36240929664` PASS, merged `54542a1443eee9a8a73a130b602abeba0fca941b`. Fitting is fail-closed: only governed `FORWARD_PRECOMMITTED EVENT_PROBABILITY` data, homogeneous scope, purged non-overlapping windows, minimum sample/class/span gates, deterministic paired-bootstrap non-degradation, frozen validation candidate, one-use FINAL_OOS, no refit after final data. Synthetic tests prove engine behavior only.

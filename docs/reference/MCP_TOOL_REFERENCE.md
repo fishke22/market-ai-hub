@@ -99,7 +99,9 @@
 
 ## get_forward_test_status
 
-- 用途：Forward test 註冊狀態（Prediction Registry 中 joint/scenario/ensemble 預測是否已結算）。
+- 用途：Forward test 註冊狀態；同時回報 W3.2 audit-side raw EVENT_PROBABILITY 累積狀態。
+- 主要欄位：`forward_evidence_n`（舊 Prediction Registry settled model forecasts）、`w32_event_probability_registered`、`w32_event_probability_settled`、`w32_event_probability_pending`、`w32_event_probability_public_calibrated=false`、W4 最低 50/50/50 sequential sample 門檻。
+- 注意：raw EVENT_PROBABILITY 計數不是 CALIBRATED；150 筆只是進入 W4 protocol 的最低樣本門檻，不保證 acceptance。
 - 參數：無
 
 ## get_analysis_archive_status

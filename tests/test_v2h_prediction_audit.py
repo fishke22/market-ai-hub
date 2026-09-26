@@ -58,8 +58,8 @@ def _outcome(prediction_id, **kw):
 
 
 # ── schema / storage ──
-def test_schema_version_2h3():
-    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.3"
+def test_schema_version_2h4():
+    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.4"
 
 
 def test_default_db_path_is_local_audit_dir():
@@ -73,7 +73,7 @@ def test_v2_schema_versions_assembled_from_modules():
     v = PA.v2_schema_versions()
     assert v["asof"] == "2A.2" and v["session_truth"] == "2A.2" and v["factor_routing"] == "2A.2"
     assert v["state_machine"] == "2D.4" and v["sequential_update"] == "2G.2"
-    assert v["prediction_audit"] == "2H.3"
+    assert v["prediction_audit"] == "2H.4"
     assert v["evaluation_governance"] == "W3.1"
 
 
@@ -320,3 +320,28 @@ def test_lineage_from_live_observation_carries_timestamps(db):
     assert lin.contract_code == "NQZ6"
     pred = _prediction([lin])
     assert db.append_prediction(pred, [lin]) == PA.APPEND_INSERTED
+
+
+def test_2h4_optional_event_threshold_preserves_legacy_artifact_payload_shape():
+    legacy = PA.make_forecast_artifact(
+        artifact_type="POINT",
+        calibration_domain="PRICE",
+        label_type="TERMINAL_PRICE_1D",
+        value=42000.0,
+        generated_at=_dt(24, 8, 0),
+        schema_version="2H.3",
+    )
+    payload = PA.forecast_artifact_payload(legacy)
+    assert "event_threshold_value" not in payload
+
+    event = PA.make_forecast_artifact(
+        artifact_type="EVENT_PROBABILITY",
+        calibration_domain="PRICE_DISTRIBUTION",
+        probability_type="TERMINAL",
+        event_definition_id="TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D",
+        event_threshold_value=42000.0,
+        label_type="TERMINAL_ABOVE_SOURCE_CLOSE_1D",
+        value=0.5,
+        generated_at=_dt(24, 8, 0),
+    )
+    assert PA.forecast_artifact_payload(event)["event_threshold_value"] == pytest.approx(42000.0)

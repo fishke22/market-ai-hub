@@ -50,19 +50,19 @@ W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊�
 
 ### W3：真實預測、到期結算與前向樣本
 
-**2026-09-26 狀態：W3.1 governance + W3.2 precommitted forward-cycle engine + C2.3 runtime adoption PASS；ACTUAL_FORWARD_EVIDENCE 仍 NONE_YET。** 2H.3 已把 sample origin + label window 綁入 prediction identity；C2.3 task 與 persistent safe-default quote owner 已採用。2026-09-26 非 OSE session，尚未產生第一筆新的合格 contract DAILY terminal-close forward evidence。
+**2026-09-26 狀態：W3.1 governance + W3.2 POINT cycle + W3.2-EP1 raw EVENT_PROBABILITY producer + C2.3 automation PASS；ACTUAL_FORWARD_EVIDENCE / ACTUAL_EVENT_PROBABILITY_EVIDENCE 仍 NONE_YET。** 2H.4 保留 sample origin + sealed label window，並新增 forecast-origin 已知的 immutable event threshold。EP1 只用同一 exact contract code/month 且 forecast-origin 前已 available 的 settled outcomes 建 Beta(1,1) raw prior；換月不混樣本。2026-09-26 非 OSE session，第一筆真實樣本仍須等下一個合格 DAILY close。
 
 建立最小的可運作研究循環，先一個直接商品、一個 horizon、一個簡單 baseline，再依同一契約擴展到各市場族群。不能把每個 callback 當獨立預測樣本。
 
 forecast origin 前封存 prediction、model/version、完整參數、feature cutoff、source IDs、forecast artifact、event/zone policy；horizon 到期後另存 outcome。預測 horizon 必須能解析實際 label window；`outcome.available_at >= forecast_origin` 單獨不足以證明到期合法。修訂用 supersedes，新版與原版都可追溯。
 
-2I.1 指標引擎仍只吃 audit DB，現在由 2H.3 + W3.1 governance 先決定 eligible samples；evaluator 仍不能直接補 CSV。歷史來源可經合法 ingestion/replay 建立 audit artifact，但標為 `RETROSPECTIVE_REPLAY`，與真正預先封存的 `FORWARD_PRECOMMITTED` 分開；基礎模型訓練 cutoff 不明時揭露預訓練重疊風險。
+2I.1 指標引擎仍只吃 audit DB，現在由 2H.4 + W3.1 governance 先決定 eligible samples；evaluator 仍不能直接補 CSV。歷史來源可經合法 ingestion/replay 建立 audit artifact，但標為 `RETROSPECTIVE_REPLAY`，與真正預先封存的 `FORWARD_PRECOMMITTED` 分開；基礎模型訓練 cutoff 不明時揭露預訓練重疊風險。
 
 工程驗收已通過：未到期、evaluation_as_of 後才可得 outcome、未知來源、重複樣本、錯 model/version/event/label scope、錯 artifact pairing / superseded selection 會拒絕或排除；W3.2 另拒絕不具 PIT/source/contract/roll provenance 的 daily input、錯 precommit 時點與跨合約 settlement。**程式與 runtime 已完成；尚未完成的是合格 real DAILY evidence 與 forward 樣本自然累積，不得用 synthetic 測試代替。**
 
 ### W4：校準與外樣本治理
 
-**2026-09-26 狀態：W4.1 governed calibration fitting engine MERGED_POSTMERGE_VERIFIED；real fitting 尚未開始，因目前沒有合格 EVENT_PROBABILITY forward evidence。ENGINE PASS 不等於 CALIBRATED。**
+**2026-09-26 狀態：W4.1 governed calibration fitting engine MERGED_POSTMERGE_VERIFIED；W3.2-EP1 raw EVENT_PROBABILITY producer 已 LOCAL_PASS 並等待未來交易日自然累積，real fitting 尚未開始。tracked protocol 最低需要 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS，同時仍須 class/span/bootstrap/non-degradation 等 gate；150 筆不是自動 CALIBRATED。**
 
 先在看結果前凍結 protocol：chronological train → calibration → validation → untouched final OOS；rolling/expanding folds，以標籤重疊長度 purge/gap，不能用 random split 或僅按行數假定時間獨立。模型選擇、特徵處理、ensemble 權重與校準 fit 都不可看 final OOS。
 
@@ -111,7 +111,7 @@ LLM 使用 compact safe packet：每項數字附可追溯 field/source ID；數�
 
 ### W7：可移植重建與資料備份
 
-**2026-09-26 狀態：W7.1-W7.8 current-machine portability/backup cells 已 PASS；full fresh dependency install、clean new Windows、WinCred recreation、Yuanta certificate reimport/signature、new-machine COM registration 保持 `UNVERIFIED_EXTERNAL_GATE`。不得用本機成功冒充跨機驗收。**
+**2026-09-26 狀態：W7 current-machine portability/backup cells 已 PASS。使用者目前沒有搬機需求；full fresh dependency install、clean new Windows、WinCred recreation、Yuanta certificate reimport/signature、new-machine COM registration 保持 `UNVERIFIED_EXTERNAL_GATE` 並記入 `FUTURE_RELOCATION_VALIDATION_MEMO.md`，日後搬機再驗，不作為目前金融分析功能的阻塞 gate。**
 
 目標分層：
 

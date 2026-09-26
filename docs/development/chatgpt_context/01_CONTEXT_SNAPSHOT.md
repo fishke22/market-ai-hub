@@ -4,15 +4,25 @@
 
 ## 1. 先讀這段
 
+### 2026-09-26 最新 W3.2-EP1 / MCP / analysis closeout
+
+目前 source/config build=`72c6f533e5ae2341`。W3.2-EP1 raw EVENT_PROBABILITY producer 已完成：每個未來合格 C2.3 exact-contract DAILY close 會同時 precommit 原 POINT baseline 與 `TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D` raw event probability。event threshold 在 forecast origin 凍結到 2H.4 immutable artifact；raw probability 使用 Beta(1,1)，只計入 forecast-origin 前已 available 且屬同一 exact contract code/month 的 settled outcomes，換月不混 prior。第一筆無歷史時是 UNCALIBRATED prior=0.5，永遠不能直接當公開已校準機率。
+
+C2.3 task 已經會呼叫同一 W3.2 operator，所以交易日無需再加另一排程。`get_forward_test_status` 新增 `w32_event_probability_registered/settled/pending`；W4 tracked protocol 的 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS 是最低 sequential sample 數，不代表滿 150 筆就自動 CALIBRATED。2026-09-26 非 OSE session，因此真實 raw event samples 仍是 NONE_YET。
+
+實機 closeout：Feature Store 已 non-destructive migration 到 schema 2，保留 547 legacy feature rows；Osaka direct input 從錯誤 `SCHEMA_NOT_READY` 修成正確 `NO_ELIGIBLE_ROWS`。FinMind HTTP logging 已抑制 token-bearing URL，既有 local mcp.log 22 處已遮罩且 credential 未改。CherryStudio 現有 `market-ai` stdio MCP entry 不需改 command，實測 21 tools / 24 calls / 0 errors。最終 exact-contract producer regression=`6 passed`；W3/W4/MCP cross=`158 passed`；CI-equivalent=`1965 passed, 1 skipped, 35 deselected, 110 warnings`，exit 0。
+
+搬移到新 Windows 目前不是阻塞條件；未驗證的 full install / WinCred / certificate / COM cells 已記錄在 `FUTURE_RELOCATION_VALIDATION_MEMO.md`，日後搬機再驗。
+
 ### 2026-09-26 最新 W4.1 / W5.1 / runtime 結果
 
 W4.1 implementation=`5ec760a`，PR #61 CI=`36240929664` PASS，merged main=`54542a1443eee9a8a73a130b602abeba0fca941b`。W4 fitting 只接受 W3.1 governed、`FORWARD_PRECOMMITTED`、scope/model/event/distribution 同質的 `EVENT_PROBABILITY`。VALIDATION 只能產生 frozen `EVALUATED_UNCALIBRATED` candidate；獨立 `FINAL_OOS` 必須一次性消耗且不得重 fit，通過後才允許 `CALIBRATED` typed evidence。local CI-equivalent=`1942 passed, 7 skipped, 35 deselected`；post-merge smoke=`61 passed`。
 
 W5.1 implementation=`906a164`，PR #62 CI=`36241924593` PASS，merged main=`37abd2574e59443d6079e24ebc0a639d3713c51e`。新增 daily first-passage label：`UPPER_FIRST / LOWER_FIRST / NEITHER / AMBIGUOUS_WITHIN_DAILY_BAR`；同一 daily bar 雙觸及、gap、missing/provenance 不足一律不猜。`FIRST_PASSAGE` 已是獨立 audit outcome kind / label scope / calibration family，不再借用 TOUCH。cross-regression=`187 passed`；local CI-equivalent=`1950 passed, 7 skipped, 35 deselected`；post-merge smoke=`187 passed`。
 
-目前 `D:\MARKET_AI_HUB` main 已同步 W5 merge；product build=`d92e85fec3660b93`。RDC 已驗證 persistent safe-default owner：唯一 owner、heartbeat fresh、runtime=disk build、measurement gates=false、無 independent duplicate。C2.3 task Enabled、每 5 分鐘、Last Result=0。2026-09-26 非 OSE session，故仍未產生新 C2.3 DAILY evidence。
+在 W5 merge checkpoint，`D:\MARKET_AI_HUB` main/product build=`d92e85fec3660b93` 且 persistent safe-default owner 已驗證唯一/heartbeat fresh/runtime=disk/measurement gates=false。此歷史 runtime 已被後續 source build `72c6f533e5ae2341` 超越，需在 merge 後做一次受控 owner handover。C2.3 task 仍 Enabled、每 5 分鐘；2026-09-26 非 OSE session，故仍未產生新 C2.3 DAILY evidence。
 
-重要真值：ENGINE PASS != DATA READY != CALIBRATED。Osaka 自動 baseline 仍是 POINT-only；`ACTUAL_FORWARD_EVIDENCE=NONE_YET`、`ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET`、market `CALIBRATED=FALSE`，沒有 trading-edge claim。
+重要真值：ENGINE PASS != DATA READY != CALIBRATED。W3.2-EP1 raw event producer 現已存在，但截至 2026-09-26 尚無真實 settled event sample；`ACTUAL_FORWARD_EVIDENCE=NONE_YET`、`ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET`、market `CALIBRATED=FALSE`，沒有 trading-edge claim。
 
 ### 2026-09-26 最新 C2.3 自動化 / W3.2 operational cycle 結果
 
