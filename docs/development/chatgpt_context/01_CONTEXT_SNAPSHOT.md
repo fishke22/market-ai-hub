@@ -14,14 +14,14 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 #### reconnect-only stacked checkpoint
 
-Reconnect implementation commit=`feeefe3`; merged with JNU base commit=`23504cf`; merged commit=`4978f59`; merged source/config build=`1037d45ff8e65884`. PR #56 is MERGED into the feature base; PR #55 CI run `36230804948` PASS.
+Reconnect implementation `feeefe3` + JNU base `23504cf` were reconciled at `4978f59`; PR #55 merged to main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`. Merged build=`1037d45ff8e65884`; final docs-only CI `36231436018` PASS; post-merge reconnect+JNU smoke=`29 passed, 21 deselected`.
 
 Merged recorder keeps JNU microstructure capture and bounded reconnect together. Reconnect remains full-runtime replacement only: durable pending flush -> local retire -> fresh Open -> official Connect -> fresh WinCred password -> Login OnResponse -> complete quote re-subscribe, then JNU microstructure subscriptions are restored. No hidden `Reconnect()` API is assumed. Tracked `auto_reconnect.enabled=false`.
 
 Merged validation: focused reconnect+JNU=`29 passed, 21 deselected`; related=`150 passed, 2 deselected`; full offline=`1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`, exit 0. Read-only main-worktree preflight observed `NO_RUNNING_OWNER`/`STOPPED` with no broker action; that is not start authorization.
 
 
-實際 repo=`D:\MARKET_AI_HUB`；feature branch 已 fast-forward 到 merged commit=`4978f59`，merged build=`1037d45ff8e65884`。PR #56 已併入 feature base；PR #55 CI `36230804948` PASS。
+實際 repo=`D:\MARKET_AI_HUB`；remote main 已前進到 merge commit=`a9ab3e55185860c1cc80923d8e9970f37e385d1c`，tree 與 validated head `98ec76c` 完全一致；merged build=`1037d45ff8e65884`。
 
 最新核心修正：durable spool/WAL、connection fail-closed、venue-local contract revalidation、JNU microstructure capture 與 bounded reconnect 已在 merged offline profile 共存。auto reconnect 實作存在但 tracked default=false；live restart/re-login 尚未 adoption。
 
@@ -182,4 +182,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 PR #55 最新 head/CI 與 main merge 狀態。merged reconnect+JNU offline 已 PASS，PR #55 CI `36230804948` 也 PASS；下一步是 review/merge-to-main readiness，不再重做架構。tracked auto reconnect 保持 disabled。任何 live enable/restart/re-login 仍需另行明確授權，`NO_RUNNING_OWNER` 不等於可自行啟動。
+PR #55 已 merge 到 main，不再重做 W1。下一個不需 broker 授權的工作包是 W3.2 dedicated contract DAILY terminal-close feature：建立真實來源的 contract-specific DAILY/PIT-safe close ingestion/aggregation contract，保留 source snapshot、contract/month/roll、available_at <= cutoff；continuous bars/TICK 不得 silent resample 或升格。tracked auto reconnect 保持 disabled；live enable/restart/re-login 仍需另行明確授權。

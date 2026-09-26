@@ -1,6 +1,6 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W1 RECONNECT+JNU MERGED_OFFLINE_PASS / PR55_CI_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
+- Current phase: **W1 MERGED_MAIN / RUNTIME_ADOPTION_PENDING / W3.2 DEDICATED_DAILY_INPUT_NEXT / C2.3 RUNTIME_REVERIFICATION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
 - build_id：**1037d45ff8e65884**（reconnect + JNU merged source/config fingerprint；OFFLINE PASS，不代表 live runtime adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
@@ -13,13 +13,13 @@
 
 ## 2026-09-26 W1 bounded quote reconnect lifecycle
 
-- Isolated reconnect commit `feeefe3`; merged with JNU base `23504cf`; merged commit `4978f59`; build `1037d45ff8e65884`. PR #56 is MERGED into the feature base; PR #55 CI `36230804948` PASS.
+- Reconnect `feeefe3` + JNU base `23504cf` reconciled at `4978f59`; PR #55 merged to main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`. Build `1037d45ff8e65884`; final docs-only CI `36231436018` PASS; post-merge smoke `29 passed, 21 deselected`.
 - No hidden reconnect API is assumed. Recovery is bounded full-runtime replacement: durable flush -> local retire -> fresh Open -> official Connect -> Login result -> full quote re-subscribe.
 - Cleanup/re-subscribe failure fails closed; retry/backoff is bounded. Tick-detail maintenance and auto reconnect are mutually exclusive.
 - Tracked `auto_reconnect.enabled=false`; JNU microstructure capture remains enabled per its own config. OFFLINE PASS != LIVE ADOPTION.
 - Merged validation: focused `29 passed, 21 deselected`; related `150 passed, 2 deselected`; full offline `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`, exit 0.
 - Base PR #55 CI run `36229125508` failed only three stale build-freeze assertions (actual base build `44de914d7d625eb5` vs old expected `b7c1f3d08a383d65`). The merged branch updates frozen assertions to its observed build `1037d45ff8e65884`.
-- Next: PR #55 is publish-ready from this work package's test/CI perspective; live enablement/restart remains separate and still requires explicit authorization.
+- Next non-live package: W3.2 dedicated contract DAILY terminal-close source/ingestion/aggregation. Preserve PIT/source/contract/month/roll provenance and available_at <= cutoff; continuous series and TICK cannot be silently promoted. Live enablement/restart remains separately authorized.
 
 ## 2026-09-26 W1 durable crash spool/WAL
 
