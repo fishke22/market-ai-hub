@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion MERGED to main; PR #58 CI `36234063403` PASS; merge=`da73dd288971520e2c765f6660b7d329b89ac79e`; build=`35669ded63f487ed`; REAL_DAILY_INPUT_NOT_REVERIFIED.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 C2.3 terminal-close automation + W3.2 exact-JNU settle/precommit OFFLINE PASS; implementation=`b0a26f3`; build=`35669ded63f487ed`; publication/runtime registration still pending.
 
 ## Current repair checkpoint
+
+### 2026-09-26 C2.3 terminal-close automation + W3.2 operational cycle
+
+Implementation commit `b0a26f3`; source/config build remains `35669ded63f487ed` because this package changes scripts/tests only. Remote Desktop read-only inspection established the previously unknown private-runtime truth: no running recorder owner, one historical raw tick-detail artifact `w33_tick_cbce3cba39291cd1f14e.json`, and no `evidence/tick_detail/verification` directory. The old raw artifact is C2.2-era and must not be retroactively promoted to C2.3 typed evidence.
+
+New `run_c23_terminal_close_maintenance.ps1` is guarded by the existing OSE close query window. Outside an OSE session date / 15:45–17:00 JST it exits without broker mutation. Inside the window it resolves the exact active JNU contract from the existing FunctionList resolver, performs a controlled single-owner handover to the runtime-only measurement gate, queues one bounded tick-detail request, requires persisted `TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED`, materializes `terminal_close / w3.2-contract-daily-close-1`, then invokes the new broker-free `run_w32_osaka_forward_cycle.py` to settle pending W3.2 exact-JNU predictions and precommit the next one-session baseline. It finally restores the normal quote-only owner. Per trading date, automated maintenance attempts are capped at three; state is metadata-only and never exposes prices.
+
+The queue script now emits the queued request path on capturable stdout instead of `Write-Host`. `register_c23_terminal_close_task.ps1` polls every 5 minutes and relies on the timezone-aware OSE window rather than a fixed local clock. Existing JNU watchdog yields while a fresh C2.3 handover state is `IN_PROGRESS`, reducing duplicate-owner races. The task is not registered by this offline package yet.
+
+Validation: focused final=`96 passed, 1 deselected`; broader=`198 passed, 2 deselected`; CI-equivalent full offline=`1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`, exit 0; Python compile PASS; PowerShell dry-run/non-session paths PASS; `git diff --check` PASS; changed/untracked secret scan=0. Today is not an OSE session date, so no C2.3 measurement was sent and ACTUAL_FORWARD_EVIDENCE remains NONE_YET. A WebCodex current-build start reached `RUNNING`/build `35669ded63f487ed` but its child was terminated with the Runner lifetime; this is not persistent runtime adoption.
 
 ### 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion
 
@@ -242,7 +252,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-W3.2 artifact ingestion/operator is OFFLINE PASS. Exact next action is evidence-dependent: materialize an already-existing valid persisted raw/evidence pair offline if one is available; otherwise no further real DAILY materialization is truthful until a separately authorized C2.3 maintenance measurement produces such a pair. Do not substitute continuous bars/TICK, and do not infer authorization to start/re-login the broker.
+C2.3 close-window automation + W3.2 settle/precommit operator is OFFLINE PASS at `b0a26f3`. Exact next package: publish this branch, then on merged main register `MARKET_AI_HUB_C23_Terminal_Close_Measurement` and establish one persistent safe-default quote owner via Remote Desktop Commander; verify task definition, owner PID/heartbeat/build, durable spool, measurement gates=false, and no duplicate owner. On the next OSE session the task may create the first new C2.3 typed evidence only inside 15:45–17:00 JST. Do not substitute the historical raw-only artifact, continuous bars, or TICK for verified DAILY evidence.
 
 ## Truthfulness rules
 

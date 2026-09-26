@@ -1,15 +1,25 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W3.2 ARTIFACT_INGESTION_OFFLINE_PASS / REAL_DAILY_INPUT_NOT_REVERIFIED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / RUNTIME_ADOPTION_PENDING**
+- Current phase: **C2.3 TERMINAL_CLOSE_AUTOMATION_OFFLINE_PASS / W3.2 OPERATIONAL_CYCLE_OFFLINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET / TASK_AND_RUNTIME_ADOPTION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
 - build_id：**35669ded63f487ed**（W3.2 persisted-artifact terminal-close operator source/config fingerprint；OFFLINE PASS，不代表 real DAILY input 或 live adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：historical 2026-09-24/25 evidence remains capability evidence. Latest read-only preflight observed `NO_RUNNING_OWNER`, status `STOPPED`, no matching Python owner, broker_action_performed=false. Reconnect+JNU merged branch is offline-verified only; tracked measurement gate=false and tracked auto reconnect=false. **Do not infer start authorization from NO_RUNNING_OWNER.**
+- Live quote capability：RDC read-only inspection on 2026-09-26 observed `NO_RUNNING_OWNER`; current private evidence has one historical raw tick-detail artifact but no typed verification directory. A WebCodex start of current build reached `RUNNING`/`35669ded63f487ed` before the Runner terminated the child, so persistent owner adoption is still pending. Tracked measurement gate=false and tracked auto reconnect=false.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 C2.3 terminal-close automation + W3.2 exact-JNU operational cycle
+
+- Implementation commit: `b0a26f3`; build remains `35669ded63f487ed`.
+- RDC resolved the private-runtime uncertainty: no running owner; one old raw artifact `w33_tick_cbce3cba39291cd1f14e.json`; no typed `verification/` evidence. The old raw file is not promotable.
+- Added close-window orchestrator: only an OSE session date and 15:45–17:00 JST can reach broker maintenance. It performs controlled single-owner handover, exact-JNU request, typed-evidence requirement, DAILY materialization, W3.2 settlement/precommit, then restores safe-default quote-only runtime. Automated attempts are capped at three per trading date.
+- Added broker-free W3.2 operator to settle pending exact-JNU forward predictions from canonical Feature Store and precommit the next one-session `last_price_naive` baseline. It accepts contract identity only; market values come only from the gated Feature Store.
+- Task registration is designed as a 5-minute poll with timezone-aware internal window; JNU watchdog yields to fresh C2.3 handover state. Task registration/live persistent owner are intentionally deferred until this code is merged.
+- Validation: focused `96 passed, 1 deselected`; broader `198 passed, 2 deselected`; CI-equivalent full `1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`, exit 0; compile/dry-run/diff/secret checks PASS.
+- Non-session date today: no tick-detail measurement was sent. Therefore eligible new real DAILY evidence and ACTUAL_FORWARD_EVIDENCE remain NONE_YET.
 
 ## 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion
 
