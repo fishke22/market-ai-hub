@@ -189,6 +189,16 @@ def test_windows_lock_setuptools_security_floor():
     assert "GHSA-h35f-9h28-mq5c" in lock
 
 
+def test_ci_pins_node24_actions_and_runner_image():
+    workflow = _read(".github/workflows/ci.yml")
+    assert "runs-on: ubuntu-24.04" in workflow
+    assert "uses: actions/checkout@v7" in workflow
+    assert "uses: actions/setup-python@v7" in workflow
+    assert "ubuntu-latest" not in workflow
+    assert "actions/checkout@v4" not in workflow
+    assert "actions/setup-python@v5" not in workflow
+
+
 # --- 14: reconstruction required files ---
 def test_reconstruct_verify_is_independent_of_caller_cwd_and_uses_runtime_build_identity():
     text = _read("scripts/reconstruct_verify.ps1")
