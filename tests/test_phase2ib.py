@@ -179,6 +179,15 @@ def test_license_present():
     assert "Apache License" in txt and "2.0" in txt
 
 
+def test_windows_lock_setuptools_security_floor():
+    lock = _read("requirements-lock-windows-x64.txt")
+    match = re.search(r"^setuptools==(\d+)\.(\d+)\.(\d+)", lock, re.MULTILINE)
+    assert match, "Windows lock must pin setuptools explicitly"
+    assert tuple(map(int, match.groups())) >= (83, 0, 0)
+    assert "GHSA-5rjg-fvgr-3xxf" in lock
+    assert "GHSA-h35f-9h28-mq5c" in lock
+
+
 # --- 14: reconstruction required files ---
 def test_reconstruct_verify_is_independent_of_caller_cwd_and_uses_runtime_build_identity():
     text = _read("scripts/reconstruct_verify.ps1")
