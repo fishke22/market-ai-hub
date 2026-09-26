@@ -480,7 +480,7 @@ def test_run_locked_records_safe_startup_failure_stage(tmp_path, monkeypatch):
         lambda _profile: SimpleNamespace(username="MASKED_TEST_ACCOUNT"),
     )
     monkeypatch.setattr(R, "read_profile_password", lambda _profile: "MASKED_TEST_SECRET")
-    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg: [])
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg, *, asof=None: [])
     monkeypatch.setattr(R, "SparkRuntime", _FailRuntime)
 
     rc = R._run_locked(

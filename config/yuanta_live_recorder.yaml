@@ -7,6 +7,7 @@ recording:
   normalized_parquet: true
   parquet_flush_seconds: 30
   latest_snapshot_seconds: 1
+  subscription_revalidation_seconds: 300
   max_dynamic_subscriptions: 200
   max_buffer_records: 100000
   keep_connection_until_process_exit: true

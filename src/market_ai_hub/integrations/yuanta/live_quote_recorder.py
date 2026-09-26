@@ -16,8 +16,9 @@ import math
 import threading
 from collections import deque
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from typing import Any
 
 import yaml
@@ -44,6 +45,41 @@ _QUOTE_FIELDS = (
     "PrincipalPercent", "UpDownDay", "BidQty", "AskQty", "PriceTrends",
     "EstDealPrice", "EstDealVol", "EstDealVolFlag",
 )
+
+
+_MARKET_TIMEZONES = {
+    1: "Asia/Taipei",   # TWSE
+    2: "Asia/Taipei",   # TWOTC
+    3: "Asia/Taipei",   # TAIFEX
+    202: "Asia/Singapore",
+    203: "America/Chicago",  # CME
+    204: "America/Chicago",  # CBOT
+    205: "Asia/Tokyo",       # TCE/TOCOM
+    207: "Asia/Tokyo",       # OSE
+    208: "Asia/Hong_Kong",
+    209: "America/New_York", # NYBOT/ICE-US
+    210: "Europe/London",
+    211: "Europe/Berlin",
+    212: "Australia/Sydney",
+    215: "America/New_York", # CBOE
+}
+_DEFAULT_SUBSCRIPTION_REVALIDATION_SECONDS = 300.0
+
+
+def _market_local_date(market: int, asof: date | datetime) -> date:
+    """Resolve a venue-local calendar date; never use UTC date as trading-date proxy."""
+    if isinstance(asof, datetime):
+        if asof.tzinfo is None:
+            raise ValueError("subscription asof datetime must be timezone-aware")
+        timezone_name = _MARKET_TIMEZONES.get(int(market))
+        if timezone_name is None:
+            raise ValueError(f"unknown market timezone: {market}")
+        return asof.astimezone(ZoneInfo(timezone_name)).date()
+    return asof
+
+
+def _subscription_revalidation_due(last_attempt: float, now: float, interval_seconds: float) -> bool:
+    return now - last_attempt >= max(1.0, float(interval_seconds))
 
 
 def _utcnow() -> datetime:
@@ -239,15 +275,22 @@ def _yyyymm(order_code: str) -> str:
     return m.group(1) if m else "999999"
 
 
-def _resolve_spec(spec: dict, rows: list[dict]) -> list[tuple[int, str, str]]:
+def _resolve_spec(
+    spec: dict,
+    rows: list[dict],
+    *,
+    asof: date | datetime | None = None,
+) -> list[tuple[int, str, str]]:
+    asof = asof or _utcnow()
     if spec.get("symbol"):
         return [(int(spec["market_no"]), str(spec["symbol"]), str(spec["key"]))]
     market = int(spec["market_no"])
+    local_asof = _market_local_date(market, asof)
     prefix = str(spec.get("code_prefix", ""))
     order_root = str(spec.get("order_root", "")).strip()
     n = int(spec.get("contracts", 1))
     variant = str(spec.get("session_variant", "")).upper()
-    now_month = _utcnow().strftime("%Y%m")
+    now_month = local_asof.strftime("%Y%m")
     matches = []
     for r in rows:
         if int(r["market_code"]) != market:
@@ -275,7 +318,7 @@ def _resolve_spec(spec: dict, rows: list[dict]) -> list[tuple[int, str, str]]:
             from market_ai_hub.integrations.yuanta.resolver import taifex_last_trading_date, ose_last_trading_date
             year, month = int(ym[:4]), int(ym[4:])
             expiry = taifex_last_trading_date(year, month) if market == 3 else ose_last_trading_date(year, month)
-            if datetime.now().date() > expiry:
+            if local_asof > expiry:
                 continue
         matches.append((ym, code))
     months = sorted({ym for ym, _ in matches})[:n]
@@ -292,14 +335,19 @@ def _resolve_spec(spec: dict, rows: list[dict]) -> list[tuple[int, str, str]]:
             if "/" not in code:
                 out.append((market, code, str(spec["key"])))
     return out
-def resolve_default_subscriptions(cfg: dict) -> list[tuple[int, str, str]]:
+def resolve_default_subscriptions(
+    cfg: dict,
+    *,
+    asof: date | datetime | None = None,
+) -> list[tuple[int, str, str]]:
+    asof = asof or _utcnow()
     p = function_list_path()
     if p is None:
         raise RuntimeError("FunctionList.xlsx unavailable")
     rows = load_stock_code_rows(p)
     out: list[tuple[int, str, str]] = []
     for spec in list(cfg.get("subscriptions", [])) + list(cfg.get("daytime_context", [])):
-        out.extend(_resolve_spec(spec, rows))
+        out.extend(_resolve_spec(spec, rows, asof=asof))
     dedup = {}
     for market, code, key in out:
         dedup[(market, code)] = (market, code, key)
@@ -321,8 +369,82 @@ def _subscribe(rt: SparkRuntime, account: str, pairs: list[tuple[int, str, str]]
             item.MarketType = enumMarketType(market)
             item.StockCode = code
             items.Add(item)
+        # Bundled vendor sample omits optional Lng; installed DLL also accepts explicit UTF8.
         rt._api.SubscribeWatchlistAll(account, items, enumLangType.UTF8)
         rt._last_subscription_at = time.monotonic()
+
+
+def _unsubscribe(rt: SparkRuntime, account: str, pairs: list[tuple[int, str, str]]) -> None:
+    from System.Collections.Generic import List as NetList
+    from YuantaOneAPI import WatchlistAll, enumLangType, enumMarketType
+    if not pairs:
+        return
+    for offset in range(0, len(pairs), 200):
+        delay = 0.2 - (time.monotonic() - getattr(rt, "_last_subscription_at", 0))
+        if delay > 0:
+            time.sleep(delay)
+        items = NetList[WatchlistAll]()
+        for market, code, _ in pairs[offset:offset + 200]:
+            item = WatchlistAll()
+            item.MarketType = enumMarketType(market)
+            item.StockCode = code
+            items.Add(item)
+        # Installed DLL exposes the same optional Lng parameter for unsubscribe.
+        rt._api.UnSubscribeWatchlistAll(account, items, enumLangType.UTF8)
+        rt._last_subscription_at = time.monotonic()
+
+
+def _refresh_default_subscriptions(
+    rt: SparkRuntime,
+    account: str,
+    cfg: dict,
+    default_subscribed: dict[tuple[int, str], str],
+    subscribed: dict[tuple[int, str], str],
+    dynamic_subscribed: set[tuple[int, str]] | None = None,
+    *,
+    asof: date | datetime,
+) -> dict:
+    if dynamic_subscribed is None:
+        dynamic_subscribed = {pair for pair, key in subscribed.items() if key == "dynamic"}
+    desired_pairs = resolve_default_subscriptions(cfg, asof=asof)
+    if len(desired_pairs) > 2000:
+        raise ValueError("total subscription limit")
+    desired = {(m, s): k for m, s, k in desired_pairs}
+    additions = [(m, s, desired[(m, s)]) for m, s in desired if (m, s) not in default_subscribed]
+    removals = [(m, s, default_subscribed[(m, s)]) for m, s in default_subscribed if (m, s) not in desired]
+    provider_new_pairs = [(m, s) for m, s, _ in additions if (m, s) not in subscribed]
+    # Keep add-before-remove continuity, but never exceed the provider's unique-subscription cap
+    # even transiently. At the cap we fail closed and retain the old coverage for a later retry.
+    if len(subscribed) + len(provider_new_pairs) > 2000:
+        raise ValueError("total subscription limit during safe refresh")
+
+    # Refresh changes are normally tiny. Apply one identity at a time so state remains truthful
+    # if a later provider call fails after earlier calls succeeded.
+    for market, code, key in additions:
+        pair = (market, code)
+        if pair not in subscribed:
+            _subscribe(rt, account, [(market, code, key)])
+        default_subscribed[pair] = key
+        # Default routing wins while active, but dynamic ownership is retained separately.
+        subscribed[pair] = key
+
+    for market, code, old_key in removals:
+        pair = (market, code)
+        if pair in dynamic_subscribed:
+            default_subscribed.pop(pair, None)
+            subscribed[pair] = "dynamic"
+            continue
+        if subscribed.get(pair) == old_key:
+            _unsubscribe(rt, account, [(market, code, old_key)])
+            subscribed.pop(pair, None)
+        default_subscribed.pop(pair, None)
+
+    for pair in set(default_subscribed).intersection(desired):
+        new_key = desired[pair]
+        default_subscribed[pair] = new_key
+        if pair in subscribed:
+            subscribed[pair] = new_key
+    return {"added": len(additions), "removed": len(removals), "desired": len(desired)}
 
 
 
@@ -464,7 +586,10 @@ def _tick_detail_measurement(
 
 def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
                       subscribed: dict[tuple[int, str], str],
+                      dynamic_subscribed: set[tuple[int, str]] | None = None,
                       runtime_build_id: str = "") -> bool:
+    if dynamic_subscribed is None:
+        dynamic_subscribed = {pair for pair, key in subscribed.items() if key == "dynamic"}
     dc = cfg.get("dynamic_requests", {})
     if not dc.get("enabled"):
         return False
@@ -491,13 +616,18 @@ def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
                 symbol = str(req["symbol"])
                 if market not in allowed or not _SYMBOL_RE.fullmatch(symbol):
                     raise ValueError("market/symbol not allowed")
-                if (market, symbol) not in subscribed:
-                    if sum(k == "dynamic" for k in subscribed.values()) >= int(cfg["recording"].get("max_dynamic_subscriptions", 200)):
+                pair = (market, symbol)
+                if pair not in dynamic_subscribed:
+                    if len(dynamic_subscribed) >= int(cfg["recording"].get("max_dynamic_subscriptions", 200)):
                         raise ValueError("dynamic subscription limit")
-                    if len(subscribed) >= 2000:
-                        raise ValueError("total subscription limit")
-                    _subscribe(rt, account, [(market, symbol, "dynamic")])
-                    subscribed[(market, symbol)] = "dynamic"
+                    if pair not in subscribed:
+                        if len(subscribed) >= 2000:
+                            raise ValueError("total subscription limit")
+                        _subscribe(rt, account, [(market, symbol, "dynamic")])
+                        subscribed[pair] = "dynamic"
+                    else:
+                        result = "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
+                    dynamic_subscribed.add(pair)
                 else:
                     result = "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
                 result_payload = {"status": result}
@@ -588,15 +718,27 @@ def _run_locked(
     secret = read_profile_password("securities")
     if cred is None or not secret:
         raise RuntimeError("SPARK securities credential unavailable")
-    defaults = resolve_default_subscriptions(cfg)
+    started_at = _utcnow()
+    defaults = resolve_default_subscriptions(cfg, asof=started_at)
     if len(defaults) > 2000:
         raise ValueError("total subscription limit")
     rt = SparkRuntime()
-    subscribed = {(m, s): k for m, s, k in defaults}
+    default_subscribed = {(m, s): k for m, s, k in defaults}
+    subscribed = dict(default_subscribed)
+    dynamic_subscribed: set[tuple[int, str]] = set()
     buffer = QuoteBuffer(int(rec.get("max_buffer_records", 100000)))
     write_error = None
-    started_at = _utcnow()
-    recording_day = started_at.date()
+    revalidation_interval = float(
+        rec.get("subscription_revalidation_seconds", _DEFAULT_SUBSCRIPTION_REVALIDATION_SECONDS)
+    )
+    if not math.isfinite(revalidation_interval) or revalidation_interval < 1:
+        raise ValueError("subscription_revalidation_seconds must be finite and >= 1")
+    last_revalidation_attempt = time.monotonic()
+    revalidation_attempted_at = None
+    revalidation_error = None
+    revalidated_at = None
+    revalidation_added: int | None = 0
+    revalidation_removed: int | None = 0
     startup_stage = "PRE_BROKER_READY"
     fatal_error = None
     login_msg_code = None
@@ -660,10 +802,28 @@ def _run_locked(
             rt.pump(0.2)
             now = time.time()
             if _dynamic_requests(
-                root, cfg, rt, cred.username, subscribed,
+                root, cfg, rt, cred.username, subscribed, dynamic_subscribed,
                 runtime_build_id=runtime_build_id,
             ):
                 break
+            monotonic_now = time.monotonic()
+            if _subscription_revalidation_due(last_revalidation_attempt, monotonic_now, revalidation_interval):
+                last_revalidation_attempt = monotonic_now
+                revalidation_asof = _utcnow()
+                revalidation_attempted_at = revalidation_asof.isoformat()
+                try:
+                    refresh = _refresh_default_subscriptions(
+                        rt, cred.username, cfg, default_subscribed, subscribed, dynamic_subscribed,
+                        asof=revalidation_asof,
+                    )
+                    revalidation_error = None
+                    revalidated_at = _utcnow().isoformat()
+                    revalidation_added = int(refresh["added"])
+                    revalidation_removed = int(refresh["removed"])
+                except Exception as exc:
+                    revalidation_error = type(exc).__name__
+                    revalidation_added = None
+                    revalidation_removed = None
             latest, pending, dropped = buffer.snapshot()
             if now - last_latest >= float(rec.get("latest_snapshot_seconds", 1)):
                 _atomic_json(latest_path, {"updated_at": _utcnow().isoformat(), "quotes": latest})
@@ -678,16 +838,24 @@ def _run_locked(
                     reasons.append("BUFFER_OVERFLOW")
                 if age is None or age > 60:
                     reasons.append("NO_RECENT_CALLBACK_SESSION_UNCHECKED")
-                if _utcnow().date() != recording_day:
-                    reasons.append("CONTRACT_REVALIDATION_REQUIRED")
+                if revalidation_error:
+                    reasons.append("CONTRACT_REVALIDATION_FAILED")
                 _atomic_json(status_path, {
                     "status": "DEGRADED" if reasons else "RUNNING", "pid": os.getpid(), "provider": "SPARK_SECURITIES_PROFILE",
                     "login_msg_code": outcome.msg_code, "subscriptions": len(subscribed),
+                    "dynamic_subscriptions": len(dynamic_subscribed),
                     "last_quote_at": last_quote, "quote_age_seconds": age,
                     "health_reasons": reasons, "pending_records": pending, "dropped_records": dropped,
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
+                    "subscription_revalidation_basis": "PERIODIC_VENUE_LOCAL_DATE",
+                    "subscription_revalidation_interval_seconds": revalidation_interval,
+                    "subscription_revalidation_attempted_at": revalidation_attempted_at,
+                    "subscription_revalidation_error": revalidation_error,
+                    "subscription_revalidated_at": revalidated_at,
+                    "subscription_revalidation_added": revalidation_added,
+                    "subscription_revalidation_removed": revalidation_removed,
                     "startup_stage": startup_stage,
                     "tick_detail_measurements_runtime_enabled": bool(
                         cfg.get("tick_detail_measurements", {}).get("enabled", False)

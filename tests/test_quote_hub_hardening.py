@@ -1,9 +1,11 @@
 """Offline fault injection. Never loads a SDK, reads credentials, or opens a broker."""
+import ast
 import importlib.util
 import json
 import os
 import subprocess
 import threading
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -65,6 +67,213 @@ def test_bounded_buffer_exposes_loss_and_retains_field_time():
     assert item["field_provenance"]["BuyPrice"]["received_at"] == quote(2)["received_at"]
     assert "source_time_of_day" not in item
     assert item["freshness_semantics"] == "PER_FIELD_ONLY"
+
+
+def test_quote_buffer_soak_stays_bounded_and_reports_exact_loss():
+    q = R.QuoteBuffer(128)
+    for n in range(5000):
+        q.append({
+            "market_no": 207, "instrument_code": "TEST",
+            "received_at": f"2026-09-24T00:{n // 60 % 60:02d}:{n % 60:02d}+00:00",
+            "timestamp_quality": "LOCAL_RECEIVE_TIME_ONLY", "callback_type": "quote",
+            "DealPrice": n,
+        })
+    latest, pending, dropped = q.snapshot()
+    assert pending == 128
+    assert dropped == 5000 - 128
+    assert latest["207:TEST"]["DealPrice"] == 4999
+
+
+def test_default_subscription_resolution_is_explicit_asof_not_wall_clock():
+    spec = {
+        "key": "ose_micro", "market_no": 207, "code_prefix": "JNU",
+        "order_root": "JNU", "session_variant": "BOTH", "contracts": 1,
+    }
+    rows = [
+        {"market_code": 207, "code": "JNU2609", "order_code": "JNU 202609"},
+        {"market_code": 207, "code": "JNU2612", "order_code": "JNU 202612"},
+    ]
+    assert R._resolve_spec(spec, rows, asof=date(2026, 9, 1)) == [(207, "JNU2609", "ose_micro")]
+    assert R._resolve_spec(spec, rows, asof=date(2026, 9, 24)) == [(207, "JNU2612", "ose_micro")]
+    before_jst_rollover = datetime(2026, 9, 10, 14, 30, tzinfo=timezone.utc)
+    after_jst_rollover = datetime(2026, 9, 10, 15, 30, tzinfo=timezone.utc)
+    assert R._resolve_spec(spec, rows, asof=before_jst_rollover) == [(207, "JNU2609", "ose_micro")]
+    assert R._resolve_spec(spec, rows, asof=after_jst_rollover) == [(207, "JNU2612", "ose_micro")]
+    with pytest.raises(ValueError, match="timezone-aware"):
+        R._resolve_spec(spec, rows, asof=datetime(2026, 9, 10, 15, 30))
+
+
+def test_subscription_revalidation_is_periodic_not_calendar_day_gate():
+    assert not R._subscription_revalidation_due(100.0, 399.9, 300.0)
+    assert R._subscription_revalidation_due(100.0, 400.0, 300.0)
+    assert R._subscription_revalidation_due(400.0, 700.0, 300.0)
+
+
+def test_runtime_default_refresh_replaces_contract_and_preserves_dynamic(monkeypatch):
+    current_defaults = {(207, "JNU2609"): "ose_micro"}
+    subscribed = {(207, "JNU2609"): "ose_micro", (203, "NQZ6"): "dynamic"}
+    calls = []
+    monkeypatch.setattr(R, "resolve_default_subscriptions",
+                        lambda _cfg, *, asof=None: [(207, "JNU2612", "ose_micro")])
+    monkeypatch.setattr(R, "_subscribe", lambda _rt, _acct, pairs: calls.append(("add", list(pairs))))
+    monkeypatch.setattr(R, "_unsubscribe", lambda _rt, _acct, pairs: calls.append(("remove", list(pairs))))
+    out = R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                           asof=date(2026, 9, 24))
+    assert out == {"added": 1, "removed": 1, "desired": 1}
+    assert current_defaults == {(207, "JNU2612"): "ose_micro"}
+    assert subscribed == {(207, "JNU2612"): "ose_micro", (203, "NQZ6"): "dynamic"}
+    assert calls == [
+        ("add", [(207, "JNU2612", "ose_micro")]),
+        ("remove", [(207, "JNU2609", "ose_micro")]),
+    ]
+
+
+def test_runtime_default_refresh_dynamic_overlap_keeps_dynamic_owner(monkeypatch):
+    current_defaults = {(207, "JNU2609"): "ose_micro"}
+    subscribed = {(207, "JNU2609"): "ose_micro", (207, "JNU2612"): "dynamic"}
+    calls = []
+    monkeypatch.setattr(R, "resolve_default_subscriptions",
+                        lambda _cfg, *, asof=None: [(207, "JNU2612", "ose_micro")])
+    monkeypatch.setattr(R, "_subscribe", lambda _rt, _acct, pairs: calls.append(("add", list(pairs))))
+    monkeypatch.setattr(R, "_unsubscribe", lambda _rt, _acct, pairs: calls.append(("remove", list(pairs))))
+    dynamic_subscribed = {(207, "JNU2612")}
+    out = R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                           dynamic_subscribed, asof=date(2026, 9, 24))
+    assert out == {"added": 1, "removed": 1, "desired": 1}
+    assert current_defaults == {(207, "JNU2612"): "ose_micro"}
+    assert subscribed == {(207, "JNU2612"): "ose_micro"}
+    assert dynamic_subscribed == {(207, "JNU2612")}
+    assert calls == [("remove", [(207, "JNU2609", "ose_micro")])]
+
+
+def test_runtime_default_removal_does_not_unsubscribe_dynamic_overlap(monkeypatch):
+    current_defaults = {(207, "JNU2612"): "ose_micro"}
+    subscribed = {(207, "JNU2612"): "dynamic"}
+    calls = []
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg, *, asof=None: [])
+    monkeypatch.setattr(R, "_unsubscribe", lambda _rt, _acct, pairs: calls.append(list(pairs)))
+    dynamic_subscribed = {(207, "JNU2612")}
+    out = R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                           dynamic_subscribed, asof=date(2026, 9, 24))
+    assert out == {"added": 0, "removed": 1, "desired": 0}
+    assert current_defaults == {}
+    assert subscribed == {(207, "JNU2612"): "dynamic"}
+    assert dynamic_subscribed == {(207, "JNU2612")}
+    assert calls == []
+
+
+def test_runtime_default_key_change_does_not_resubscribe(monkeypatch):
+    current_defaults = {(207, "JNU2612"): "old_key"}
+    subscribed = {(207, "JNU2612"): "old_key"}
+    monkeypatch.setattr(R, "resolve_default_subscriptions",
+                        lambda _cfg, *, asof=None: [(207, "JNU2612", "new_key")])
+    monkeypatch.setattr(R, "_subscribe", lambda *_args, **_kwargs: pytest.fail("unexpected subscribe"))
+    monkeypatch.setattr(R, "_unsubscribe", lambda *_args, **_kwargs: pytest.fail("unexpected unsubscribe"))
+    out = R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                           asof=date(2026, 9, 24))
+    assert out == {"added": 0, "removed": 0, "desired": 1}
+    assert current_defaults == {(207, "JNU2612"): "new_key"}
+    assert subscribed == {(207, "JNU2612"): "new_key"}
+
+
+def test_runtime_default_partial_add_failure_keeps_completed_add_truth(monkeypatch):
+    current_defaults = {}
+    subscribed = {}
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg, *, asof=None: [
+        (207, "JNU2612", "ose_micro"), (207, "JNU2703", "ose_micro"),
+    ])
+    calls = []
+    def subscribe(_rt, _acct, pairs):
+        calls.append(list(pairs))
+        if pairs[0][1] == "JNU2703":
+            raise OSError("provider subscribe failed")
+    monkeypatch.setattr(R, "_subscribe", subscribe)
+    with pytest.raises(OSError):
+        R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                         asof=date(2026, 9, 24))
+    assert current_defaults == {(207, "JNU2612"): "ose_micro"}
+    assert subscribed == {(207, "JNU2612"): "ose_micro"}
+    assert calls == [[(207, "JNU2612", "ose_micro")], [(207, "JNU2703", "ose_micro")]]
+
+
+
+def test_runtime_default_refresh_fails_closed_before_transient_total_cap(monkeypatch):
+    current_defaults = {(207, "OLD"): "ose_micro"}
+    subscribed = {(207, "OLD"): "ose_micro"}
+    subscribed.update({(203, f"DYN{n}"): "dynamic" for n in range(1999)})
+    monkeypatch.setattr(R, "resolve_default_subscriptions",
+                        lambda _cfg, *, asof=None: [(207, "NEW", "ose_micro")])
+    monkeypatch.setattr(R, "_subscribe", lambda *_args, **_kwargs: pytest.fail("unexpected subscribe"))
+    monkeypatch.setattr(R, "_unsubscribe", lambda *_args, **_kwargs: pytest.fail("unexpected unsubscribe"))
+    with pytest.raises(ValueError, match="safe refresh"):
+        R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                         asof=date(2026, 9, 24))
+    assert current_defaults == {(207, "OLD"): "ose_micro"}
+    assert (207, "NEW") not in subscribed
+    assert len(subscribed) == 2000
+
+def test_runtime_default_refresh_failure_preserves_truthful_union(monkeypatch):
+    current_defaults = {(207, "JNU2609"): "ose_micro"}
+    subscribed = {(207, "JNU2609"): "ose_micro", (203, "NQZ6"): "dynamic"}
+    monkeypatch.setattr(R, "resolve_default_subscriptions",
+                        lambda _cfg, *, asof=None: [(207, "JNU2612", "ose_micro")])
+    monkeypatch.setattr(R, "_subscribe", lambda *_args, **_kwargs: None)
+    def fail_remove(*_args, **_kwargs):
+        raise OSError("provider unsubscribe failed")
+    monkeypatch.setattr(R, "_unsubscribe", fail_remove)
+    with pytest.raises(OSError):
+        R._refresh_default_subscriptions(object(), "MASKED", {}, current_defaults, subscribed,
+                                         asof=date(2026, 9, 24))
+    assert current_defaults == {
+        (207, "JNU2609"): "ose_micro", (207, "JNU2612"): "ose_micro",
+    }
+    assert subscribed == {
+        (207, "JNU2609"): "ose_micro", (207, "JNU2612"): "ose_micro",
+        (203, "NQZ6"): "dynamic",
+    }
+
+
+def test_dynamic_request_on_existing_default_preserves_future_dynamic_intent(tmp_path, monkeypatch):
+    cfg = {"recording": {"max_dynamic_subscriptions": 2},
+           "dynamic_requests": {"enabled": True, "allowed_markets": [207]}}
+    inbox = tmp_path / "control/inbox"
+    inbox.mkdir(parents=True)
+    (inbox / "keep.json").write_text(json.dumps({
+        "action": "subscribe", "market_no": 207, "symbol": "JNU2612",
+    }), encoding="utf-8")
+    subscribed = {(207, "JNU2612"): "ose_micro"}
+    dynamic_subscribed = set()
+    monkeypatch.setattr(R, "_subscribe", lambda *_args, **_kwargs: pytest.fail("unexpected subscribe"))
+    R._dynamic_requests(tmp_path, cfg, object(), "MASKED", subscribed, dynamic_subscribed)
+    assert subscribed == {(207, "JNU2612"): "ose_micro"}
+    assert dynamic_subscribed == {(207, "JNU2612")}
+    result = json.loads((tmp_path / "control/processed/keep.result.json").read_text(encoding="utf-8"))
+    assert result["status"] == "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
+
+
+def test_watchlist_all_call_signature_documents_vendor_sample_optional_language_arg():
+    root = Path(__file__).resolve().parents[1]
+    vendor = root / "vendor/yuanta_spark/2.2026.0918.0/YuantaSparkAPI_win-x64_Python/YSendOrder.py"
+    recorder = root / "src/market_ai_hub/integrations/yuanta/live_quote_recorder.py"
+
+    def counts(path):
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        out = {"SubscribeWatchlistAll": [], "UnSubscribeWatchlistAll": []}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in out:
+                out[node.func.attr].append(len(node.args))
+        return out
+
+    vendor_counts = counts(vendor)
+    recorder_counts = counts(recorder)
+    assert 2 in vendor_counts["SubscribeWatchlistAll"]
+    assert 2 in vendor_counts["UnSubscribeWatchlistAll"]
+    # Installed 2.2026.0918.0 DLL reflection shows a third optional Lng parameter
+    # (default NORMAL); recorder keeps explicit UTF8 rather than changing runtime behavior.
+    assert recorder_counts["SubscribeWatchlistAll"] == [3]
+    assert recorder_counts["UnSubscribeWatchlistAll"] == [3]
+    text = recorder.read_text(encoding="utf-8")
+    assert "enumLangType.UTF8" in text
 
 
 def test_control_rejects_action_limit_and_traversal(tmp_path, monkeypatch):
