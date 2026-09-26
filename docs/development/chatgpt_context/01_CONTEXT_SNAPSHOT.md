@@ -1,6 +1,6 @@
 # MARKET_AI_HUB 跨對話上下文快照
 
-快照日期：2026-09-25（Asia/Taipei）。用途：上傳 ChatGPT 專案資料來源。此檔是查核資料，不是新的執行授權。後續應替換此快照，避免多份「最新」並存。
+快照日期：2026-09-26（Asia/Taipei）。用途：上傳 ChatGPT 專案資料來源。此檔是查核資料，不是新的執行授權。後續應替換此快照，避免多份「最新」並存。
 
 ## 1. 先讀這段
 
@@ -10,9 +10,23 @@
 
 GitHub：https://github.com/fishke22/market-ai-hub
 
+### 2026-09-26 最新 W1 接手結果
+
+實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。上一棒留下的 `live_quote_recorder.py` / `test_quote_hub_hardening.py` dirty W1 contract-roll package 已完成 review、最小修補與離線驗收，implementation commit=`d6d443a1d18989e4826c81ed0fcff835f5295386`，目前 source/config build=`b571449004691eac`。
+
+核心修正：default subscriptions 每 300 秒重新解析，以各 market venue-local date 判斷月份/expiry，不再把 UTC rollover 當 exchange/session rollover；revalidation failure 會保持 DEGRADED 並於下一 interval retry。default routing 與 dynamic ownership 分離，default roll/removal 不會誤刪 dynamic intent；部分 subscribe/unsubscribe 失敗保持已完成操作的 truthful union。add-before-remove 若會暫時突破 2000 unique subscription cap，會在 provider call 前 fail closed。5000-event buffer soak 驗證 bounded queue 與 exact drop counter。
+
+API signature 查核：bundled vendor `YSendOrder.py` 的 WatchlistAll sample 省略第三參數；本機 `2.2026.0918.0` DLL reflection 顯示第三個 `Lng` 是 optional、default=`NORMAL`，因此 recorder 保留既有 explicit `enumLangType.UTF8`。subscribe/unsubscribe 共用 0.2 秒 throttle。這個查核只載入本機 assembly，沒有 instantiate/login/broker call。
+
+驗證：W1/W2/C2 broader=`96 passed, 2 deselected`；final isolated offline=`1888 passed, 1 skipped, 35 deselected, 110 warnings in 107.43s`，exit 0；diff check PASS；changed-file secret scan=0。第一次 full offline 的 3 failures 全是舊 `afd52f88a351541a` build-freeze assertions，觀測新 fingerprint 後更新為 `b571449004691eac`，沒有刪 gate。
+
+目前 recorder **尚未 adoption 新 build**。read-only preflight=`BLOCKED_RUNTIME_BUILD_STALE`：同一 invocation chain `[31808,32120]`、無 independent duplicate、heartbeat fresh、status=`DEGRADED`、runtime build=`afd52f88a351541a`、disk build=`b571449004691eac`、runtime/tracked measurement gate=false、broker_action_performed=false。不要因 disk/runtime 不一致就啟第二 owner或直接重啟。auto reconnect 尚未實作/驗證；crash durability 仍 `BUFFERED_NOT_ZERO_LOSS`，無 durable WAL/spool。
+
+可信度邊界不變：`ENGINE PASS != DATA READY != CALIBRATED != PREDICTIVE EVIDENCE != TRADING EDGE`；actual C2.3 typed runtime verification、eligible real DAILY close、W3.2 actual forward evidence仍未成立。
+
 2026-09-25 C2 W3.3 controlled-measurement path 最新交接：
 
-controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、`873e6bd9697efe1bc2c67d1767c708b23af2df10`；maintenance-control = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；request-script repair = `1452a45cf0c4de631d213eaa8648c3eae3b90211`；startup-observability source = `b9cfcb0e302e1520027d2c69adf363d15baf00c4`；current source/config build_id = `afd52f88a351541a`。
+controlled-path initial commit = `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review fixes = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、`873e6bd9697efe1bc2c67d1767c708b23af2df10`；maintenance-control = `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；request-script repair = `1452a45cf0c4de631d213eaa8648c3eae3b90211`；startup-observability source = `b9cfcb0e302e1520027d2c69adf363d15baf00c4`；C2.3-era source/config build_id at that checkpoint = `afd52f88a351541a`。
 新增的 `tick_detail_measurement` 只會在既有 single-owner recorder 內執行，
 而且 `tick_detail_measurements.enabled=false` 預設關閉。它只允許 OSE 207 + exact JNU contract
 + LastCount<=20，actual request/callback 都必須在 15:45–17:00 JST，遇到 outstanding ambiguity、
@@ -89,7 +103,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder runtime adoption 已成立，且最新 current-build safe-default recorder 正在 RUNNING；但 C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 仍未成立。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder 在 `afd52f88a351541a` 時曾完成 runtime adoption；2026-09-26 W1 source/config 已更新到 `b571449004691eac`，現有 single owner 仍跑舊 build，因此新 build 的 runtime adoption 目前是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -157,4 +171,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 current-build safe-default recorder 已 RUNNING 且 measurement runtime gate=false，所以平時不要再開第二 owner；parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。下一次新的使用者 continuation若落在有效 OSE 15:45–17:00 JST 視窗內，preflight 必須沒有 independent duplicate risk，才安全交接/停止唯一 safe-default owner，再用已證明的 foreground Runner Job 路徑以 current C2.3 build `afd52f88a351541a` 啟動 maintenance owner，驗 fresh W1/W2 provenance + FunctionList exact JNU，再只送一筆 measurement。typed evidence 成立才 materialize DAILY close；否則 fail closed。C3/C4 仍等待真實 C1/C2 輸入。
+先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 single safe-default owner 仍 RUNNING，但 runtime build=`afd52f88a351541a`、disk build=`b571449004691eac`，所以 owner preflight 應為 `BLOCKED_RUNTIME_BUILD_STALE`；不要再開第二 owner，parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。下一次需要 runtime adoption 或 C2.3 maintenance 時，必須先依 single-owner lifecycle 做受控 handover，啟動 disk current build `b571449004691eac` 並重新驗 fresh W1/W2 provenance；只有 C2 maintenance 且落在有效 OSE 15:45–17:00 JST 視窗時，才可再驗 FunctionList exact JNU 並只送一筆 measurement。typed evidence 成立才 materialize DAILY close；否則 fail closed。C3/C4 仍等待真實 C1/C2 輸入。
