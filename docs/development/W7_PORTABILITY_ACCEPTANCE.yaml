@@ -1,6 +1,6 @@
 schema: W7_PORTABILITY_ACCEPTANCE_V1
 updated_at: "2026-09-26"
-product_build_id: d92e85fec3660b93
+product_build_id: 72c6f533e5ae2341
 scope_note: "Current-machine relocation evidence is not new-Windows certification."
 cells:
   non_repo_cwd:

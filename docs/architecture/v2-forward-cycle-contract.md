@@ -2,7 +2,7 @@
 
 - **Schema**: `W3_FORWARD_CYCLE_SCHEMA_VERSION = "W3.2"`
 - **Module**: `src/market_ai_hub/research/v2/forward_cycle.py`
-- **Audit store**: V2-H **2H.3**
+- **Audit store**: V2-H **2H.4**
 - **Evaluation governance**: W3.1
 - **Metric engine**: V2-I **2I.1**, unchanged
 - **First supported scope**: OSAKA_MICRO / JNU / 1 OSE derivatives session / `last_price_naive`
@@ -15,7 +15,7 @@ W3.2 provides the smallest auditable real-forward lifecycle:
 ```text
 eligible contract daily close
   -> precommit prediction before target session begins
-  -> immutable 2H.3 prediction + lineage + POINT artifact
+  -> immutable 2H.4 prediction + lineage + POINT artifact
   -> wait until the sealed target session closes
   -> append exact contract terminal-close outcome
   -> W3.1 governed FORWARD evaluation
@@ -50,8 +50,10 @@ Once 17:00 JST is reached, a full-session 1d prediction for that target is too l
 - `series_semantics=CONTRACT`;
 - `roll_status=NONE`.
 
-The first model is the existing `last_price_naive`: its POINT forecast equals the last eligible
-contract close. This is a baseline, not a probability and not a trading recommendation.
+The POINT model remains the existing `last_price_naive`: its forecast equals the last eligible
+contract close. In parallel, W3.2-EP1 precommits an independent raw EVENT_PROBABILITY prediction
+for `TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D` using the causal Beta(1,1) producer defined in
+`w32-event-probability-producer-contract.md`. The raw probability is always UNCALIBRATED and not a trading recommendation.
 
 ## Feature Store boundary
 
@@ -80,7 +82,7 @@ Outcome records use:
 - schema: W3.2
 - exact source snapshot IDs
 
-Append-only/idempotent 2H.3 rules still apply.
+Append-only/idempotent 2H.4 rules still apply.
 
 ## Evaluation
 
@@ -109,7 +111,9 @@ Therefore **W3.2 ENGINE PASS != REAL FORWARD EVIDENCE**.
 
 ## Scheduling
 
-This package does not enable Windows Task Scheduler or any persistent background job. The old
-`research/forward_shadow.py` registry remains a historical Phase-2 forward-shadow component and is
-not reclassified as W3.2 evidence. Automatic daily execution can only be enabled in a later, explicitly
-reviewed operational package after an eligible DAILY contract-close source exists.
+The reviewed C2.3 Windows Scheduled Task is now enabled as a 5-minute timezone-aware poll. It reaches
+broker maintenance only on a verified OSE session date inside the 15:45-17:00 JST close window,
+materializes one typed exact-contract DAILY close, then invokes the broker-free W3.2 operator. The
+operator settles pending POINT and W3.2-EP1 event predictions before precommitting both scopes for the
+next full session. Outside the window the task exits no-op. The old `research/forward_shadow.py` registry
+remains a historical Phase-2 component and is not reclassified as W3.2 evidence.

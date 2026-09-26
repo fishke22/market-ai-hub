@@ -52,6 +52,17 @@ SOURCE_FREQUENCY = "DAILY"
 FORWARD_DAILY_FEATURE_NAME = "terminal_close"
 FORWARD_DAILY_FEATURE_VERSION = "w3.2-contract-daily-close-1"
 
+EVENT_PROBABILITY_SCHEMA_VERSION = "W3.2-EP1"
+EVENT_MODEL_NAME = "beta_bernoulli_terminal_above_source_close"
+EVENT_MODEL_VERSION = "w3.2-ep1-beta11-causal-1"
+EVENT_ARTIFACT_TYPE = "EVENT_PROBABILITY"
+EVENT_CALIBRATION_DOMAIN = "PRICE_DISTRIBUTION"
+EVENT_PROBABILITY_TYPE = "TERMINAL"
+EVENT_DEFINITION_ID = "TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D"
+EVENT_LABEL_TYPE = "TERMINAL_ABOVE_SOURCE_CLOSE_1D"
+EVENT_DISTRIBUTION_ID = "beta_bernoulli_terminal_above_source_close"
+EVENT_DISTRIBUTION_VERSION = "w3.2-ep1-beta11-causal-1"
+
 STATUS_PRECOMMITTED = "PRECOMMITTED"
 STATUS_ALREADY_PRECOMMITTED = "ALREADY_PRECOMMITTED"
 STATUS_SETTLED = "SETTLED"
@@ -392,6 +403,331 @@ def precommit_osaka_last_price(
         forecast_origin=now,
         label_window_start=window_start,
         label_window_end=window_end,
+    )
+
+
+
+
+def _event_scope_match(pred: PA.PredictionRecord, target_trading_date: str | None = None) -> bool:
+    return (
+        pred.target_family == TARGET_FAMILY
+        and pred.instrument == INSTRUMENT
+        and pred.horizon == HORIZON
+        and pred.model == EVENT_MODEL_NAME
+        and pred.model_version == EVENT_MODEL_VERSION
+        and pred.sample_origin == "FORWARD_PRECOMMITTED"
+        and (target_trading_date is None or pred.label_window_id == target_trading_date)
+    )
+
+
+def _event_contract_match(
+    db: PA.PredictionAuditDB,
+    prediction_id: str,
+    contract_code: str,
+    contract_month: str,
+) -> bool:
+    lineage = [
+        x for x in db.get_lineage(prediction_id)
+        if x.representation_id == REPRESENTATION_ID
+    ]
+    return (
+        len(lineage) == 1
+        and lineage[0].contract_code == contract_code
+        and lineage[0].contract_month == contract_month
+        and lineage[0].series_semantics == "CONTRACT"
+        and lineage[0].roll_status == "NONE"
+    )
+
+
+def _event_prior_counts(
+    db: PA.PredictionAuditDB,
+    as_of: datetime,
+    *,
+    contract_code: str,
+    contract_month: str,
+) -> tuple[int, int]:
+    """Count only causal settled outcomes from the same exact contract scope."""
+    successes = 0
+    failures = 0
+    cutoff = _utc(as_of)
+    for pid in db.list_prediction_ids():
+        pred = db.get_prediction(pid)
+        if (
+            pred is None
+            or not _event_scope_match(pred)
+            or not _event_contract_match(db, pid, contract_code, contract_month)
+        ):
+            continue
+        arts = [
+            a for a in db.get_forecast_artifacts(pid)
+            if a.artifact_type == EVENT_ARTIFACT_TYPE
+            and a.event_definition_id == EVENT_DEFINITION_ID
+            and a.label_type == EVENT_LABEL_TYPE
+        ]
+        if len(arts) != 1:
+            continue
+        outs = [
+            o for o in db.get_outcomes(pid)
+            if o.forecast_artifact_id == arts[0].forecast_artifact_id
+            and o.label_type == EVENT_LABEL_TYPE
+            and o.outcome_kind == "TERMINAL"
+            and o.available_at is not None
+            and _utc(o.available_at) <= cutoff
+        ]
+        if len(outs) != 1 or outs[0].actual_value not in (0, 0.0, 1, 1.0):
+            continue
+        if float(outs[0].actual_value) == 1.0:
+            successes += 1
+        else:
+            failures += 1
+    return successes, failures
+
+
+def raw_event_probability(
+    db: PA.PredictionAuditDB,
+    as_of: datetime,
+    *,
+    contract_code: str,
+    contract_month: str,
+) -> tuple[float, int, int]:
+    """Causal same-contract Beta(1,1) posterior mean; raw/uncalibrated by design."""
+    successes, failures = _event_prior_counts(
+        db,
+        as_of,
+        contract_code=contract_code,
+        contract_month=contract_month,
+    )
+    probability = (successes + 1.0) / (successes + failures + 2.0)
+    return probability, successes, failures
+
+
+def precommit_osaka_event_probability(
+    snapshot: OsakaForwardInput,
+    *,
+    db: PA.PredictionAuditDB | None = None,
+) -> ForwardCycleResult:
+    """Precommit one raw, explicitly UNCALIBRATED terminal event probability."""
+    db = db or PA.PredictionAuditDB()
+    now = _now_utc()
+    blockers = _input_blockers(snapshot, now)
+    try:
+        target, window_start, window_end = ose_next_full_session_window(snapshot.trading_date)
+    except Exception as exc:
+        return ForwardCycleResult(
+            status=STATUS_INPUT_NOT_ELIGIBLE,
+            reason=f"CALENDAR_INVALID:{type(exc).__name__}",
+            input_trading_date=snapshot.trading_date,
+            forecast_origin=now,
+        )
+    if blockers:
+        return ForwardCycleResult(
+            status=STATUS_INPUT_NOT_ELIGIBLE,
+            reason=";".join(sorted(set(blockers))),
+            input_trading_date=snapshot.trading_date,
+            target_trading_date=target,
+            forecast_origin=now,
+            label_window_start=window_start,
+            label_window_end=window_end,
+        )
+    existing = [
+        db.get_prediction(pid) for pid in db.list_prediction_ids()
+    ]
+    existing = [
+        p for p in existing
+        if (
+            p is not None
+            and _event_scope_match(p, target)
+            and _event_contract_match(
+                db,
+                p.prediction_id,
+                snapshot.contract_code,
+                snapshot.contract_month,
+            )
+        )
+    ]
+    if existing:
+        pred = sorted(existing, key=lambda p: p.prediction_id)[0]
+        arts = db.get_forecast_artifacts(pred.prediction_id)
+        art = next((a for a in arts if a.artifact_type == EVENT_ARTIFACT_TYPE), None)
+        return ForwardCycleResult(
+            status=STATUS_ALREADY_PRECOMMITTED,
+            reason="event scope/window already has a precommitted prediction",
+            prediction_id=pred.prediction_id,
+            forecast_artifact_id=art.forecast_artifact_id if art else "",
+            input_trading_date=snapshot.trading_date,
+            target_trading_date=target,
+            forecast_origin=pred.forecast_origin,
+            label_window_start=pred.label_window_start,
+            label_window_end=pred.label_window_end,
+        )
+
+    probability, successes, failures = raw_event_probability(
+        db,
+        now,
+        contract_code=snapshot.contract_code,
+        contract_month=snapshot.contract_month,
+    )
+    lineage = PA.make_lineage(
+        economic_factor_id=ECONOMIC_FACTOR_ID,
+        representation_id=REPRESENTATION_ID,
+        instrument_type="FUTURE",
+        representation_relation="DIRECT",
+        temporal_role="PREVIOUS_SESSION_REFERENCE",
+        resolved_role="PREVIOUS_SESSION_REFERENCE",
+        venue_id=VENUE_ID,
+        calendar_id=CALENDAR_ID,
+        session_status="CLOSED",
+        trading_date=snapshot.trading_date,
+        event_timestamp=snapshot.session_close_timestamp,
+        available_at=snapshot.available_at,
+        provider_timestamp=None,
+        received_at=snapshot.available_at,
+        timestamp_precision="BAR_CLOSE_TIMESTAMP",
+        staleness_status="FRESH_AT_FORECAST_ORIGIN",
+        availability_status=snapshot.availability_status,
+        quality_status=snapshot.quality_status,
+        provider=snapshot.provider,
+        source_type=snapshot.source_type,
+        source_frequency=SOURCE_FREQUENCY,
+        data_grade=snapshot.data_grade,
+        point_in_time_safe=True,
+        contract_code=snapshot.contract_code,
+        contract_month=snapshot.contract_month,
+        roll_status=snapshot.roll_status,
+        series_semantics=snapshot.series_semantics,
+        source_snapshot_ids=snapshot.source_snapshot_ids,
+    )
+    template = PA.make_forecast_artifact(
+        prediction_id="",
+        artifact_type=EVENT_ARTIFACT_TYPE,
+        calibration_domain=EVENT_CALIBRATION_DOMAIN,
+        probability_type=EVENT_PROBABILITY_TYPE,
+        event_definition_id=EVENT_DEFINITION_ID,
+        event_threshold_value=float(snapshot.close),
+        label_type=EVENT_LABEL_TYPE,
+        value=float(probability),
+        raw_score=float(successes + failures),
+        units="probability",
+        status="OK",
+        calibration_status_at_origin="UNCALIBRATED",
+        distribution_id=EVENT_DISTRIBUTION_ID,
+        distribution_version=EVENT_DISTRIBUTION_VERSION,
+        generated_at=now,
+        source_snapshot_ids=snapshot.source_snapshot_ids,
+    )
+    schemas = PA.v2_schema_versions()
+    schemas["event_probability_producer"] = EVENT_PROBABILITY_SCHEMA_VERSION
+    pred = PA.make_prediction(
+        [lineage], [template],
+        target_family=TARGET_FAMILY,
+        instrument=INSTRUMENT,
+        instrument_role="DIRECT",
+        calendar_id=CALENDAR_ID,
+        frequency="DAILY",
+        horizon=HORIZON,
+        sample_origin="FORWARD_PRECOMMITTED",
+        label_window_id=target,
+        label_window_start=window_start,
+        label_window_end=window_end,
+        forecast_origin=now,
+        feature_cutoff_timestamp=snapshot.available_at,
+        build_id=build_fingerprint()["build_id"],
+        model=EVENT_MODEL_NAME,
+        model_version=EVENT_MODEL_VERSION,
+        v2_schema_versions=schemas,
+        sequence_id=f"{EVENT_MODEL_NAME}|{target}|{snapshot.contract_code}",
+        source_snapshot_ids=snapshot.source_snapshot_ids,
+    )
+    artifact = PA.ForecastArtifactRecord(**{**template.model_dump(), "prediction_id": pred.prediction_id})
+    db.append_prediction_bundle(pred, [lineage], [artifact])
+    return ForwardCycleResult(
+        status=STATUS_PRECOMMITTED,
+        prediction_id=pred.prediction_id,
+        forecast_artifact_id=artifact.forecast_artifact_id,
+        input_trading_date=snapshot.trading_date,
+        target_trading_date=target,
+        forecast_origin=now,
+        label_window_start=window_start,
+        label_window_end=window_end,
+    )
+
+
+def settle_osaka_event_probability(
+    prediction_id: str,
+    snapshot: OsakaForwardOutcome,
+    *,
+    db: PA.PredictionAuditDB | None = None,
+) -> ForwardCycleResult:
+    """Settle the frozen terminal-above-source-close event after target close."""
+    db = db or PA.PredictionAuditDB()
+    pred = db.get_prediction(prediction_id)
+    if pred is None:
+        return ForwardCycleResult(status=STATUS_NOT_FOUND, reason="prediction not found", prediction_id=prediction_id)
+    if not _event_scope_match(pred):
+        return ForwardCycleResult(status=STATUS_BLOCKED, reason="prediction is not W3.2-EP1 event scope", prediction_id=prediction_id)
+    artifacts = [
+        a for a in db.get_forecast_artifacts(prediction_id)
+        if a.artifact_type == EVENT_ARTIFACT_TYPE
+        and a.event_definition_id == EVENT_DEFINITION_ID
+        and a.label_type == EVENT_LABEL_TYPE
+    ]
+    if len(artifacts) != 1 or artifacts[0].event_threshold_value is None:
+        return ForwardCycleResult(status=STATUS_BLOCKED, reason="event artifact/threshold missing or ambiguous", prediction_id=prediction_id)
+    art = artifacts[0]
+    existing = [
+        o for o in db.get_outcomes(prediction_id)
+        if o.forecast_artifact_id == art.forecast_artifact_id
+    ]
+    if existing:
+        return ForwardCycleResult(
+            status=STATUS_ALREADY_SETTLED,
+            reason="event prediction already has an outcome",
+            prediction_id=prediction_id,
+            forecast_artifact_id=art.forecast_artifact_id,
+            outcome_id=existing[0].outcome_id,
+            target_trading_date=pred.label_window_id,
+            forecast_origin=pred.forecast_origin,
+            label_window_start=pred.label_window_start,
+            label_window_end=pred.label_window_end,
+        )
+    now = _now_utc()
+    blockers = _outcome_blockers(pred, db.get_lineage(prediction_id), snapshot, now)
+    if blockers:
+        status = STATUS_NOT_MATURE if "HORIZON_NOT_MATURE" in blockers else STATUS_OUTCOME_NOT_ELIGIBLE
+        return ForwardCycleResult(
+            status=status,
+            reason=";".join(sorted(set(blockers))),
+            prediction_id=prediction_id,
+            forecast_artifact_id=art.forecast_artifact_id,
+            target_trading_date=pred.label_window_id,
+            forecast_origin=pred.forecast_origin,
+            label_window_start=pred.label_window_start,
+            label_window_end=pred.label_window_end,
+        )
+    actual = 1.0 if float(snapshot.close) > float(art.event_threshold_value) else 0.0
+    outcome = PA.make_outcome(
+        prediction_id=prediction_id,
+        label_type=EVENT_LABEL_TYPE,
+        outcome_kind="TERMINAL",
+        target_period=pred.label_window_id,
+        actual_value=actual,
+        event_timestamp=snapshot.session_close_timestamp,
+        available_at=snapshot.available_at,
+        label_schema_version=EVENT_PROBABILITY_SCHEMA_VERSION,
+        source_snapshot_ids=snapshot.source_snapshot_ids,
+        notes="W3.2-EP1 exact-contract terminal close vs frozen source-close threshold",
+        forecast_artifact_id=art.forecast_artifact_id,
+    )
+    db.append_outcome(outcome)
+    return ForwardCycleResult(
+        status=STATUS_SETTLED,
+        prediction_id=prediction_id,
+        forecast_artifact_id=art.forecast_artifact_id,
+        outcome_id=outcome.outcome_id,
+        target_trading_date=pred.label_window_id,
+        forecast_origin=pred.forecast_origin,
+        label_window_start=pred.label_window_start,
+        label_window_end=pred.label_window_end,
     )
 
 
@@ -749,6 +1085,47 @@ def osaka_forward_outcome_from_feature_store(
     )
     status["forward_outcome_status"] = "CANDIDATE"
     return outcome, status
+
+
+
+
+def precommit_osaka_event_probability_from_feature_store(
+    *,
+    contract_code: str,
+    db: PA.PredictionAuditDB | None = None,
+    store: Any | None = None,
+) -> ForwardCycleResult:
+    now = _now_utc()
+    snapshot, status = osaka_forward_input_from_feature_store(
+        as_of=now, contract_code=contract_code, store=store,
+    )
+    if snapshot is None:
+        return ForwardCycleResult(
+            status=STATUS_INPUT_NOT_ELIGIBLE,
+            reason=f"{status.get('status', 'NOT_READY')}:{status.get('reason', '')}".rstrip(":"),
+            forecast_origin=now,
+        )
+    return precommit_osaka_event_probability(snapshot, db=db)
+
+
+def settle_osaka_event_probability_from_feature_store(
+    prediction_id: str,
+    *,
+    db: PA.PredictionAuditDB | None = None,
+    store: Any | None = None,
+) -> ForwardCycleResult:
+    audit = db or PA.PredictionAuditDB()
+    now = _now_utc()
+    snapshot, status = osaka_forward_outcome_from_feature_store(
+        prediction_id, as_of=now, db=audit, store=store,
+    )
+    if snapshot is None:
+        return ForwardCycleResult(
+            status=STATUS_OUTCOME_NOT_ELIGIBLE,
+            reason=f"{status.get('status', 'NOT_READY')}:{status.get('reason', '')}".rstrip(":"),
+            prediction_id=prediction_id,
+        )
+    return settle_osaka_event_probability(prediction_id, snapshot, db=audit)
 
 
 def settle_osaka_from_feature_store(

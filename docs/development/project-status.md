@@ -1,22 +1,32 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W5.1 FIRST_PASSAGE_ENGINE_MERGED_POSTMERGE_VERIFIED / W4.1 CALIBRATION_FITTING_ENGINE_MERGED_POSTMERGE_VERIFIED / C2.3+W3.2 RUNTIME_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
-- Gate: **LOCAL ENGINEERING THROUGH W5.1 PASS; evidence gates remain closed until real forward samples exist. W4 CALIBRATED is forbidden without separate one-use FINAL_OOS evidence.**
-- build_id：**d92e85fec3660b93**（merged W5 source/config fingerprint；current persistent live owner runtime=disk build verified）
-- Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
+- Current phase: **W3.2-EP1 RAW_EVENT_PROBABILITY_PRODUCER_LOCAL_PASS / W5.1 FIRST_PASSAGE_MERGED / W4.1 CALIBRATION_ENGINE_MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Gate: **LOCAL ENGINEERING INCLUDING W3.2-EP1 PASS; producer will start only from future eligible exact-contract DAILY closes. Evidence gates remain closed until real samples accumulate. W4 CALIBRATED still requires governed CALIBRATION + VALIDATION + separate one-use FINAL_OOS acceptance.**
+- build_id：**72c6f533e5ae2341**（W3.2-EP1 + MCP/security closeout source/config fingerprint；LOCAL_PASS，post-merge live-owner handover pending）
+- Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.4**；evaluation governance **W3.1**；forward cycle **W3.2**；raw event producer **W3.2-EP1**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：persistent safe-default owner adopted and reverified by RDC on build **d92e85fec3660b93**; heartbeat fresh, runtime=disk build, measurement gates=false, no independent duplicate owner. On 2026-09-26 weekend/non-session the only health reason is `NO_RECENT_CALLBACK_SESSION_UNCHECKED`.
+- Live quote capability：the pre-existing persistent safe-default owner remains single-owner/safe-default; source changes make runtime build stale versus disk build **72c6f533e5ae2341** until the post-merge controlled handover. Measurement gates remain false; no second owner is permitted.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 W3.2-EP1 raw event-probability + MCP/analysis closeout
+
+- Build `72c6f533e5ae2341` locally passes the new W3.2-EP1 producer. Event=`TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D`; first raw sample is Beta(1,1) prior=0.5; subsequent prior counts use only settled outcomes available before forecast origin and only the same exact contract code/month. Every artifact remains `UNCALIBRATED`; `is_public_probability=false`.
+- 2H.4 adds optional immutable `event_threshold_value` while preserving legacy artifact hashes when the field is absent. C2.3/W3.2 automatically settles and precommits both POINT and raw EVENT_PROBABILITY scopes from the verified DAILY exact-contract close.
+- Feature Store on this machine was non-destructively migrated to schema 2; 547 legacy feature rows were preserved and `factor_observations` exists. Direct Osaka model input now reports `NO_ELIGIBLE_ROWS`, not schema failure.
+- FinMind request logging no longer emits token-bearing URLs. Existing local `mcp.log` was scrubbed at 22 occurrences without rotating/changing the credential. Branch-wide changed-file secret scan=0.
+- CherryStudio `market-ai` MCP stdio entry remains valid; MCP E2E passed 21 tools / 24 calls / 0 errors. `get_forward_test_status` now exposes W3.2-EP1 registered/settled/pending counts without exposing raw probabilities.
+- Validation after exact-contract hardening: event focused `6 passed`; W3/W4/MCP cross `158 passed`; local CI-equivalent `1965 passed / 1 skipped / 35 deselected / 110 warnings`, exit 0. Real samples remain NONE_YET because 2026-09-26 is not an OSE session.
+- W7 clean-new-Windows/full-install/WinCred/certificate/COM validation is deferred by user intent and recorded in `FUTURE_RELOCATION_VALIDATION_MEMO.md`; it is not a current financial-analysis gate.
 
 ## 2026-09-26 W4.1 + W5.1 final engineering closure
 
 - W4.1: implementation `5ec760a`; PR #61; CI `36240929664` PASS; merged `54542a1443eee9a8a73a130b602abeba0fca941b`. Governed sigmoid fitting consumes only homogeneous W3.1 `FORWARD_PRECOMMITTED EVENT_PROBABILITY` evidence. Validation freezes `EVALUATED_UNCALIBRATED`; a distinct one-use `FINAL_OOS` dataset is required before `CALIBRATED`. Local CI-equivalent `1942 passed / 7 skipped / 35 deselected`; post-merge smoke `61 passed`.
 - W5.1: implementation `906a164`; PR #62; CI `36241924593` PASS; merged `37abd2574e59443d6079e24ebc0a639d3713c51e`. Added daily first-passage `UPPER_FIRST / LOWER_FIRST / NEITHER / AMBIGUOUS_WITHIN_DAILY_BAR` and independent FIRST_PASSAGE audit/calibration semantics. Cross-regression `187 passed`; local CI-equivalent `1950 passed / 7 skipped / 35 deselected`; post-merge smoke `187 passed`.
 - Runtime: `D:\MARKET_AI_HUB` main equals origin/main; safe-default owner adopted on build `d92e85fec3660b93`. C2.3 Scheduled Task is Enabled, polls every 5 minutes, Last Result=0 on this non-session date.
-- Evidence truth: no new real DAILY terminal-close evidence was created on the weekend. Osaka automatic baseline is POINT-only. `ACTUAL_FORWARD_EVIDENCE=NONE_YET`; `ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET`; market `CALIBRATED=FALSE`; trading edge is not claimed.
+- Evidence truth at the W4/W5 merge checkpoint: no new real DAILY terminal-close evidence was created on the weekend and W3.2 was POINT-only at that time. W3.2-EP1 now supersedes the producer limitation, but `ACTUAL_FORWARD_EVIDENCE=NONE_YET`; `ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET`; market `CALIBRATED=FALSE`; trading edge is still not claimed.
 
 ## 2026-09-26 C2.3 terminal-close automation + W3.2 exact-JNU operational cycle
 

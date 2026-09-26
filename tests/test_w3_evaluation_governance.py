@@ -153,7 +153,7 @@ def test_prediction_window_and_origin_are_identity_bound():
     c, _, _ = _prediction(window_end=_dt(25, 7))
     assert a.prediction_id != b.prediction_id
     assert a.prediction_id != c.prediction_id
-    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.3"
+    assert PA.V2_PREDICTION_AUDIT_SCHEMA_VERSION == "2H.4"
     assert PA.v2_schema_versions()["evaluation_governance"] == "W3.1"
 
 

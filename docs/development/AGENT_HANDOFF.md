@@ -1,9 +1,21 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W4.1 calibration fitting + W5.1 first-passage MERGED_POSTMERGE_VERIFIED; live safe-default owner adopted on build `d92e85fec3660b93`; real forward/event-probability evidence still NONE_YET.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W3.2-EP1 raw event-probability producer + MCP/Feature-Store/security closeout LOCAL_PASS; product build `72c6f533e5ae2341`; real forward/event-probability evidence still NONE_YET pending the next valid OSE sessions.
 
 ## Current repair checkpoint
+
+### 2026-09-26 W3.2-EP1 raw EVENT_PROBABILITY + Cherry/MCP closeout
+
+W3.2-EP1 is implemented and locally validated on product build `72c6f533e5ae2341`. Every eligible C2.3 exact-contract DAILY terminal close now drives two independent `FORWARD_PRECOMMITTED` scopes: the existing POINT `last_price_naive` baseline and a raw `EVENT_PROBABILITY` model for `TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D`. The event threshold is frozen in immutable 2H.4 audit metadata. The raw probability is a causal Beta(1,1) posterior mean using only already-available settled outcomes from the same exact `contract_code + contract_month`; rollover contracts never share the prior. First sample with no history is an explicit UNCALIBRATED prior=0.5. Raw values are not public calibrated probabilities.
+
+The C2.3 Scheduled Task already invokes the W3.2 operator, so no new user action is required on trading days. The operator settles pending POINT/event predictions, then precommits both next-session scopes. MCP `get_forward_test_status` now reports `w32_event_probability_registered/settled/pending` plus the tracked W4 50/50/50 minimum partition counts; 150 samples is a minimum protocol count, not automatic calibration acceptance. No real EP1 prediction was backfilled on 2026-09-26 because it was not an OSE session.
+
+Closeout hardening also non-destructively migrated the existing Feature Store to schema 2 while preserving all 547 legacy feature rows; missing direct model input now truthfully reports `NO_ELIGIBLE_ROWS` rather than `SCHEMA_NOT_READY`. FinMind HTTP logging was hardened so token-bearing request URLs are suppressed/redacted; existing local `mcp.log` had 22 occurrences redacted without changing the credential. CherryStudio's existing `market-ai` stdio executable remains the correct MCP entry and successfully exposes 21 tools.
+
+Validation after exact-contract hardening: event-focused=`6 passed`; W3/W4/MCP cross-regression=`158 passed`; CI-equivalent local=`1965 passed, 1 skipped, 35 deselected, 110 warnings`, exit 0; MCP E2E before the final exact-contract-only refinement=`21 tools / 24 calls / 0 errors`, and the refinement is covered by the later 158/1965 suites. Branch-wide changed-file secret scan=0; `git diff --check` PASS. Current live owner must be handed over to the merged build after publication; until then runtime/disk build mismatch is expected on this development branch.
+
+Future new-machine relocation is deliberately not a current gate. `docs/development/FUTURE_RELOCATION_VALIDATION_MEMO.md` records the unverified clean-Windows/full-install/WinCred/certificate/COM checks for later. Current financial analysis remains fail-closed: proxy/direct semantics, data freshness, calibration state, and evidence gates are reported rather than guessed.
 
 ### 2026-09-26 W4.1/W5.1 final engineering closure
 
@@ -13,7 +25,7 @@ W5.1 implementation `906a164`; PR #62 clean-runner CI `36241924593` PASS; merged
 
 Runtime adoption is complete. `D:\MARKET_AI_HUB` main equals origin/main W5 merge, product build `d92e85fec3660b93`. RDC verified exactly one safe-default recorder owner, fresh heartbeat, runtime build=disk build, measurement gates=false, and no independent duplicate owner. On this non-OSE-session date the only health reason is `NO_RECENT_CALLBACK_SESSION_UNCHECKED`. `MARKET_AI_HUB_C23_Terminal_Close_Measurement` remains Enabled on a 5-minute poll with Last Result=0.
 
-Truth boundary: ENGINE PASS is not DATA READY. Current Osaka automatic forward baseline remains POINT-only, so `ACTUAL_FORWARD_EVIDENCE=NONE_YET` and real EVENT_PROBABILITY calibration evidence is `NONE_YET`. No market `CALIBRATED` evidence and no trading edge are claimed.
+Truth boundary at this W4/W5 checkpoint was: ENGINE PASS is not DATA READY. W3.2 was POINT-only at that time. This historical sentence is superseded by the W3.2-EP1 closeout above: the raw EVENT_PROBABILITY producer now exists, but no real EP1 sample has settled yet. No market `CALIBRATED` evidence and no trading edge are claimed.
 
 ### 2026-09-26 C2.3 terminal-close automation + W3.2 operational cycle
 

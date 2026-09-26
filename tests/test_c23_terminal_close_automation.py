@@ -73,6 +73,7 @@ def test_w32_operator_settles_pending_scope_then_precommits(monkeypatch):
     audit = FakeAudit()
     settled = []
     precommits = []
+    event_precommits = []
 
     def fake_settle(prediction_id, *, db, store):
         settled.append(prediction_id)
@@ -91,13 +92,24 @@ def test_w32_operator_settles_pending_scope_then_precommits(monkeypatch):
             target_trading_date="2026-09-29",
         )
 
+    def fake_event_precommit(*, contract_code, db, store):
+        event_precommits.append(contract_code)
+        return FC.ForwardCycleResult(
+            status=FC.STATUS_PRECOMMITTED,
+            prediction_id="new-event-prediction",
+            target_trading_date="2026-09-29",
+        )
+
     monkeypatch.setattr(mod.FC, "settle_osaka_from_feature_store", fake_settle)
     monkeypatch.setattr(mod.FC, "precommit_osaka_from_feature_store", fake_precommit)
+    monkeypatch.setattr(mod.FC, "precommit_osaka_event_probability_from_feature_store", fake_event_precommit)
     result = mod.run_cycle("jnu2612", db=audit, store=object())
 
     assert settled == ["w32-pending"]
     assert precommits == ["JNU2612"]
+    assert event_precommits == ["JNU2612"]
     assert result["precommit"]["status"] == FC.STATUS_PRECOMMITTED
+    assert result["event_probability_precommit"]["status"] == FC.STATUS_PRECOMMITTED
     assert result["values_exposed"] is False
     assert all("close" not in json.dumps(x).lower() for x in result["settlements"])
 

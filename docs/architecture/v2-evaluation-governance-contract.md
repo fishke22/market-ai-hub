@@ -2,7 +2,7 @@
 
 - **Schema**: `W3_EVALUATION_GOVERNANCE_SCHEMA_VERSION = "W3.1"`
 - **Module**: `src/market_ai_hub/research/v2/evaluation_governance.py`
-- **Upstream audit**: V2-H **2H.3**
+- **Upstream audit**: V2-H **2H.4**
 - **Metric engine**: V2-I **2I.1**, unchanged
 - **Purpose**: decide which already-audited samples are legally eligible for evaluation. It does **not** fit a calibrator.
 

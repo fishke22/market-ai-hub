@@ -179,6 +179,8 @@ try {
         materialization_status = [string]$Materialized.status
         precommit_status = [string]$ForwardResult.precommit.status
         prediction_id = [string]$ForwardResult.precommit.prediction_id
+        event_probability_precommit_status = [string]$ForwardResult.event_probability_precommit.status
+        event_probability_prediction_id = [string]$ForwardResult.event_probability_precommit.prediction_id
         settlement_count = @($ForwardResult.settlements).Count
     }
     $Completed = $true

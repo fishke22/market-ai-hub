@@ -477,3 +477,152 @@ def test_legacy_continuous_daily_parquet_is_never_forward_evidence(tmp_path):
         "ROLL_PROVENANCE_MISSING",
     ):
         assert blocker in status["reason"]
+
+
+def test_raw_event_probability_first_sample_is_uninformative_prior(monkeypatch, db):
+    _set_clock(monkeypatch, _dt(24, 7, 0))
+    res = FC.precommit_osaka_event_probability(_input(), db=db)
+    assert res.status == FC.STATUS_PRECOMMITTED
+    pred = db.get_prediction(res.prediction_id)
+    assert pred is not None
+    assert pred.model == FC.EVENT_MODEL_NAME
+    assert pred.model_version == FC.EVENT_MODEL_VERSION
+    assert pred.sample_origin == "FORWARD_PRECOMMITTED"
+    arts = db.get_forecast_artifacts(pred.prediction_id)
+    assert len(arts) == 1
+    art = arts[0]
+    assert art.artifact_type == "EVENT_PROBABILITY"
+    assert art.calibration_domain == "PRICE_DISTRIBUTION"
+    assert art.probability_type == "TERMINAL"
+    assert art.event_definition_id == FC.EVENT_DEFINITION_ID
+    assert art.event_threshold_value == pytest.approx(42000.0)
+    assert art.value == pytest.approx(0.5)
+    assert art.raw_score == pytest.approx(0.0)
+    assert art.calibration_status_at_origin == "UNCALIBRATED"
+    assert PA.is_public_probability(art) is False
+
+
+def test_event_probability_settlement_uses_frozen_threshold(monkeypatch, db):
+    _set_clock(monkeypatch, _dt(24, 7, 0))
+    pred = FC.precommit_osaka_event_probability(_input(), db=db)
+    _set_clock(monkeypatch, _dt(25, 7, 0))
+    res = FC.settle_osaka_event_probability(
+        pred.prediction_id, _outcome(close=42100.0), db=db
+    )
+    assert res.status == FC.STATUS_SETTLED
+    outs = db.get_outcomes(pred.prediction_id)
+    assert len(outs) == 1
+    assert outs[0].outcome_kind == "TERMINAL"
+    assert outs[0].label_type == FC.EVENT_LABEL_TYPE
+    assert outs[0].actual_value == pytest.approx(1.0)
+    assert outs[0].label_schema_version == FC.EVENT_PROBABILITY_SCHEMA_VERSION
+
+
+def test_event_probability_second_precommit_updates_only_from_available_history(monkeypatch, db):
+    _set_clock(monkeypatch, _dt(24, 7, 0))
+    first = FC.precommit_osaka_event_probability(_input(), db=db)
+    _set_clock(monkeypatch, _dt(25, 7, 10))
+    settled = FC.settle_osaka_event_probability(
+        first.prediction_id,
+        _outcome(close=42100.0, available_at=_dt(25, 7, 5)),
+        db=db,
+    )
+    assert settled.status == FC.STATUS_SETTLED
+
+    # At 07:00 the outcome exists in storage but was not yet available, so it is excluded.
+    p_early, succ_early, fail_early = FC.raw_event_probability(db, _dt(25, 7, 0), contract_code="JNU2612", contract_month="202612")
+    assert (succ_early, fail_early) == (0, 0)
+    assert p_early == pytest.approx(0.5)
+
+    # Once available, the same causal history updates Beta(1,1) to Beta(2,1).
+    p_late, succ_late, fail_late = FC.raw_event_probability(db, _dt(25, 7, 6), contract_code="JNU2612", contract_month="202612")
+    assert (succ_late, fail_late) == (1, 0)
+    assert p_late == pytest.approx(2.0 / 3.0)
+
+    second_input = _input(
+        trading_date="2026-09-25",
+        close=42100.0,
+        session_close_timestamp=_dt(25, 6, 45),
+        available_at=_dt(25, 6, 50),
+        source_snapshot_ids=["src-input-20260925"],
+    )
+    _set_clock(monkeypatch, _dt(25, 7, 6))
+    second = FC.precommit_osaka_event_probability(second_input, db=db)
+    assert second.status == FC.STATUS_PRECOMMITTED
+    art = db.get_forecast_artifacts(second.prediction_id)[0]
+    assert art.value == pytest.approx(2.0 / 3.0)
+    assert art.raw_score == pytest.approx(1.0)
+    assert art.event_threshold_value == pytest.approx(42100.0)
+
+
+def test_event_probability_equal_close_is_false_not_ambiguous(monkeypatch, db):
+    _set_clock(monkeypatch, _dt(24, 7, 0))
+    pred = FC.precommit_osaka_event_probability(_input(), db=db)
+    _set_clock(monkeypatch, _dt(25, 7, 0))
+    FC.settle_osaka_event_probability(
+        pred.prediction_id, _outcome(close=42000.0), db=db
+    )
+    assert db.get_outcomes(pred.prediction_id)[0].actual_value == pytest.approx(0.0)
+
+
+def test_event_probability_feature_store_wrappers_accumulate_without_cli_prices(monkeypatch, tmp_path, db):
+    store = _forward_store(tmp_path)
+    _set_clock(monkeypatch, _dt(24, 7, 0))
+    pre = FC.precommit_osaka_event_probability_from_feature_store(
+        contract_code="JNU2612", db=db, store=store,
+    )
+    assert pre.status == FC.STATUS_PRECOMMITTED
+    art = db.get_forecast_artifacts(pre.prediction_id)[0]
+    assert art.value == pytest.approx(0.5)
+    assert art.event_threshold_value == pytest.approx(42000.0)
+
+    # Add the next exact-contract DAILY close; settlement wrapper must use store truth only.
+    _forward_store(
+        tmp_path, trading_date="2026-09-25", day=25, value=42100.0,
+    )
+    _set_clock(monkeypatch, _dt(25, 7, 0))
+    settled = FC.settle_osaka_event_probability_from_feature_store(
+        pre.prediction_id, db=db, store=store,
+    )
+    assert settled.status == FC.STATUS_SETTLED
+    out = db.get_outcomes(pre.prediction_id)[0]
+    assert out.actual_value == pytest.approx(1.0)
+
+
+def test_event_probability_prior_and_idempotency_do_not_cross_contracts(monkeypatch, db):
+    _set_clock(monkeypatch, _dt(24, 7, 0))
+    first = FC.precommit_osaka_event_probability(_input(), db=db)
+    assert first.status == FC.STATUS_PRECOMMITTED
+
+    _set_clock(monkeypatch, _dt(25, 7, 0))
+    settled = FC.settle_osaka_event_probability(
+        first.prediction_id, _outcome(close=42100.0), db=db,
+    )
+    assert settled.status == FC.STATUS_SETTLED
+
+    same_contract = FC.raw_event_probability(
+        db, _dt(25, 7, 1), contract_code="JNU2612", contract_month="202612",
+    )
+    other_contract = FC.raw_event_probability(
+        db, _dt(25, 7, 1), contract_code="JNU2703", contract_month="202703",
+    )
+    assert same_contract == pytest.approx((2.0 / 3.0, 1, 0))
+    assert other_contract == pytest.approx((0.5, 0, 0))
+
+    # A different exact contract may have its own prediction for the same target window.
+    _set_clock(monkeypatch, _dt(24, 7, 5))
+    other = FC.precommit_osaka_event_probability(
+        _input(
+            contract_code="JNU2703",
+            contract_month="202703",
+            source_snapshot_ids=["src-input-other-contract"],
+        ),
+        db=db,
+    )
+    assert other.status == FC.STATUS_PRECOMMITTED
+    assert other.prediction_id != first.prediction_id
+    art = db.get_forecast_artifacts(other.prediction_id)[0]
+    assert art.value == pytest.approx(0.5)
+    lineage = db.get_lineage(other.prediction_id)
+    assert lineage[0].contract_code == "JNU2703"
+    assert lineage[0].contract_month == "202703"

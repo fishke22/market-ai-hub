@@ -25,7 +25,7 @@
 不在本棒：calibration fitting / Brier / log-loss / model training / trading / broker / recorder。
 Yuanta live capability 不是 gate：live → 存 live lineage；unavailable → 存 unavailable lineage。
 
-Schema: V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"。
+Schema: V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.4"。
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"
+V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.4"
 
 PREDICTION_STATUSES = ("PENDING", "SUPERSEDED", "VOID")
 PREDICTION_SAMPLE_ORIGINS = ("FORWARD_PRECOMMITTED", "RETROSPECTIVE_REPLAY", "UNKNOWN")
@@ -280,6 +280,7 @@ class ForecastArtifactRecord:
     calibration_domain: str = ""
     probability_type: str = ""
     event_definition_id: str = ""
+    event_threshold_value: float | None = None
     label_type: str = ""
     value: float | None = None
     raw_score: float | None = None
@@ -321,7 +322,7 @@ class ForecastArtifactRecord:
             raise PredictionAuditError("EVENT_PROBABILITY artifact requires event_definition_id")
         if self.artifact_type == "NOT_AVAILABLE" and (self.value is not None or self.raw_score is not None):
             raise PredictionAuditError("NOT_AVAILABLE artifact must not carry value/raw_score")
-        for n in ("value", "raw_score", "quantile_level", "lower_value", "upper_value", "nominal_coverage"):
+        for n in ("value", "raw_score", "event_threshold_value", "quantile_level", "lower_value", "upper_value", "nominal_coverage"):
             v = getattr(self, n)
             if v is not None and not isinstance(v, (int, float)):
                 raise PredictionAuditError(f"{n} must be numeric or None")
@@ -440,6 +441,10 @@ def forecast_artifact_payload(record: ForecastArtifactRecord) -> dict:
     d.pop("forecast_artifact_id", None)
     d.pop("prediction_id", None)   # FK, excluded so identity is not circular with the prediction id
     d.pop("created_at", None)
+    # 2H.4 adds an optional frozen event threshold. Omitting the absent field preserves
+    # canonical payload/hash compatibility for every pre-2H.4 artifact.
+    if d.get("event_threshold_value") is None:
+        d.pop("event_threshold_value", None)
     return d
 
 

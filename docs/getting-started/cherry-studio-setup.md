@@ -127,7 +127,7 @@ Cherry Studio 啟動的 MCP server 是長駐 process。
 
 更多範例：[`prompts/QUICK_PROMPTS.md`](prompts/QUICK_PROMPTS.md)
 
-完整 Agent 行為參考（推薦）：[`prompts/SYSTEM_PROMPT_V4_1_COMPACT.md`](prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)
+CherryStudio `market-ai` Agent 目前推薦：[`CHERRYSTUDIO_MARKET_AI_AGENT_2026-09-26.md`](../prompts/CHERRYSTUDIO_MARKET_AI_AGENT_2026-09-26.md)；完整通用 Agent 規則仍可參考 [`SYSTEM_PROMPT_V4_1_COMPACT.md`](../prompts/SYSTEM_PROMPT_V4_1_COMPACT.md)
 
 （完整政策參考：[`prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md`](prompts/SYSTEM_PROMPT_V4_PHASE2_RC1.md)）
 （歷史 / 相容性參考：[`prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md`](prompts/SYSTEM_PROMPT_V3_3_REFERENCE.md)）

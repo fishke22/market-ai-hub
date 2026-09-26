@@ -1,6 +1,6 @@
 # V2 Prediction Audit Contract
 
-- **Schema**: `V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"`
+- **Schema**: `V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.4"`
   (module `src/market_ai_hub/research/v2/prediction_audit.py`)
 - **Store**: `data/audit/prediction_audit.duckdb` — **LOCAL_ONLY** (no remote, no sync).
 - Independent of `2A.2` / `2B.1` / `2C.2` / `2D.4` / `2E.3` / `2F.3` / `2G.2` / `3A.2.3`.
@@ -14,7 +14,7 @@ Brier/log-loss/calibration could not be computed from the audit DB alone. 2H.2 a
 ```
 artifact_type ∈ POINT / QUANTILE / INTERVAL / CLASS_SCORE / EVENT_PROBABILITY / STATE / NOT_AVAILABLE
 fields: forecast_artifact_id, prediction_id, calibration_domain, probability_type, event_definition_id,
-        label_type, value, raw_score, class_label, quantile_level, lower_value, upper_value,
+        event_threshold_value, label_type, value, raw_score, class_label, quantile_level, lower_value, upper_value,
         nominal_coverage, units, status, calibration_status_at_origin, calibration_evidence_id,
         distribution_id, distribution_version, generated_at, source_snapshot_ids
 non-applicable fields stay None/"" — never fabricated
@@ -49,7 +49,7 @@ be type/scope compatible: `TOUCH` probability cannot pair with a `TERMINAL` outc
 
 ### Temporal gates (added to all 2H.1 gates)
 `generated_at <= forecast_origin` (`BLOCKED_ARTIFACT_TEMPORAL`) and the legacy floor
-`outcome available_at >= forecast_origin` (`BLOCKED_OUTCOME_TEMPORAL`). For sealed 2H.3 label windows,
+`outcome available_at >= forecast_origin` (`BLOCKED_OUTCOME_TEMPORAL`). For sealed 2H.3+ label windows,
 `outcome available_at >= label_window_end` (`BLOCKED_OUTCOME_IMMATURE`) and
 `target_period == label_window_id` (`BLOCKED_OUTCOME_SCOPE`) are additionally mandatory.
 
@@ -70,6 +70,17 @@ excludes them from governed forward/calibration evidence.
 The default audit DB path follows the canonical `MARKET_AI_DATA_ROOT` resolver. Identical forecast
 artifact identities cannot silently bind to two different predictions; the second binding is a typed
 `BLOCKED_ARTIFACT_PREDICTION_MISMATCH`, not a raw database constraint failure.
+
+## 2H.4 addition — frozen event threshold without breaking legacy identities
+
+2H.4 adds optional `ForecastArtifactRecord.event_threshold_value` for event definitions whose
+threshold is known at forecast origin and must be frozen for later settlement. W3.2-EP1 uses it for
+`TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D`.
+
+The field enters canonical artifact payload/identity only when it is non-null. For legacy artifacts
+where the field is absent, the payload omits it entirely, preserving all pre-2H.4 artifact hashes.
+The audit layer still allows malformed probability values to be recorded so the evaluation layer can
+fail-closed on bad inputs; raw audit storage does not imply publication eligibility.
 
 ## Purpose
 

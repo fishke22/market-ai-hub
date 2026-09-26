@@ -60,6 +60,8 @@ status=CALIBRATED.
 
 ## Current market-evidence boundary
 
-As of 2026-09-26 the operational W3.2 Osaka baseline emits POINT artifacts, not EVENT_PROBABILITY.
-Therefore W4 can be fully engine-tested offline but cannot truthfully fit an Osaka probability
-calibrator until real forward event-probability artifacts and settled outcomes exist.
+As of 2026-09-26 W3.2-EP1 is implemented to precommit raw UNCALIBRATED Osaka EVENT_PROBABILITY
+artifacts alongside the POINT baseline once a verified C2.3 DAILY close exists. No real W3.2-EP1
+artifact has settled yet because the producer was completed on a non-OSE-session date. W4 therefore
+remains REAL_CALIBRATION_FIT_NOT_STARTED until scope-homogeneous forward event-probability samples
+actually accumulate; implementation availability is not calibration evidence.

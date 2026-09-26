@@ -26,11 +26,14 @@ _JNU_RE = re.compile(r"^JNU\d{4}$")
 
 def _is_w32_scope(pred: PA.PredictionRecord) -> bool:
     return (
+
         pred.target_family == FC.TARGET_FAMILY
         and pred.instrument == FC.INSTRUMENT
         and pred.horizon == FC.HORIZON
-        and pred.model == FC.MODEL_NAME
-        and pred.model_version == FC.MODEL_VERSION
+        and (
+            (pred.model == FC.MODEL_NAME and pred.model_version == FC.MODEL_VERSION)
+            or (pred.model == FC.EVENT_MODEL_NAME and pred.model_version == FC.EVENT_MODEL_VERSION)
+        )
         and pred.sample_origin == "FORWARD_PRECOMMITTED"
     )
 
@@ -68,23 +71,28 @@ def run_cycle(
             continue
         if audit.get_outcomes(prediction_id):
             continue
-        result = FC.settle_osaka_from_feature_store(
-            prediction_id,
-            db=audit,
-            store=features,
-        )
+        if pred.model == FC.EVENT_MODEL_NAME:
+            result = FC.settle_osaka_event_probability_from_feature_store(
+                prediction_id, db=audit, store=features,
+            )
+        else:
+            result = FC.settle_osaka_from_feature_store(
+                prediction_id, db=audit, store=features,
+            )
         settlements.append(_public_result(result))
 
     precommit = FC.precommit_osaka_from_feature_store(
-        contract_code=contract,
-        db=audit,
-        store=features,
+        contract_code=contract, db=audit, store=features,
+    )
+    event_precommit = FC.precommit_osaka_event_probability_from_feature_store(
+        contract_code=contract, db=audit, store=features,
     )
     return {
-        "schema": "W3.2_OSAKA_FORWARD_OPERATOR_V1",
+        "schema": "W3.2_OSAKA_FORWARD_OPERATOR_V2",
         "contract_code": contract,
         "settlements": settlements,
         "precommit": _public_result(precommit),
+        "event_probability_precommit": _public_result(event_precommit),
         "values_exposed": False,
     }
 
@@ -104,11 +112,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-    status = result["precommit"]["status"]
-    return 0 if status in {
-        FC.STATUS_PRECOMMITTED,
-        FC.STATUS_ALREADY_PRECOMMITTED,
-    } else 2
+    ok = {FC.STATUS_PRECOMMITTED, FC.STATUS_ALREADY_PRECOMMITTED}
+    point_status = result["precommit"]["status"]
+    event_status = result["event_probability_precommit"]["status"]
+    return 0 if point_status in ok and event_status in ok else 2
 
 
 if __name__ == "__main__":
