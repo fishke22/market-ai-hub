@@ -79,16 +79,19 @@ class _ClassifierAdapter(ModelAdapter):
 
         feat = build_features(df)
         X = feat[FEATURE_INPUT]
+        latest = X.iloc[[-1]] if len(X) else X
+        if latest.empty or not np.isfinite(latest.to_numpy(dtype=float)).all():
+            return ForecastResult(warnings=["forecast-origin features unavailable"])
         y = future_return_k(feat, steps)
         valid = X.notna().all(axis=1) & y.notna()
-        X, y = X[valid].iloc[:-steps], y[valid][:-steps]
+        X, y = X[valid], y[valid]
         y_cls = np.where(y > 0.005, 1, np.where(y < -0.005, -1, 0)).astype(int)
         if len(np.unique(y_cls)) < 2:
             return ForecastResult(direction="", class_label=None, point=None,
                                   warnings=["training labels single class"])
         m = BaselineClassifier(self._classifier_key)
         m.fit(X, y_cls)
-        pred = int(m.predict(X.iloc[[-1]])[0])
+        pred = int(m.predict(latest)[0])
         direction = "up" if pred == 1 else ("down" if pred == -1 else "flat")
         return ForecastResult(direction=direction, class_label=pred, point=None,
                               probability_calibrated=False,

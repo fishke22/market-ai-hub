@@ -1,0 +1,50 @@
+schema: W7_PORTABILITY_ACCEPTANCE_V1
+updated_at: "2026-09-26"
+product_build_id: afd52f88a351541a
+scope_note: "Current-machine relocation evidence is not new-Windows certification."
+cells:
+  non_repo_cwd:
+    status: PASS
+    evidence: W7.1
+  external_data_root_cjk_space:
+    status: PASS
+    evidence: W7.2
+  fresh_bootstrap_venv_current_windows:
+    status: PASS
+    evidence: W7.3
+  source_backup_restore_different_path:
+    status: PASS
+    evidence: W7.4
+  scheduled_tasks_rebind_dry_run:
+    status: PASS
+    evidence: W7.5
+  mcp_client_config_rebind:
+    status: PASS
+    evidence: W7.6
+  full_dependency_install_fresh_venv:
+    status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
+    reason: "Would install external packages; requires separately authorized install validation."
+  new_windows_clean_machine:
+    status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
+    reason: "No separate clean Windows machine has been validated."
+  yuanta_wincred_recreation:
+    status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
+    reason: "Credentials are machine-local/private and must be recreated explicitly."
+  yuanta_certificate_reimport:
+    status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
+    reason: "Certificate/private-key handling requires explicit user-controlled restoration."
+  yuanta_com_registration_new_machine:
+    status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
+    reason: "Proprietary OCX/COM registration has not been validated on a new machine."
+  private_research_data_consistent_restore:
+    status: PASS
+    evidence: W7.8
+    reason: "Current-machine DuckDB/SQLite/Parquet snapshot->verify->restore drill passed; live/** and backups/** are excluded."
+  c2_3_live_runtime_reverification:
+    status: WAITING_TIME_WINDOW
+    reason: "Requires a valid OSE maintenance window and exactly one controlled same-owner measurement."

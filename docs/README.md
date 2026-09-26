@@ -2,6 +2,11 @@
 
 Documentation index for MARKET_AI_HUB.
 
+## Project continuity
+
+- [ChatGPT project instructions and upload package](development/chatgpt_context/README_USE.md)
+- [Quote hub hardening report](../research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md)
+
 ## Getting started
 
 - [Quick start](getting-started/quickstart.md)

@@ -10,8 +10,8 @@ Phase 2B 擴充的免費資料來源總表。所有來源透過統一 `DataProvi
 `freshness` / `frequency` / `data_grade` / `license` / `delay_status` /
 `target_match` / `information_cutoff_compatible`。
 
-- `available_at` = `source_timestamp` + 已知延遲（供 no-look-ahead）。
-- `information_cutoff_compatible`：來源是否提供可信的 available_at（官方來源皆 true）。
+- `available_at` 必須有實際發布/可取得時間證據；source_timestamp 加延遲只能在該資料集有明確契約時使用，不能當通用事實。
+- `information_cutoff_compatible` 逐筆/逐 dataset 驗證；官方身分不保證當時可取得。修訂資料需 vintage；時間未知時 fail-closed。
 
 ## 來源總表
 
@@ -19,7 +19,7 @@ Phase 2B 擴充的免費資料來源總表。所有來源透過統一 `DataProvi
 |------|-----------|-----------|------|------|-----------|
 | **TWSE** OpenAPI | 台灣證交所 | 免費 | 台股上市日線 | 日線（收盤後） | TWSE 公開資料 |
 | **FinMind** | FinMind | Free tier；部分 dataset 需 Backer/Sponsor | 台股/法人/財報 | 日線 | FinMind 條款；付費 tier 回 DATA_REQUIRES_PAID_TIER |
-| **FRED** | St. Louis Fed | 免費（需免費 key） | 美債/聯邦基金利率等總經 | 日線（非高頻即時） | 美國政府公開資料 |
+| **FRED** | St. Louis Fed | 免費（需免費 key） | 美債/聯邦基金利率等總經 | 日線（非高頻即時） | FRED 匯集多種來源；逐 series 核對原作者及再利用條款 |
 | **yfinance** | Yahoo（unofficial） | 免費（個人研究） | 全球代理行情 | BEST_EFFORT / DELAYED_POSSIBLE | unofficial wrapper，**非交易所級** |
 | **TAIFEX** | 台灣期交所 | 免費 | 期貨日資料 + 近 30 日 Time & Sales | 日資料（收盤後）；T&S 近 30 日 | TAIFEX 公開資料 |
 | **BOJ Time-Series** | 日本銀行 | 免費 | 日本總經時序列 | 日/月 | BOJ 公開資料 |
@@ -57,3 +57,5 @@ Phase 2B 擴充的免費資料來源總表。所有來源透過統一 `DataProvi
 - `JQUANTS_API_KEY`（J-Quants Free，格式 `mail:password`）
 
 詳見 `.env.example`。絕不硬編碼 token。
+
+時間證據參考：[FRED API](https://fred.stlouisfed.org/docs/api/fred/)、[ALFRED vintages](https://fred.stlouisfed.org/docs/api/fred/series_vintagedates.html)。免費 API 不代表每個 series 可自由再散布。

@@ -15,8 +15,9 @@
 
 ### Step 2. 安裝 Python 3.12 x64
 - 官方：<https://www.python.org/downloads/windows/>
-- 安裝時勾 **Add python.exe to PATH**。
-- 確認：`python --version` → `Python 3.12.x`
+- 安裝時可勾 **Add python.exe to PATH**；但 MARKET_AI_HUB installer 不只相信 PATH，會實測 Python 版本與 64-bit pointer width。
+- 只接受 CPython 3.11/3.12 64-bit；32-bit Python 會被拒絕。
+- 可先用 `scripts\setup_windows.ps1 -BootstrapOnly` 做不下載依賴的新 venv 驗證。
 
 ### Step 3. Clone repository
 ```powershell
@@ -25,10 +26,19 @@ cd D:\MARKET_AI_HUB
 ```
 
 ### Step 4. 一鍵安裝
+先做無下載 bootstrap：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -BootstrapOnly
+```
+再做完整依賴安裝：
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1 -WithDev
 ```
-（細節與「看到什麼才算成功」見 `docs/INSTALL_WINDOWS.md`）
+若要先驗證 source checkout 搬到其他磁碟/中文空白路徑後不依賴舊 checkout，執行：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\verify_source_relocation_bootstrap.ps1
+```
+（完整安裝會連外抓依賴；無網路或未授權時只做 bootstrap。）
 
 ### Step 5. 下載模型
 ```powershell
@@ -66,10 +76,10 @@ D:\MARKET_AI_HUB\.venv\Scripts\python.exe -m pytest tests -q -m "not integration
 | 模型 manifest | ✅ 有 | 下載方式與 revision |
 | 模型 weights | ❌ 沒有 | 依 license，需自行下載 |
 | `.venv` | ❌ 沒有 | 用 setup 重建 |
-| 市場資料 / DuckDB / Parquet | ❌ 沒有 | 需重新抓取 |
+| 私人研究資料 / DuckDB / SQLite / Parquet | ❌ 不在 GitHub | 可用本機 research snapshot/restore；`live/**` 明確排除 |
 | `.env` / token | ❌ 沒有 | 自行設定 |
 
-**結論**：只要 GitHub repo 存在 + 網路可連到官方來源，就能從零恢復完整功能。
+**結論**：GitHub repo + 可取得的合法依賴來源足以重建 **core source/environment**；但不能據此宣稱完整功能已自動恢復。模型 weights、私人市場資料、WinCred、憑證、元大 proprietary SDK/COM、帳號 entitlement 與 Startup/排程都必須依各自流程重新取得/建立並分別驗收。`.venv` 不搬移，目的地重新建立。
 
 ---
 
@@ -88,8 +98,10 @@ powershell -ExecutionPolicy Bypass -File scripts\create_offline_backup.ps1 -Dest
 ... -Destination E:\MARKET_AI_BACKUP -IncludeModels
 ```
 
-- 會產生 `SHA256SUMS.txt` 供日後驗證完整性。
-- 還原：把備份目錄內容複製回對應位置，或依 manifest 重新安裝。
+- 會產生 `SHA256SUMS.txt`；`create_offline_backup.ps1` 會對 robocopy / pip native failure fail closed，且 SHA256 支援 Windows 深層長路徑。
+- 驗證既有備份：`powershell -ExecutionPolicy Bypass -File scripts\verify_offline_backup.ps1 -BackupRoot <backup_dir>`。除了逐檔 SHA256，也拒絕 missing、duplicate、path escape、tampered 與未列入 checksum 的額外檔案。
+- 基本 source restore drill：`powershell -ExecutionPolicy Bypass -File scripts\verify_offline_backup_restore_drill.ps1`。它會建立基本備份、驗證、還原到另一個暫存路徑，確認不帶 `.venv`/private data，並要求 restored source import 的 build_id 與目前 source 一致。
+- 還原：基本 source tier 可用上述 drill 驗證；wheel/model 仍依各自 manifest/授權流程處理。私人研究資料另用下方 `create_research_data_snapshot.py` / `verify_research_data_snapshot.py` / `restore_research_data_snapshot.py`，不能把 basic source PASS 當 private-data PASS。
 
 > ⚠️ **本地私人備份 ≠ 公開重新散布。**
 > TimesFM-3.0 / FinCast 的 weights 受非商業 / research-only 授權限制，
@@ -109,5 +121,15 @@ powershell -ExecutionPolicy Bypass -File scripts\export_environment.ps1
 
 ## 資料備份（研究資料，非程式）
 
-若你有重要的 DuckDB / Parquet 研究資料，請**自行**備份 `data/`（本專案不代管）。
-這些檔案含 provider 資料，散布前請確認各來源條款。
+私人研究資料不進 GitHub。對 `data/` 中的 DuckDB / SQLite / Parquet，可在本機建立一致性 snapshot：
+```powershell
+python scripts\create_research_data_snapshot.py --data-root <DATA_ROOT> --destination <PRIVATE_BACKUP_ROOT>
+python scripts\verify_research_data_snapshot.py --snapshot <SNAPSHOT_DIR>
+python scripts\restore_research_data_snapshot.py --snapshot <SNAPSHOT_DIR> --destination <NEW_DATA_ROOT>
+```
+- snapshot/restore 會驗 SHA256、檔案 inventory、table row counts，若有 `prediction_id` 會再驗 digest；DuckDB/SQLite 使用一致性 copy，Parquet 要求 copy 前後來源 hash 不變。
+- `live/**` 與 `backups/**` 明確排除；它不是即時行情 recorder 備份，也不會複製元大登入資料。
+- restore 只接受不存在的全新 destination，拒絕覆蓋既有資料，也拒絕與 snapshot 路徑重疊。
+- snapshot / restore 檔案仍是私人資料，只供自用；不得 commit 或公開散布，provider/licensing 條款仍須另外遵守。
+
+2026-09-26 current-machine drill：8 DuckDB + 1 SQLite + 5 Parquet 建立/驗證/還原 PASS；1686 個 `live/**` files 被排除，還原目標沒有 `live/`。這是目前機器的 research-data consistency evidence，不是 clean-new-Windows certification。

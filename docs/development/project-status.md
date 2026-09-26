@@ -1,23 +1,190 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **Phase V2-I（Calibration / Evaluation — 2I.1 Evaluation Foundation）**
-- Gate: **PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS** + **YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE**
-- build_id：**（本棒合併後以 `scripts/agent_bootstrap.ps1` 實測為準）**（fingerprint 全部 runtime source + config）
-- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.2**；calibration evaluation **2I.1**
+- Current phase: **W1 RECONNECT+JNU MERGED_OFFLINE_PASS / PR55_CI_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
+- Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
+- build_id：**1037d45ff8e65884**（reconnect + JNU merged source/config fingerprint；OFFLINE PASS，不代表 live runtime adoption）
+- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Actual live readiness：OSE Micro / TX / MTX / TMF / NQ / ES live = **NOT_AVAILABLE**
+- Live quote capability：historical 2026-09-24/25 evidence remains capability evidence. Latest read-only preflight observed `NO_RUNNING_OWNER`, status `STOPPED`, no matching Python owner, broker_action_performed=false. Reconnect+JNU merged branch is offline-verified only; tracked measurement gate=false and tracked auto reconnect=false. **Do not infer start authorization from NO_RUNNING_OWNER.**
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
-- V2-H：**FORECAST_ARTIFACT_PASS**
+
+## 2026-09-26 W1 bounded quote reconnect lifecycle
+
+- Isolated reconnect commit `feeefe3`; merged with JNU base `23504cf`; merged commit `4978f59`; build `1037d45ff8e65884`. PR #56 is MERGED into the feature base; PR #55 CI `36230804948` PASS.
+- No hidden reconnect API is assumed. Recovery is bounded full-runtime replacement: durable flush -> local retire -> fresh Open -> official Connect -> Login result -> full quote re-subscribe.
+- Cleanup/re-subscribe failure fails closed; retry/backoff is bounded. Tick-detail maintenance and auto reconnect are mutually exclusive.
+- Tracked `auto_reconnect.enabled=false`; JNU microstructure capture remains enabled per its own config. OFFLINE PASS != LIVE ADOPTION.
+- Merged validation: focused `29 passed, 21 deselected`; related `150 passed, 2 deselected`; full offline `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`, exit 0.
+- Base PR #55 CI run `36229125508` failed only three stale build-freeze assertions (actual base build `44de914d7d625eb5` vs old expected `b7c1f3d08a383d65`). The merged branch updates frozen assertions to its observed build `1037d45ff8e65884`.
+- Next: PR #55 is publish-ready from this work package's test/CI perspective; live enablement/restart remains separate and still requires explicit authorization.
+
+## 2026-09-26 W1 durable crash spool/WAL
+
+- Implementation commit: `e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`; build `b7c1f3d08a383d65`.
+- Tracked config enables bounded fsync-before-accept WAL (`100000` records / `268435456` bytes). Restart validates checksums, contiguous sequence, partial/final recovery, quota and checksummed ack before credentials/runtime construction.
+- Deterministic WAL batch IDs + `_wal_seq`/record hash + COMMITTED manifest make Parquet replay idempotent across publish-before-ack crashes. W2 reader rejects durable batches with missing/invalid manifests.
+- Ack is an atomic oldest-prefix watermark with checksum; corruption/tampering fails closed. Windows atomic replace has a bounded five-attempt sharing-violation retry.
+- Validation: focused `21 passed, 40 deselected`; related `138 passed, 2 deselected`; full isolated offline `1912 passed, 1 skipped, 35 deselected, 110 warnings in 115.04s`, exit 0; diff check PASS; changed-file secret scan 0.
+- Boundary: this is disk/offline correctness only. Existing owner runtime remains `afd52f88a351541a`, so live recorder durability is not yet upgraded.
+- Exact next offline W1 package: verify and specify automatic reconnect/re-login/resubscribe lifecycle as a bounded single-owner state machine; do not guess unsupported SDK behavior.
+
+## 2026-09-26 W1 SPARK connection-event fail-closed
+
+- Implementation commit: `223ddd88e3a308a21c95176992001041d1eefeb0`; build `1ff1c2adb6bc21bf`.
+- Official system-event semantics are explicit: only `intMark=0,dwIndex=1` is Connect. Codes 2/3/4/5 latch DISCONNECTED/NETWORK_ERROR/UPDATE_REQUIRED/NOT_CONNECTED fault state; announcement/other events do not unblock startup.
+- Startup connection failure now blocks before Login. A RUNNING fault exits fail-closed as `RUNTIME_FAILED`, records safe connection event metadata, then performs the existing pending-buffer flush attempt and closes/disposes the API.
+- Fault remains latched if a later Connect arrives within the same Open because subscription continuity is unknown; a new explicit Open resets state. No automatic reconnect/login/resubscribe loop is implemented or claimed.
+- Validation: focused `5 passed`; related `119 passed, 2 deselected`; full isolated offline `1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`, exit 0; diff check PASS; changed-file secret scan 0.
+- At this connection-event checkpoint there was no broker action and the live owner was still prior build `afd52f88a351541a`; durable spool was not yet present at that checkpoint. Current durability truth is the newer W1 durable-spool section above.
+- Durable crash spool/WAL is now offline PASS in the section above; automatic reconnect remains a separate unadopted lifecycle package.
+
+## 2026-09-26 W1 runtime subscription revalidation
+
+- Implementation commit: `d6d443a1d18989e4826c81ed0fcff835f5295386`.
+- Revalidation is periodic (tracked config 300 seconds) and resolves contract expiry against venue-local dates; UTC midnight is no longer used as a session/roll proxy. Failure remains DEGRADED and retries on the next interval.
+- Default subscription routing and dynamic ownership are tracked separately. Dynamic overlap survives default roll/removal without duplicate provider calls or accidental unsubscribe; partial provider failures preserve truthful local union state.
+- Safe add-before-remove refresh fail-closes before any transient unique-subscription count can exceed 2000.
+- Installed DLL reflection: WatchlistAll subscribe/unsubscribe have a third optional `Lng` parameter (default `NORMAL`); bundled vendor Python sample omits it. Explicit `UTF8` remains valid and unchanged. Shared 0.2-second subscribe/unsubscribe throttle remains below the documented rate ceiling.
+- Validation: broader `96 passed, 2 deselected`; full isolated offline `1888 passed, 1 skipped, 35 deselected, 110 warnings in 107.43s`, exit 0; `git diff --check` PASS; changed-file secret scan 0. Three build-freeze assertions were updated only after the new fingerprint was observed.
+- Boundaries: no broker call in this package; auto reconnect is still not implemented/verified; crash durability remains `BUFFERED_NOT_ZERO_LOSS` without a WAL/durable spool. ENGINE PASS is not DATA READY/CALIBRATED/PREDICTIVE EVIDENCE/TRADING EDGE.
+- V2-H：**2H.3 OUTCOME_MATURITY_PASS**；W3.1：**OUTCOME_EVALUATION_GOVERNANCE_PASS**；W3.2：**PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**
 - Manual Cherry UAT：**RETEST_REQUIRED**（6 cases）
 - Research truth：OSAKA frozen；TAIWAN_STOCK/TAIWAN_INDEX = NOT_YET_VALIDATED（不繼承 Osaka）
 - Probability availability：全部 NOT_AVAILABLE（CalibrationEvidence typed gate；無 calibration fitting）
 - V2-I：**EVALUATION_FOUNDATION_PASS**（evaluation engine only；CALIBRATION FITTING NOT STARTED）
-- Yuanta SPARK securities profile：login ACCEPTED（0001）；TAIFEX/OSE subscription ACCEPTED，**無 callback** →
-  `spark_securities_taifex_quote` / `spark_securities_ose_quote` = `SUBSCRIPTION_ACCEPTED_NO_CALLBACK`
+- Yuanta SPARK securities profile：PR #53 had no callbacks; later local 2026-09-24 matrix records matching TAIFEX/OSE/CME/CBOT/CBOE/NYBOT callbacks. Preserve account_profile=SECURITIES. Source hardening does not re-certify those live observations.
 - Yuanta SPARK futures profile：0112 → **SPARK_FUTURES_ACCOUNT_ENTITLEMENT_BLOCKED**（不 retry）
+
+## 2026-09-25 C2 same-owner controlled measurement path
+
+- Initial implementation: `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening: `9496eb9afa65e647b5fceca86610247ff24e258e`; review fixes: `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, `873e6bd9697efe1bc2c67d1767c708b23af2df10`; maintenance control `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`; request-script repair `1452a45cf0c4de631d213eaa8648c3eae3b90211`; startup observability `b9cfcb0e302e1520027d2c69adf363d15baf00c4`; C2.3-era build_id at that checkpoint `afd52f88a351541a`.
+- New recorder control action `tick_detail_measurement` runs only inside the existing owner. Config default remains `enabled: false`; the queue script does not login/logout.
+- OSE market 207 + exact JNU contract + LastCount<=20 only. Actual request and callback must both be inside 15:45–17:00 JST; ambiguous outstanding requests and unsafe evidence paths block before a broker call.
+- Recorder freezes `runtime_build_id` at startup and compares it to current disk fingerprint before measurement. Stale process/disk mismatch returns `TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE`.
+- Runtime evidence schema `W3.3-C2.3` binds process build, request/callback identity and canonical raw snapshot. UTC-like/Taipei-like alternatives fail closed. C2.3 permits only `15:45:01` as an evidence-bounded closing-auction print; `15:45:02+` remains blocked and session event time remains 15:45.
+- Raw tick values stay in local evidence storage. Control/evidence metadata expose IDs/paths/status, not prices. Persisted artifacts are reloadable and canonical IDs/bindings are checked again before terminal-close materialization.
+- Review hardening also makes optional Feature Store provenance queries return [] on DuckDB/IO failure and prevents `LEGACY_TOP_LEVEL_RECEIPT_ONLY` rows from being presented as FRESH in public packet freshness.
+- Maintenance-control commit `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c` adds runtime-only tick-detail enable and control-inbox graceful shutdown while keeping tracked `enabled: false`. Startup-observability commit `b9cfcb0e302e1520027d2c69adf363d15baf00c4` adds `startup_stage`, safe error-type/login-code status and start-script confirmation of a fresh running build.
+- Validation: startup-observability focused `42 passed, 2 deselected`; broader regression `151 passed, 2 deselected`; final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`, exit 0. Targeted secret scan 0; diff check PASS.
+- First authorized live attempt: valid OSE session and in-window; FunctionList resolver selected `JNU2612`. Old owner was already absent. One runtime-only owner start exited before fresh status/log.
+- Second new user continuation: one new runtime-only start reached `login_msg_code=0001`, `startup_stage=RUNNING`, build `ba7c0e1b9ca9d62c`, measurement gate=true, subscriptions=42 and zero pending/dropped records. The child disappeared after the one-shot Runner command returned, before any fresh callback/W1-W2 provenance. No `START_FAILED`, clean `STOPPED`, recorder stderr/stdout or crash dump was produced. Required measurement preconditions therefore failed; no GetStkTickDetail request and no second login retry occurred in that execution.
+- WebCodex continuation rule: run `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` as a long-running Runner Job and keep that exact execution alive while separate calls inspect status / queue the one measurement / send graceful shutdown. Do not use ad-hoc detachment to evade Runner lifecycle controls.
+- Third attempt: foreground Runner Job PASS; fresh RUNNING/login `0001`/W1-W2 provenance. Exactly one JNU2612 request `tick-detail-01892509e2e742619eef0c0d07349d39` produced raw snapshot `w33_tick_cbce3cba39291cd1f14e`; C2.2 result = `TICK_DETAIL_TIMESTAMP_BASIS_BLOCKED / RAW_TRADE_AFTER_DAY_CLOSE`. Raw reload PASS; no typed evidence artifact was created.
+- C2.3 offline validation: focused `59 passed`; broader `154 passed, 2 deselected`; full offline `1861 passed, 24 deselected, 132 warnings in 133.26s`, exit 0. Third-attempt foreground recorder graceful-shutdown PASS. A later same-build safe-default recorder invocation was then RUNNING with measurement gate=false; current 2026-09-26 runtime/disk truth is the W1 section above.
+- C2.3 source commit `3e05af13762d430f875a35f2b288cf33188ce733`; source CI #162 SUCCESS. First C2.3 handoff publication commit `3f4dda90485cf1a86bc16114e2edec40e837eff8`.
+- Post-publication regression commit `0d2693f` covers the complete valid C2.3 path for a `15:45:01` print: measurement → persisted raw/evidence → typed reload → exact-contract DAILY materializer. Regression: `38 passed`; broader `155 passed, 2 deselected`; full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`, exit 0. Source/config build is unchanged at `afd52f88a351541a`.
+- Bridge regression commit `3ce826817834b20d26d671cd24a0aec8c1821e4a` proves the cross-module offline chain: C2.3 DAILY materializer → Feature Store → W3.2 candidate/precommit; callback availability is enforced; a next-session C2.3 DAILY close then settles the exact-contract prediction and flows through W3.1 evaluation. Focused `45 passed`; broader `158 passed, 2 deselected`; full offline `1865 passed, 24 deselected, 132 warnings in 144.28s`, exit 0. Synthetic evaluation still reports `CALIBRATED=false`, `PREDICTIVE_EVIDENCE=NOT_ESTABLISHED`, `TRADING_EDGE=NOT_ESTABLISHED`; this does not create actual forward evidence.
+- Owner-preflight commit `bef25d54ebea22bcb93d8466f657fe7d460496e9` adds a read-only `scripts/check_yuanta_recorder_owner.ps1` that treats the status PID and its matching parent/child chain as one invocation, reports only independent matching chains as duplicate risk, and verifies heartbeat/runtime-build/measurement-gate/tracked-safe-default state. Live classification=`SAFE_DEFAULT_OWNER_HEALTHY`; PowerShell parse PASS; focused `26 passed, 2 deselected`; broader `159 passed, 2 deselected`; full offline `1866 passed, 24 deselected, 132 warnings in 137.11s`, exit 0. No source/config change, so build remains `afd52f88a351541a`.
+- Lifecycle-gating commit `639de5f3fe3fda1bcb0c4b31055c3bdf2ab4e930` wires preflight into start/stop before mutation. Healthy existing owner start is idempotent and did not change PIDs; duplicate/unverified/stale-build/tracked-gate states block before new start. Stop with `NO_RUNNING_OWNER` now exits before writing shutdown JSON, so a stale shutdown request cannot be left for a future recorder; duplicate/unverified states block. Focused `27 passed, 2 deselected`; broader `160 passed, 2 deselected`; full offline `1867 passed, 24 deselected, 132 warnings in 141.86s`, exit 0. Build remains `afd52f88a351541a`.
+- Request-gating commit `ef59565ebb502957f8d1b9c8e77f39a7ddeaa3af` wires the same preflight into quote/tick-detail request scripts before inbox resolution/creation. Quote requests require a healthy verified RUNNING owner; tick-detail requests additionally require maintenance-owner classification, runtime measurement gate=true, tracked gate=false, runtime/disk build match and no health reasons. Static contract `15 passed, 1 deselected`; broader `158 passed, 2 deselected`; full offline `1868 passed, 24 deselected, 132 warnings in 126.74s`, exit 0. No broker request was queued in validation; build remains `afd52f88a351541a`.
+- 2026-09-25 19:25 Asia/Taipei read-only continuation: owner preflight again=`SAFE_DEFAULT_OWNER_HEALTHY`, one parent/child invocation chain, fresh heartbeat, runtime/disk build=`afd52f88a351541a`, both measurement gates=false, no health reasons. PR #55 checks were SUCCESS at the request-gating head. `v2-tick-detail-source-contract.md` stale pre-C2 live-state bullets were reconciled; no broker mutation was performed.
+- Actual runtime timestamp evidence = **NONE_YET**; eligible real DAILY terminal close = **NONE_YET**; ACTUAL_FORWARD_EVIDENCE = **NONE_YET**.
+- W7.1 reconstruction verifier: reproduced non-repo-cwd FAIL from `%TEMP%` (relative config reads), then a second stale-contract FAIL because current `system_manifest.yaml` correctly uses `build_id: runtime_introspected`. Fixed `reconstruct_verify.ps1` to enter repo root, validate the sentinel, and separately verify runtime `build_fingerprint()`; `%TEMP%` rerun now `RESULT: PASS`. This is current-machine caller-cwd evidence, not new-venv/new-Windows/broker relocation acceptance.
+- W7.2 Yuanta portability: removed tracked `D:\MARKET_AI_HUB` / named-user path assumptions from COM check, x86 sidecar setup and local SDK forensics. x86 Python is now launcher/override-driven and validated 32-bit before install; venv/pip failures stop immediately. Read-only COM smoke=`READY_FOR_AUTH`; external `MARKET_AI_DATA_ROOT` with Chinese+space path from non-repo cwd resolved `live\yuanta` correctly. Targeted=`15 passed, 1 deselected`; full offline=`1871 passed, 24 deselected, 132 warnings in 132.68s`, exit 0. Product build unchanged `afd52f88a351541a`; implementation commit=`86cea574927988e78793dd307af2e3351f73e59c`; PR #55 OPEN/MERGEABLE; CI `36133883630` SUCCESS. New-venv/new-Windows/WinCred/certificate relocation still unverified.
+- W7.3 main-env relocation bootstrap: reproduced that PATH `python` is 3.11 **32-bit** while `platform.machine()` returns `AMD64`, so the old installer could silently build the wrong main venv. `setup_windows.ps1` now accepts only CPython 3.11/3.12 with actual 64-bit pointer width, prefers launcher-discovered 3.12/3.11, supports `-PythonExe`, disables automatic Python installation, and adds `-BootstrapOnly` with no pip/network activity. New reproducible `verify_source_relocation_bootstrap.ps1` copied 706 tracked files to a Chinese+space temp checkout, created a fresh 3.12.13 x64 venv from non-repo cwd, preserved build=`afd52f88a351541a`, resolved `source_root` to the new checkout and reported `old_repo_in_syspath=false`. Targeted=`4 passed, 14 deselected`; full offline=`1873 passed, 24 deselected, 132 warnings in 147.68s`, exit 0. Full dependency install/new Windows/private integration restore remain separate gates.
+- W7.4 basic offline backup/restore: real drill first exposed unchecked robocopy/pip exits, PowerShell 5.1 long-path hashing failure, and a critical `/XD data models reports` bug that also removed nested runtime source (`src/market_ai_hub/data`, `src/market_ai_hub/models`, `config/data`), yielding restored build `bbef69fe330230ab` despite checksum completion. Backup exclusions are now absolute repo-root paths, SHA256 is long-path-safe, native failures are fatal, and new verifier/drill scripts validate hashes/inventory/path containment, restore source to another path and require restored import/build identity. Final drill verified 2191 files and restored build=`afd52f88a351541a`; targeted=`2 passed`; full offline=`1875 passed, 24 deselected, 132 warnings in 139.90s`, exit 0. Basic tier excludes wheels/models/private market data; private DB/Parquet/WAL-consistent restore remains unverified.
+- W7.5 Scheduled Task relocation: fixed forward-shadow registration so an existing task does not silently preserve an old checkout path after relocation. Both registration scripts now have non-mutating `-DryRun`; forward-shadow refreshes by default and supports explicit `-PreserveExisting`. Regression copies scripts to a Chinese+space temp repo and runs from non-repo cwd, proving generated task paths bind only to the relocated checkout. No Scheduler mutation was performed. Targeted=`17 passed`; full offline=`1880 passed, 24 deselected, 132 warnings in 141.67s`, exit 0 (including three concurrent untracked research-snapshot tests not owned by this package). Commit=`95c34cedf21ba1dfa4e7a48b23ee8da53ad6677b`; CI `36142106665` SUCCESS. Build remains `afd52f88a351541a`.
+- W7.6 MCP config relocation: added `scripts/render_mcp_config.py` so generic/Cherry client JSON is generated from the current/explicit project root instead of hand-editing `<PROJECT>`. Supports stdout-only default, explicit `--output`, and fail-closed `--require-command`. Chinese+space relocated-root/non-repo-cwd regression covers both clients and rejects old-root leakage; targeted reconstruction=`18 passed`; full offline=`1881 passed, 24 deselected, 132 warnings in 132.50s`, exit 0. Commit=`db9eeed6b9aaba540fcb2acef19de3ea2cd8e86c`; CI `36143262904` SUCCESS. No third-party client setting was modified; build remains `afd52f88a351541a`.
+- W7.7 portability truth matrix: added `docs/development/W7_PORTABILITY_ACCEPTANCE.yaml`. W7.1–W7.6 current-machine cells are PASS, while full dependency install/new Windows/WinCred/certificate/COM remain `UNVERIFIED_EXTERNAL_GATE`, private research-data restore was still a separate workstream at W7.7 publication, and C2.3 live verification remained time-window-gated; W7.8 later closes the current-machine private research-data cell only. A first placement under `config/` correctly triggered build-id regressions (`c555afda8269c1cc`), proving engineering status must not contaminate runtime identity; moved to docs and build returned to `afd52f88a351541a`. Targeted matrix/build=`22 passed`; full offline=`1882 passed, 24 deselected, 132 warnings in 172.30s`, exit 0.
+- W7.8 private research-data snapshot/restore: recovered and completed the interrupted local workstream with public scripts only; no private data is committed. DuckDB/SQLite/Parquet snapshot, verifier and restore enforce exact inventory, SHA256, row counts, optional `prediction_id` digests, source-consistency checks, no overwrite/overlap, symlink fail-closed, and explicit `live/**` + `backups/**` exclusion. Real temp drill: 8 DuckDB + 1 SQLite + 5 Parquet, 1686 live files excluded, 14 restored files, no restored `live/`, cleanup PASS. Targeted=`4 passed, 1 skipped`; full offline=`1884 passed, 1 skipped, 24 deselected, 132 warnings in 133.70s`, exit 0. Current-machine acceptance cell now PASS; clean-new-Windows and live recorder restore remain separate gates. Commit=`f3faf193b34bae714c547dddba525a93edd467fb`; CI `36209628743` SUCCESS. Build unchanged `afd52f88a351541a`.
+- W8.1 Windows lock security: GitHub default-branch Dependabot reported high `GHSA-5rjg-fvgr-3xxf` and medium `GHSA-h35f-9h28-mq5c`, both caused by `setuptools==78.1.0`. The stricter advisory requires `>=83.0.0`, so `requirements-lock-windows-x64.txt` now pins `83.0.0` and records both advisory IDs; lock documentation no longer claims bit-identical V1 freeze after security patching. No dependency installation was performed. Targeted=`20 passed`; full offline=`1883 passed, 24 deselected, 132 warnings in 170.00s`, exit 0; build unchanged `afd52f88a351541a`. Commit=`c2d76febca2c994b3678391a5b484d15b1d77319`; CI `36208910703` SUCCESS. Status=`PATCH_IN_PR / REMOTE_ALERT_PENDING_MERGE` because Dependabot evaluates default branch.
+- W8.2 CI runtime maintenance: GitHub latest releases are checkout `v7.0.1` and setup-python `v7.0.0`, both Node 24. Workflow now uses `actions/checkout@v7`, `actions/setup-python@v7`, and fixed `ubuntu-24.04` instead of `ubuntu-latest`, avoiding the observed Node-20 forced-runtime warning and the announced Ubuntu 26 migration. Static regression locks this contract. Targeted=`21 passed`; full offline=`1885 passed, 1 skipped, 24 deselected, 132 warnings in 166.54s`, exit 0. Commit=`ac40f88b377b09eca0d296e0232abc88f4bd13c2`; CI `36210103584` SUCCESS; PR #55 OPEN/MERGEABLE; build unchanged `afd52f88a351541a`.
+- W8.3 external relocation preflight: added non-mutating `check_external_relocation_gates.ps1 -Json`; all full-install/new-Windows/WinCred/certificate/COM cells remain `UNVERIFIED_EXTERNAL_GATE` while local readiness can be inspected without secrets or broker mutation. Fixed certificate false-positive semantics: generic Windows store non-empty/unexpired is not Yuanta identity/signature verification. WebCodex also reproduced and fixed UTF-8 corruption for Chinese relocation paths in MCP config and Scheduled Task dry-run outputs. Targeted=`23 passed`; full offline=`1887 passed, 1 skipped, 24 deselected, 132 warnings in 148.29s`, exit 0; build unchanged `afd52f88a351541a`.
+
+## 2026-09-25 C2 W3.3 runtime evidence / terminal-close correctness
+
+- Implementation commit: `92e178e4ea6cad632d071747efe1c273bcc79efc`; build_id `b6cfc2ceae89d221`.
+- Raw `TickDetailBatch` cannot self-assert runtime verification. Raw canonical snapshot identity is independent of verification state.
+- SPARK runtime records bounded request/callback metadata without account/prices. Exact request time is separate from callback receipt. Identical concurrent outstanding requests are left uncorrelated rather than guessed.
+- `TickDetailRuntimeVerificationEvidence` binds request id/time/acceptance, callback time/index/returned market+code, canonical raw snapshot id and timestamp-basis cross-check into a deterministic integrity id. The id is not a broker signature.
+- Terminal-close materialization requires valid typed evidence. Request and callback must both fall in the controlled 15:45 <= JST < 17:00 window; request-before-close/callback-after-close is rejected.
+- Derived DAILY Feature Store materialization is a separate strict gate. Exact contract/month, CONTRACT series, roll NONE, PIT-safe source IDs, session close equality and DAILY frequency are required; TICK does not silently impersonate DAILY.
+- Validation: C2/W3.3 35 passed; related W2/W3/C1 134 passed; final offline profile 1834 passed / 24 deselected / 132 warnings in 140.87s, exit 0, excluding only the live-owner mutex test. Changed-file secret scan 0; diff check PASS.
+- Actual runtime timestamp verification = **NONE_YET**. Eligible real DAILY terminal-close evidence = **NONE_YET**. ACTUAL_FORWARD_EVIDENCE = **NONE_YET**. No broker/login/restart/subscription/order/account action occurred.
+- Pre-existing staged W3.3 contract/report files are not part of implementation commit `92e178e`. Full details: `research/phase3/reports/C2_W33_RUNTIME_EVIDENCE_TERMINAL_CLOSE_2026-09-25.md`.
+
+## 2026-09-24 correctness hardening
+
+Latest 2026-09-25 correction: code `ea29c12af8bdffb36bbaa1dd8275d445fc7135a0`.
+Exact outcome labels, seasonal horizons, interval origin alignment/validity, trend confidence truth
+and classifier forecast-origin inputs fixed. Offline profile 1785 passed / 34 deselected; focused
+172 passed / 3 deselected. See `MODEL_CREDIBILITY_PLAN_2026-09-25.md` and
+`MODEL_CREDIBILITY_VALIDATION_2026-09-25.md` in this directory for scope and limitations.
+Prior tournament rankings affected by these changes require versioned re-evaluation.
+
+## 2026-09-25 C1 evaluation comparison / abstention correctness
+
+- Implementation commit: `50f209a095a151b6ae42c6db5d0d462d11fd2395`; build_id `c64b98bd4a09d576`.
+- Tournament now counts VALID / FAILED / ABSTAINED / NONFINITE / INVALID_TARGET separately. Effective sample and coverage no longer treat refusals/failures as valid observations.
+- Pairwise comparison uses common valid origins and simultaneously records each model's full coverage. CLI persists pairwise rows; `compare` no longer compares unmatched success subsets. Best-summary ranking requires full coverage.
+- Performance Store C1.1 rejects NaN/Inf, missing/inconsistent accounting, isolates legacy leaderboard rows by schema, and keeps legacy data inspectable without rewriting history.
+- Random walk now respects horizon steps; research majority-class baseline requires train labels; rates regime uses aligned 10Y/5Y observations and an actual 20-session lookback.
+- Validation: initial C1 `11 passed, 4 failed`; final focused `198 passed, 6 deselected`, exit 0. Unfiltered full offline: `1802 passed, 34 deselected, 1 failed` only because Windows global quote-owner mutex reported `YUANTA_LIVE_ALREADY_RUNNING`. Final offline profile excluding that one live-owner-conflicting test: `1804 passed, 35 deselected, 110 warnings` in 129.47s, exit 0. Changed-file secret scan 0; diff check PASS.
+- No broker/login/restart/subscription/order/account action; no calibration fitting; no new model; no real forward sample or market ranking rerun. ENGINE PASS remains distinct from DATA READY / CALIBRATED / PREDICTIVE EVIDENCE / TRADING EDGE.
+
+
+Source fixes: durable-write acknowledgement, per-field freshness, bounded callbacks,
+single-owner mutex, subscription request validation/limits, shared data-root resolution,
+fail-closed audit probability helper, read-only readiness, fatal installer failures,
+offline CI markers, complete runtime-config fingerprint. See
+`research/phase3/reports/QUOTE_HUB_HARDENING_2026-09-24.md` for validation/publication state.
+The previously running recorder has not been restarted by this repair; disk source
+PASS does not mean that process loaded the new implementation.
+Automatic reconnect/roll, durable crash spool, validated TICK→daily aggregation / broker DATA READY and calibration fitting remain future work. Reader → V2-A.2/V2-H lineage → canonical Feature Store provenance → packet/model-input boundary is offline-verified; research-only boundaries are unchanged.
+
+## 2026-09-25 W2 field-aware reader/replay
+
+- Implementation commit: `825c19e7c67922eb7779d768ccd8b4207aae98cf`; build_id `52837b5fc6444e3f`.
+- `src/market_ai_hub/integrations/yuanta/quote_reader.py` reads trade/bid/ask with independent field provenance, keeps callback receipt separate from exchange event time, and routes through existing V2-A.2 session/factor definitions rather than a parallel registry.
+- Source time-of-day without a date stays `event_timestamp=None` / `timestamp_precision=UNKNOWN`; old recorder schema degrades to `LEGACY_TOP_LEVEL_RECEIPT_ONLY`. Market/contract/session mismatches, missing field time in the new schema, out-of-order replay, partial files, persistence errors and overflow fail closed.
+- V2-H `lineage_from_observation()` preserves source snapshot IDs, quality and contract identity. No probability gate was relaxed; 2I.1 remains evaluation-only.
+- Read-only live inspection: running PID/status uses the old health schema and 0/22 latest quotes carry `field_provenance`; state = **RUNTIME_ADOPTION_PENDING**. Recorder was not stopped or restarted.
+- Local validation: focused V2/Yuanta regression `153 passed, 1 deselected`; final default suite `1717 passed, 23 deselected, 132 warnings` in 135.55s, exit 0. Existing private Parquet read-only sample: 934 rows, 76 OSE rows; 5 valid trade observations adapted and explicitly degraded, 71 non-valid trade callbacks rejected. No raw private quote values were added to the repo.
+- W2 is only partially complete: feature store/model/public packet end-to-end ingestion remains pending, as do reconnect/roll/WAL and controlled runtime adoption.
+
+## 2026-09-25 W2 Feature Store / packet provenance wiring
+
+- Implementation commit: `5fe8906bd1237f7f89cd96dbbfa9383b8763281f`; build_id `f09ff80765f94687`.
+- Feature Store schema advances non-destructively from v1 to v2. Existing Phase-2C feature rows remain readable; V2-A.2 observation snapshots preserve V2-H lineage ID, venue/session/trading date, timestamp precision, quality, contract/roll semantics and source snapshot IDs.
+- Quote features materialize only when the observation is AVAILABLE, dated, point-in-time safe, FRESH and a V2-A.2 live role; legacy receipt-only, unknown event time, stale, future-available, wrong roll/contract semantics stay provenance-only or fail closed.
+- Replay is idempotent for both immutable observation snapshot and materialized feature. Read-only packet queries do not create/migrate a Feature Store.
+- Canonical data-root use is now `MARKET_AI_DATA_ROOT` for runtime paths, Data Lake and default Feature Store; old `MARKET_AI_HUB_DATA_ROOT` remains only migration fallback in Data Lake.
+- Analysis Packet exposes a bounded `factor_observation_summary` with lineage/source/quality/contract/freshness context. It does not turn those rows into probabilities and does not silently override existing target/reference price selection.
+- Validation: focused integration `155 passed, 1 deselected`; broader contract regression `265 passed, 2 deselected`; final default suite `1726 passed, 23 deselected, 132 warnings` in 150.34s, exit 0. Changed-file secret scan: 0 hits; `git diff --check` PASS.
+- Feature Store / packet provenance sub-step is complete; recorder runtime adoption remains separately pending.
+
+## 2026-09-25 W2 gated model-input contract
+
+- Implementation commit: `9a11ce309ef5159545cb64e4ed8fa81ca0bbacfd`; build_id `bed003b51f6d1f8b`.
+- Read-only model-input construction consumes only materialized, point-in-time-safe, AVAILABLE Feature Store rows at/before cutoff and requires homogeneous representation, contract and source frequency. Missing schema/store, mixed contracts/frequency, duplicate event times and insufficient history produce typed abstention states.
+- Lineage/source snapshot IDs remain attached. Public readiness exposes metadata only (`values_exposed=false`); later-available rows are excluded by test.
+- Current broker features are `TICK`, while Chronos/TimesFM/classifiers are `1d`; Osaka direct readiness therefore reports `INCOMPATIBLE_FREQUENCY` rather than fake resampling. Taiwan index is checked per futures representation; Taiwan stock has no broker direct-target model-input mapping.
+- Offline W2 engineering path = **W2_OFFLINE_CONTRACT_PASS**. This is not DATA READY: live recorder adoption is pending and there is no validated TICK→daily aggregation for the current daily models.
+- Validation: focused `117 passed, 1 deselected`; packet regression `76 passed, 1 deselected`; V2 regression `146 passed`; final default suite `1735 passed, 23 deselected, 132 warnings` in 141.75s, exit 0. Changed-file secret scan 0 hits; `git diff --check` PASS.
+
+## 2026-09-25 W3.1 outcome / evaluation governance
+
+- Implementation commit: `95289de6722c1477c5183e172384a3fd196050fd`; build_id `98fe354dcc4fb275`.
+- Prediction Audit advances to 2H.3. New predictions can seal `sample_origin`, `label_window_id`, `label_window_start`, and `label_window_end` into immutable identity. For a sealed window, outcomes before horizon maturity or with a mismatched target period are rejected at append time.
+- New W3.1 governed evaluation requires timezone-aware `evaluation_as_of` and an exact target/instrument/horizon/model/model-version/artifact/label/sample-origin/event scope. Forward-precommitted and retrospective replay samples cannot mix; duplicate logical samples and selected superseded samples fail closed.
+- W3.1 exposes coverage/missing-outcome/event/missing-day/overlapping-horizon metadata and only then delegates metrics to the unchanged 2I.1 engine. `READY_FOR_EVALUATION != CALIBRATED`; fitting remains NOT_STARTED.
+- Default prediction-audit DB now follows canonical `MARKET_AI_DATA_ROOT`. Cross-prediction reuse of the same artifact identity is a typed binding rejection rather than a raw DuckDB constraint error.
+- Validation: W3/V2-H/V2-I focused `85 passed`; W3 + PPM/packet broader `236 passed, 1 deselected`; final code/test default suite `1749 passed, 23 deselected, 132 warnings` in 172.00s, exit 0. Changed implementation/test secret scan: 0 hits; `git diff --check` PASS.
+- Evidence boundary: the new W3 regression samples are synthetic temporary DB records and are **not** market predictive evidence. Real precommitted forward sample accumulation is still pending.
+
+
+## 2026-09-25 W3.2 precommitted forward cycle
+
+- Implementation commit: `2f374ad533a74e3647fdfdeb73d9ebb2f379631a`; build_id `81f02a25847b9e65`.
+- First supported scope is OSAKA_MICRO / JNU / 1 verified OSE session / existing `last_price_naive`. Prediction is a POINT terminal-price baseline, not a probability.
+- Precommit is accepted only from a contract-specific DAILY/PIT-safe/source-snapshotted close after 15:45 JST and before the target night session begins at 17:00 JST. No public backdate argument exists.
+- Feature Store reader requires dedicated `terminal_close / w3.2-contract-daily-close-1` rows and reuses W2 read-only model-input gating. TICK cannot impersonate DAILY. Settlement requires the same contract/month and exact sealed target close before W3.1/2I.1 evaluation.
+- Runtime read-only probe: legacy continuous Osaka parquet = 960 rows, latest 2026-09-01, blocked by missing available_at/source IDs/contract/month/roll provenance; canonical Feature Store existed but had 0 OSE observations at the probe cutoff. Eligible W3.2 candidate = none; real W3.2 prediction inserted = none.
+- Validation: focused 101 passed; final Feature Store/operator focused 127 passed; broader 303 passed/2 deselected; default 1773 passed/23 deselected/132 warnings in 156.48s, exit 0; changed implementation/test secret scan 0 hits; diff check PASS.
+- No scheduler was enabled, no recorder/broker action occurred, and CALIBRATION FITTING remains NOT_STARTED.
 
 ## Phase 2 全歷程 Gate
 
@@ -267,5 +434,5 @@
 NO LIVE TRADING / NO ORDER / NO BROKER CREDENTIAL / AUTO_PROMOTE_CHAMPION=false /
 Yuanta quote-only、Trading API 未接 runtime、OrderApiExposureGuard PASS、secret scan 無真實 PII。
 
-## NEXT（禁止）
-- 不 git commit/push、不 release/tag、不 Live Trading、不 Yuanta order、不 recorder。
+## Historical stop point (superseded by later user-authorized quote work)
+- Historical phase prohibited commit/push/recorder. Later user authorization permits quote recorder engineering and publication. Live Trading and Yuanta order remain prohibited.

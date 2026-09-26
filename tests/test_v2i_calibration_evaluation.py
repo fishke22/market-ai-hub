@@ -96,6 +96,18 @@ def test_schema_version_2i1_and_no_calibrated_status():
     assert PA.v2_schema_versions()["calibration_evaluation"] == "2I.1"
 
 
+def test_opposite_touch_label_rejected_at_write_and_legacy_evaluation(db, monkeypatch):
+    pred, art, out = _sample(db)
+    wrong = replace(out, label_type="TOUCH_DOWN_1D", outcome_id="")
+    with pytest.raises(PA.ArtifactOutcomeMismatchError):
+        db.append_outcome(wrong)
+    # Legacy records may predate the write guard: the reader must also fail closed.
+    monkeypatch.setattr(db, "get_outcomes", lambda pid: [replace(wrong, outcome_id=out.outcome_id)])
+    result = CE.evaluate_manifest(db, _manifest(db, [pred]))
+    assert result.status == "BLOCKED"
+    assert "WRONG_EVENT_DEFINITION" in result.reason
+
+
 def test_status_vocabulary_is_closed():
     assert set(CE.EVALUATION_STATUSES) == {"EVALUATED", "INSUFFICIENT_SAMPLE",
                                           "NOT_EVALUATABLE", "BLOCKED"}
@@ -273,7 +285,7 @@ def test_cross_prediction_and_unknown_prediction_blocked(db):
 
 def test_members_never_cross_predictions(db):
     p1, a1, _ = _sample(db, value=0.4, actual=1.0)
-    p2, _, _ = _sample(db, value=0.5, actual=0.0)
+    p2, a2, _ = _sample(db, value=0.5, actual=0.0)
     man = _manifest(db, [p1, p2])
     assert len(man.members) == 2
     for m in man.members:
@@ -281,7 +293,7 @@ def test_members_never_cross_predictions(db):
         assert art.prediction_id == m.prediction_id
         assert [o for o in db.get_outcomes(m.prediction_id) if o.outcome_id == m.outcome_id]
     assert {m.forecast_artifact_id for m in man.members} == {
-        a1.forecast_artifact_id, man.members[1].forecast_artifact_id}
+        a1.forecast_artifact_id, a2.forecast_artifact_id}
 
 
 def test_missing_outcome_is_non_blocking_but_excluded(db):
@@ -528,5 +540,5 @@ def test_actual_readiness_counts_real_settled_samples(db):
     _sample(db, value=0.9, actual=0.0)
     r = CE.actual_evaluation_readiness(db)
     assert r["settled_event_probability_samples"] == 2
-    assert r["ACTUAL_PROBABILITY_EVALUATION"] == "EVALUATED"
+    assert r["ACTUAL_PROBABILITY_EVALUATION"] == "READY_FOR_EVALUATION"
     assert r["ACTUAL_CALIBRATION_EVIDENCE"] == "NONE_YET"

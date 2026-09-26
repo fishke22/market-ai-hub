@@ -1,0 +1,637 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
+import yaml
+
+from market_ai_hub.feature_store.store import FeatureStore
+from market_ai_hub.integrations.yuanta import live_quote_recorder as R
+from market_ai_hub.integrations.yuanta.spark_runtime import (
+    TickDetailCallbackTrace,
+    TickDetailRequestTrace,
+)
+from market_ai_hub.research.v2 import terminal_close_materializer as TCM
+from market_ai_hub.research.v2 import tick_detail_source as TD
+from market_ai_hub.research.v2 import tick_detail_verification as TV
+
+UTC = timezone.utc
+
+
+def _dt(hour: int, minute: int, second: int = 0) -> datetime:
+    return datetime(2026, 9, 25, hour, minute, second, tzinfo=UTC)
+
+
+class _Row:
+    def __init__(self, hour: int, minute: int, second: int, price: float, seq: int, volume: int = 1):
+        self.TimeStamp = datetime(2026, 9, 25, hour, minute, second)
+        self.DealPrice = price
+        self.DealVol = volume
+        self.BuyPrice = price - 5
+        self.SellPrice = price + 5
+        self.SeqNo = seq
+        self.InOutFlag = 0
+
+
+class _Result:
+    def __init__(self, rows, market: int = TD.OSE_MARKET_NO, stock: str = "JNU2612"):
+        self.MarketNo = market
+        self.StockCode = stock
+        self.StickDetailList = list(rows)
+
+
+def _result(*, raw_hour: int = 15, raw_minute: int = 44):
+    return _Result([
+        _Row(raw_hour, raw_minute, 50, 65900.0, 100),
+        _Row(raw_hour, raw_minute, 59, 65905.0, 101),
+    ])
+
+
+def _batch(*, raw_hour: int = 15, raw_minute: int = 44):
+    return TD.parse_tick_detail_result(
+        _result(raw_hour=raw_hour, raw_minute=raw_minute),
+        received_at=_dt(6, 46),
+    )
+
+
+class _FakeRuntime:
+    def __init__(self, result=None, *, request_time=None, callback_time=None, accepted=True):
+        self.on_tick_detail_callback = None
+        self.result = result or _result()
+        self.request_time = request_time or _dt(6, 45, 30)
+        self.callback_time = callback_time or _dt(6, 46)
+        self.accepted = accepted
+        self.calls = []
+        self.request = None
+        self.callback = None
+        self.emitted = False
+        self.pending_trace = None
+
+    def tick_detail_runtime_traces(self):
+        requests = []
+        callbacks = []
+        if self.pending_trace is not None:
+            requests.append({
+                "request_id": self.pending_trace,
+                "request_time_utc": self.request_time,
+                "market_no": TD.OSE_MARKET_NO,
+                "stock_code": "JNU2612",
+                "last_count": 20,
+                "accepted": True,
+            })
+        return {"requests": requests, "callbacks": callbacks}
+
+    def request_tick_detail_last(self, account, market_no, stock_code, last_count):
+        self.calls.append((account, market_no, stock_code, last_count))
+        self.request = TickDetailRequestTrace(
+            request_id="tick_detail_1",
+            request_time_utc=self.request_time,
+            market_no=market_no,
+            stock_code=stock_code,
+            last_count=last_count,
+            accepted=self.accepted,
+        )
+        return self.accepted
+
+    def latest_tick_detail_request(self):
+        return self.request
+
+    def pump(self, _seconds):
+        if self.emitted or self.request is None or not self.accepted:
+            return
+        self.callback = TickDetailCallbackTrace(
+            request_id=self.request.request_id,
+            callback_received_at_utc=self.callback_time,
+            callback_mark=1,
+            callback_index=TV.CALLBACK_INDEX,
+            returned_market_no=self.request.market_no,
+            returned_stock_code=self.request.stock_code,
+        )
+        self.emitted = True
+        if self.on_tick_detail_callback is not None:
+            self.on_tick_detail_callback(1, self.result)
+
+    def latest_tick_detail_exchange(self):
+        if self.request is not None and self.callback is not None:
+            return self.request, self.callback
+        return None
+
+
+def _cfg(enabled=True):
+    return {
+        "recording": {"max_dynamic_subscriptions": 2},
+        "dynamic_requests": {"enabled": True, "allowed_markets": [207]},
+        "tick_detail_measurements": {
+            "enabled": enabled,
+            "timeout_seconds": 1,
+            "max_last_count": 20,
+            "raw_dir": "evidence/tick_detail/raw",
+            "evidence_dir": "evidence/tick_detail/verification",
+        },
+    }
+
+
+def test_runtime_measurement_override_does_not_mutate_safe_default():
+    base = _cfg(enabled=False)
+    runtime = R._runtime_config(base, enable_tick_detail_measurements=True)
+    assert base["tick_detail_measurements"]["enabled"] is False
+    assert runtime["tick_detail_measurements"]["enabled"] is True
+
+
+def test_shutdown_control_is_acknowledged_without_broker_request(tmp_path):
+    rt = _FakeRuntime()
+    inbox = tmp_path / "control/inbox"
+    inbox.mkdir(parents=True)
+    (inbox / "shutdown.json").write_text(
+        json.dumps({"action": "shutdown", "reason": "MAINTENANCE_WINDOW"}),
+        encoding="utf-8",
+    )
+    shutdown = R._dynamic_requests(
+        tmp_path, _cfg(enabled=False), rt, "MASKED_TEST_ACCOUNT", {}
+    )
+    assert shutdown is True
+    assert rt.calls == []
+    payload = json.loads(
+        (tmp_path / "control/processed/shutdown.result.json").read_text(encoding="utf-8")
+    )
+    assert payload["status"] == "SHUTDOWN_ACCEPTED"
+    assert payload["values_exposed"] is False
+
+
+def test_ose_local_timestamp_crosscheck_distinguishes_near_close_local_clock():
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        _batch(),
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_PASS
+    assert check["timestamp_crosscheck_passed"] is True
+    assert check["timestamp_basis_status"] == TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED
+    assert check["values_exposed"] is False
+
+
+def test_ose_local_timestamp_crosscheck_accepts_one_second_closing_auction_print():
+    batch = TD.parse_tick_detail_result(
+        _Result([
+            _Row(15, 40, 0, 65900.0, 100),
+            _Row(15, 45, 1, 65905.0, 101, volume=1844),
+        ]),
+        received_at=_dt(6, 46),
+    )
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        batch,
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_PASS
+    assert check["timestamp_crosscheck_passed"] is True
+
+
+def test_ose_local_timestamp_crosscheck_rejects_two_seconds_after_close():
+    batch = TD.parse_tick_detail_result(
+        _Result([
+            _Row(15, 40, 0, 65900.0, 100),
+            _Row(15, 45, 2, 65905.0, 101, volume=1844),
+        ]),
+        received_at=_dt(6, 46),
+    )
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        batch,
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_BLOCKED
+    assert "RAW_TRADE_AFTER_DAY_CLOSE" in check["reason"]
+
+
+def test_ose_local_timestamp_crosscheck_rejects_utc_like_raw_clock():
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        _batch(raw_hour=6, raw_minute=44),
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_BLOCKED
+    assert "NO_NEAR_CLOSE_TRADE_FOR_BASIS_CROSSCHECK" in check["reason"]
+    assert "UTC_ALTERNATIVE_NOT_DISPROVEN" in check["reason"]
+
+
+def test_measurement_is_disabled_by_default_and_does_not_touch_api(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=False), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is False
+    assert result["status"] == "TICK_DETAIL_MEASUREMENT_DISABLED"
+    assert rt.calls == []
+
+
+def test_measurement_outside_controlled_window_never_calls_api(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 44, 59))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is False
+    assert result["status"] == "TICK_DETAIL_MEASUREMENT_OUTSIDE_WINDOW"
+    assert rt.calls == []
+
+
+def test_measurement_rejects_existing_unmatched_request(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    rt.pending_trace = "tick_detail_old"
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is False
+    assert result["status"] == "TICK_DETAIL_MEASUREMENT_REQUEST_ALREADY_PENDING"
+    assert rt.calls == []
+
+
+def test_same_owner_measurement_records_raw_and_typed_evidence(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is True
+    assert result["status"] == "TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED"
+    assert result["values_exposed"] is False
+    assert "price" not in json.dumps(result).lower()
+    raw = tmp_path / result["raw_artifact"]
+    evidence = tmp_path / result["evidence_artifact"]
+    assert raw.exists() and evidence.exists()
+    raw_payload = json.loads(raw.read_text(encoding="utf-8"))
+    evidence_payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert raw_payload["source_snapshot_id"] == result["source_snapshot_id"]
+    assert raw_payload["rows"][-1]["deal_price"] == 65905.0
+    assert evidence_payload["evidence_id"] == result["evidence_id"]
+    assert evidence_payload["runtime_build_id"]
+    assert "deal_price" not in evidence_payload
+
+    loaded_batch, loaded_evidence = TV.load_runtime_measurement(raw, evidence)
+    materialized = TCM.materialize_ose_terminal_close(
+        loaded_batch,
+        contract_month="202612",
+        verification_evidence=loaded_evidence,
+        store=FeatureStore(root=tmp_path / "feature-store"),
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+    assert materialized.source_snapshot_ids == (
+        loaded_batch.source_snapshot_id,
+        loaded_evidence.evidence_id,
+    )
+
+
+def test_c2_3_one_second_closing_auction_measurement_persists_and_materializes(
+    tmp_path, monkeypatch,
+):
+    rt = _FakeRuntime(
+        result=_Result([
+            _Row(15, 40, 0, 65900.0, 100),
+            _Row(15, 45, 1, 65905.0, 101, volume=1844),
+        ]),
+        request_time=_dt(6, 45, 30),
+        callback_time=_dt(6, 46),
+    )
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+
+    assert ok is True
+    assert result["status"] == "TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED"
+    raw = tmp_path / result["raw_artifact"]
+    evidence = tmp_path / result["evidence_artifact"]
+    loaded_batch, loaded_evidence = TV.load_runtime_measurement(raw, evidence)
+
+    assert loaded_evidence.schema_version == "W3.3-C2.3"
+    assert (
+        loaded_evidence.timestamp_basis_method
+        == TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK
+    )
+    assert loaded_evidence.timestamp_crosscheck_passed is True
+    assert loaded_batch.rows[-1].raw_timestamp == datetime(2026, 9, 25, 15, 45, 1)
+
+    materialized = TCM.materialize_ose_terminal_close(
+        loaded_batch,
+        contract_month="202612",
+        verification_evidence=loaded_evidence,
+        store=FeatureStore(root=tmp_path / "feature-store-c2-3"),
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+    assert materialized.source_trade_timestamp == _dt(6, 45, 1)
+    assert materialized.session_close_timestamp == _dt(6, 45)
+    assert materialized.source_snapshot_ids == (
+        loaded_batch.source_snapshot_id,
+        loaded_evidence.evidence_id,
+    )
+
+
+def test_dynamic_control_action_writes_metadata_only_result(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    inbox = tmp_path / "control/inbox"
+    inbox.mkdir(parents=True)
+    request = {
+        "action": "tick_detail_measurement",
+        "market_no": 207,
+        "symbol": "JNU2612",
+        "last_count": 20,
+    }
+    (inbox / "measure.json").write_text(json.dumps(request), encoding="utf-8")
+    R._dynamic_requests(tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT", {})
+    result_path = tmp_path / "control/processed/measure.result.json"
+    assert result_path.exists()
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["status"] == "TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED"
+    assert payload["values_exposed"] is False
+    assert "price" not in json.dumps(payload).lower()
+
+
+def test_measurement_loader_rejects_tampered_raw_artifact(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is True
+    raw = tmp_path / result["raw_artifact"]
+    evidence = tmp_path / result["evidence_artifact"]
+    payload = json.loads(raw.read_text(encoding="utf-8"))
+    payload["rows"][-1]["deal_price"] = 1.0
+    raw.write_text(json.dumps(payload), encoding="utf-8")
+    try:
+        TV.load_runtime_measurement(raw, evidence)
+    except ValueError as exc:
+        assert "SOURCE_SNAPSHOT_ID_CANONICAL_MISMATCH" in str(exc)
+    else:
+        raise AssertionError("tampered raw artifact unexpectedly accepted")
+
+
+def test_ose_local_timestamp_crosscheck_rejects_taipei_like_raw_clock():
+    check = TV.crosscheck_ose_local_timestamp_basis(
+        _batch(raw_hour=14, raw_minute=44),
+        request_time=_dt(6, 45, 30),
+        callback_received_at=_dt(6, 46),
+    )
+    assert check["status"] == TV.CROSSCHECK_BLOCKED
+    assert "NO_NEAR_CLOSE_TRADE_FOR_BASIS_CROSSCHECK" in check["reason"]
+
+
+def test_measurement_path_traversal_blocks_before_api(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    cfg = _cfg(enabled=True)
+    cfg["tick_detail_measurements"]["raw_dir"] = "../escape"
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    try:
+        R._tick_detail_measurement(
+            tmp_path, cfg, rt, "MASKED_TEST_ACCOUNT",
+            {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+        )
+    except ValueError as exc:
+        assert "path must stay within recorder root" in str(exc)
+    else:
+        raise AssertionError("path traversal unexpectedly accepted")
+    assert rt.calls == []
+
+
+def test_measurement_loader_rejects_non_boolean_evidence_flags(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is True
+    raw = tmp_path / result["raw_artifact"]
+    evidence = tmp_path / result["evidence_artifact"]
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    payload["request_accepted"] = "false"
+    evidence.write_text(json.dumps(payload), encoding="utf-8")
+    try:
+        TV.load_runtime_measurement(raw, evidence)
+    except ValueError as exc:
+        assert "REQUEST_ACCEPTED_MUST_BE_BOOL" in str(exc)
+    else:
+        raise AssertionError("non-boolean request_accepted unexpectedly accepted")
+
+
+def test_measurement_blocks_when_running_process_build_is_stale(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    monkeypatch.setattr(R, "_disk_build_id", lambda: "DISK_BUILD_NEW")
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+        runtime_build_id="PROCESS_BUILD_OLD",
+    )
+    assert ok is False
+    assert result["status"] == "TICK_DETAIL_MEASUREMENT_RUNTIME_BUILD_STALE"
+    assert rt.calls == []
+
+
+def test_run_locked_records_safe_startup_failure_stage(tmp_path, monkeypatch):
+    cfg = {
+        "enabled": True,
+        "recording": {
+            "max_buffer_records": 10,
+            "raw_jsonl": False,
+            "normalized_parquet": True,
+        },
+        "storage": {
+            "status_file": "status.json",
+            "latest_file": "latest.json",
+        },
+        "dynamic_requests": {"enabled": False},
+        "tick_detail_measurements": {"enabled": False},
+    }
+    config_path = tmp_path / "recorder.yaml"
+    config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    class _Guard:
+        def scan(self):
+            return {"gate": "PASS", "findings": []}
+
+    class _FailRuntime:
+        def instantiate(self):
+            raise RuntimeError("synthetic instantiate failure")
+
+        def close(self):
+            return None
+
+        def dispose(self):
+            return None
+
+        def connection_snapshot(self):
+            return {"state": "INITIAL", "system_code": None, "faulted": False}
+
+    monkeypatch.setattr(
+        "market_ai_hub.integrations.yuanta.order_api_guard.OrderApiExposureGuard",
+        _Guard,
+    )
+    monkeypatch.setattr(
+        R, "read_profile_credential",
+        lambda _profile: SimpleNamespace(username="MASKED_TEST_ACCOUNT"),
+    )
+    monkeypatch.setattr(R, "read_profile_password", lambda _profile: "MASKED_TEST_SECRET")
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg, *, asof=None: [])
+    monkeypatch.setattr(R, "SparkRuntime", _FailRuntime)
+
+    rc = R._run_locked(
+        config_path,
+        tmp_path,
+        enable_tick_detail_measurements=True,
+    )
+    assert rc == 1
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "START_FAILED"
+    assert status["startup_stage"] == "INSTANTIATE"
+    assert status["fatal_error"] == "RuntimeError"
+    assert status["runtime_build_id"]
+    assert status["tick_detail_measurements_runtime_enabled"] is True
+    serialized = json.dumps(status)
+    assert "MASKED_TEST_SECRET" not in serialized
+    assert "MASKED_TEST_ACCOUNT" not in serialized
+
+
+
+def _connection_test_config(tmp_path):
+    cfg = {
+        "enabled": True,
+        "recording": {
+            "max_buffer_records": 10,
+            "raw_jsonl": False,
+            "normalized_parquet": True,
+        },
+        "storage": {"status_file": "status.json", "latest_file": "latest.json"},
+        "dynamic_requests": {"enabled": False},
+        "tick_detail_measurements": {"enabled": False},
+    }
+    path = tmp_path / "recorder.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return path
+
+
+def _allow_offline_recorder_start(monkeypatch):
+    class _Guard:
+        def scan(self):
+            return {"gate": "PASS", "findings": []}
+
+    monkeypatch.setattr(
+        "market_ai_hub.integrations.yuanta.order_api_guard.OrderApiExposureGuard", _Guard,
+    )
+    monkeypatch.setattr(
+        R, "read_profile_credential", lambda _profile: SimpleNamespace(username="MASKED_TEST_ACCOUNT"),
+    )
+    monkeypatch.setattr(R, "read_profile_password", lambda _profile: "MASKED_TEST_SECRET")
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg, *, asof=None: [])
+
+
+def test_run_locked_connect_failure_blocks_before_login(tmp_path, monkeypatch):
+    config_path = _connection_test_config(tmp_path)
+    _allow_offline_recorder_start(monkeypatch)
+    calls = []
+
+    class _ConnectFailRuntime:
+        def instantiate(self): calls.append("instantiate")
+        def open_prod(self): calls.append("open")
+        def wait_connected(self, timeout=15.0):
+            calls.append("wait_connected")
+            return False
+        def login(self, *_args):
+            pytest.fail("login must not run without official Connect")
+        def connection_snapshot(self):
+            return {"state": "NOT_CONNECTED", "system_code": 5, "faulted": True}
+        def close(self): calls.append("close")
+        def dispose(self): calls.append("dispose")
+
+    monkeypatch.setattr(R, "SparkRuntime", _ConnectFailRuntime)
+    rc = R._run_locked(config_path, tmp_path)
+    assert rc == 1
+    assert calls == ["instantiate", "open", "wait_connected", "close", "dispose"]
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "START_FAILED"
+    assert status["startup_stage"] == "WAIT_CONNECTED"
+    assert status["fatal_error"] == "ConnectionError"
+    assert status["connection_event_state"] == "NOT_CONNECTED"
+    assert status["connection_event_code"] == 5
+    assert status["connection_faulted"] is True
+
+
+def test_run_locked_runtime_connection_fault_exits_fail_closed(tmp_path, monkeypatch):
+    config_path = _connection_test_config(tmp_path)
+    _allow_offline_recorder_start(monkeypatch)
+    calls = []
+
+    class _FaultRuntime:
+        def __init__(self):
+            self.on_quote_callback = None
+        def instantiate(self): calls.append("instantiate")
+        def open_prod(self): calls.append("open")
+        def wait_connected(self, timeout=15.0): return True
+        def login(self, *_args):
+            calls.append("login")
+            return True
+        def wait_login(self, timeout=25.0):
+            return SimpleNamespace(received=True, msg_code="0001")
+        def pump(self, _seconds): calls.append("pump")
+        def connection_snapshot(self):
+            return {"state": "DISCONNECTED", "system_code": 2, "faulted": True}
+        def close(self): calls.append("close")
+        def dispose(self): calls.append("dispose")
+
+    monkeypatch.setattr(R, "SparkRuntime", _FaultRuntime)
+    monkeypatch.setattr(R, "_subscribe", lambda *_args, **_kwargs: None)
+    rc = R._run_locked(config_path, tmp_path)
+    assert rc == 1
+    assert calls == ["instantiate", "open", "login", "pump", "close", "dispose"]
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "RUNTIME_FAILED"
+    assert status["startup_stage"] == "RUNNING_CONNECTION_FAULT"
+    assert status["fatal_error"] == "ConnectionError"
+    assert status["login_msg_code"] == "0001"
+    assert status["connection_event_state"] == "DISCONNECTED"
+    assert status["connection_event_code"] == 2
+    assert status["connection_faulted"] is True
+    assert status["pending_records"] == 0
+
+def test_measurement_does_not_retry_same_contract_in_one_process(tmp_path, monkeypatch):
+    rt = _FakeRuntime()
+    rt.pending_trace = None
+    rt.tick_detail_runtime_traces = lambda: {
+        "requests": [{
+            "request_id": "tick_detail_old",
+            "market_no": 207,
+            "stock_code": "JNU2612",
+            "last_count": 20,
+            "accepted": True,
+        }],
+        "callbacks": [{"request_id": "tick_detail_old"}],
+    }
+    monkeypatch.setattr(R, "_utcnow", lambda: _dt(6, 45, 30))
+    ok, result = R._tick_detail_measurement(
+        tmp_path, _cfg(enabled=True), rt, "MASKED_TEST_ACCOUNT",
+        {"market_no": 207, "symbol": "JNU2612", "last_count": 20},
+    )
+    assert ok is False
+    assert result["status"] == "TICK_DETAIL_MEASUREMENT_ALREADY_ATTEMPTED_IN_PROCESS"
+    assert rt.calls == []
+
+
+def test_runtime_verification_requirements_include_c2_3_provenance():
+    req = TD.runtime_verification_requirements()
+    assert req["runtime_evidence_schema_version"] == "W3.3-C2.3"
+    assert req["controlled_measurement_default_enabled"] is False
+    joined = " ".join(req["required_checks"])
+    assert "runtime process build id" in joined
+    assert "no prior same-contract" in joined
+    assert "persisted and reload-validated" in joined

@@ -16,7 +16,7 @@ Write-Host "comtypes/pywin32: $deps"
 $reg = & $sidePy -c "import winreg; k=winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, 'CLSID\{8E7FB42A-1137-467E-98C6-830C9B02EA82}\InprocServer32', 0, winreg.KEY_READ|winreg.KEY_WOW64_32KEY); print(winreg.QueryValue(k, None))" 2>$null
 Write-Host "OCX InprocServer32: $reg"
 
-$imp = & $sidePy -c "import sys; sys.path.insert(0, r'D:\MARKET_AI_HUB\src'); import market_ai_hub.integrations.yuanta.futures_com; print('ok')" 2>$null
+$imp = & $sidePy -c "import market_ai_hub.integrations.yuanta.futures_com; print('ok')" 2>$null
 Write-Host "sidecar import: $imp"
 
 $sta = & $sidePy -m market_ai_hub.integrations.yuanta.futures_com_smoke 2>$null

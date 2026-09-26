@@ -21,7 +21,8 @@ def data_root() -> Path:
     """<DATA_ROOT>：env MARKET_AI_DATA_ROOT 優先，否則 <ProjectRoot>/data。"""
     override = os.environ.get(_ENV_OVERRIDE, "").strip()
     if override:
-        return Path(override).expanduser()
+        path = Path(override).expanduser()
+        return path if path.is_absolute() else project_root() / path
     return project_root() / "data"
 
 
@@ -38,6 +39,11 @@ def raw_archive_dir() -> Path:
 def normalized_ose_micro_dir() -> Path:
     """normalized OSE micro bars：<DATA_ROOT>/normalized/ose_micro。"""
     return data_root() / "normalized" / "ose_micro"
+
+
+def feature_store_root() -> Path:
+    """Canonical Feature Store root：<DATA_ROOT>/feature_store。"""
+    return data_root() / "feature_store"
 
 
 def ose_micro_bars_path() -> Path:

@@ -15,6 +15,12 @@ from market_ai_hub.regime.events import EventEngine, event_phase
 from market_ai_hub.regime.protection import RegimeProtection, shrinkage, wilson_ci
 
 
+def test_trend_does_not_invent_confidence_interval():
+    result = MarketRegimeEngine().compute(_panel())["trend_regime"]
+    assert result.get("confidence_interval") is None
+    assert result["confidence_status"] == "NOT_ESTIMATED"
+
+
 # ── Feature Store ──
 
 def _closes(symbol, n=30, seed=0):

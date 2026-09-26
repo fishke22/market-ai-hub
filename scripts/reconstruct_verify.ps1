@@ -2,6 +2,7 @@
 # 不要求下載 optional 4GB models 才能 PASS。
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent $PSScriptRoot
+Set-Location -LiteralPath $Root
 $fail = 0
 
 function Check($cond, $msg) {
@@ -39,10 +40,12 @@ if (Test-Path $py) {
   Check ($ok -eq "ok") "core dependencies importable"
 }
 
-Write-Host "== SYSTEM_MANIFEST validity =="
+Write-Host "== SYSTEM_MANIFEST + runtime identity =="
 if (Test-Path $py) {
   $m = & $py -c "import yaml; d=yaml.safe_load(open('config/system_manifest.yaml',encoding='utf-8')); print(d['system']['build_id'])" 2>$null
-  Check ($m -match "^[0-9a-f]{16}$") "config/system_manifest.yaml valid; build_id=$m"
+  Check ($m -eq "runtime_introspected") "config/system_manifest.yaml build_id uses runtime introspection sentinel"
+  $runtimeBuild = & $py -c "from market_ai_hub.services.build_info import build_fingerprint; print(build_fingerprint()['build_id'])" 2>$null
+  Check ($runtimeBuild -match "^[0-9a-f]{16}$") "runtime build fingerprint valid; build_id=$runtimeBuild"
   $c = & $py -c "import yaml; d=yaml.safe_load(open('config/capabilities.yaml',encoding='utf-8')); print(d['live_trading']['status'])" 2>$null
   Check ($c -eq "PROHIBITED") "capabilities.yaml live_trading=PROHIBITED"
 }

@@ -1,0 +1,538 @@
+"""C2 terminal-close materializer: offline fail-closed correctness."""
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import datetime, timezone
+
+import pytest
+
+from market_ai_hub.feature_store.model_input import build_model_input
+from market_ai_hub.feature_store.store import FeatureStore
+from market_ai_hub.integrations.yuanta.spark_runtime import (
+    TickDetailCallbackTrace,
+    TickDetailRequestTrace,
+)
+from market_ai_hub.research.v2 import forward_cycle as FC
+from market_ai_hub.research.v2 import prediction_audit as PA
+from market_ai_hub.research.v2 import terminal_close_materializer as TCM
+from market_ai_hub.research.v2 import tick_detail_source as TD
+from market_ai_hub.research.v2 import tick_detail_verification as TV
+
+UTC = timezone.utc
+
+
+def _dt(day: int, hour: int, minute: int = 0, second: int = 0) -> datetime:
+    return datetime(2026, 9, day, hour, minute, second, tzinfo=UTC)
+
+
+def _row(hour: int, minute: int, second: int, price: float, seq: int,
+         volume: int = 1, *, day: int = 24) -> TD.TickDetailRow:
+    return TD.TickDetailRow(
+        raw_timestamp=datetime(2026, 9, day, hour, minute, second),
+        deal_price=price,
+        deal_volume=volume,
+        buy_price=price - 5,
+        sell_price=price + 5,
+        seq_no=seq,
+        in_out_flag=0,
+    )
+
+
+def _batch(*, rows=None, received_at: datetime | None = None) -> TD.TickDetailBatch:
+    raw = TD.TickDetailBatch(
+        market_no=TD.OSE_MARKET_NO,
+        stock_code="JNU2612",
+        rows=list(rows or [
+            _row(15, 44, 40, 41995.0, 100),
+            _row(15, 44, 58, 42000.0, 101),
+        ]),
+        received_at=received_at or _dt(24, 6, 46),
+    )
+    return replace(raw, source_snapshot_id=TD.canonical_tick_detail_snapshot_id(raw))
+
+
+def _evidence(
+    batch: TD.TickDetailBatch,
+    *,
+    request_time: datetime | None = None,
+) -> TV.TickDetailRuntimeVerificationEvidence:
+    return TV.build_ose_runtime_verification_evidence(
+        batch,
+        runtime_request_id="tick_detail_test_1",
+        runtime_build_id="TEST_BUILD_C2",
+        request_time=request_time or _dt(24, 6, 45, 30),
+        callback_received_at=batch.received_at,
+        requested_market_no=TD.OSE_MARKET_NO,
+        requested_stock_code=batch.stock_code,
+        last_count=20,
+        request_accepted=True,
+        callback_index=TV.CALLBACK_INDEX,
+        callback_mark=1,
+        returned_market_no=batch.market_no,
+        returned_stock_code=batch.stock_code,
+        timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
+        timestamp_basis_method=TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK,
+        timestamp_crosscheck_passed=True,
+    )
+
+
+def _rehash(evidence: TV.TickDetailRuntimeVerificationEvidence, **changes):
+    changed = replace(evidence, **changes, evidence_id="")
+    return replace(changed, evidence_id=TV.canonical_evidence_id(changed))
+
+
+def _materialize(batch, tmp_path, *, evidence=None, month="202612"):
+    return TCM.materialize_ose_terminal_close(
+        batch,
+        contract_month=month,
+        verification_evidence=evidence,
+        store=FeatureStore(root=tmp_path),
+    )
+
+
+def test_raw_batch_cannot_self_assert_runtime_verified_status():
+    with pytest.raises(ValueError, match="must remain timestamp-basis UNVERIFIED"):
+        TD.TickDetailBatch(
+            market_no=TD.OSE_MARKET_NO,
+            stock_code="JNU2612",
+            rows=[_row(15, 44, 58, 42000.0, 101)],
+            received_at=_dt(24, 6, 46),
+            timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
+        )
+
+
+def test_missing_runtime_evidence_cannot_materialize(tmp_path):
+    batch = _batch()
+    result = _materialize(batch, tmp_path)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "RUNTIME_VERIFICATION_EVIDENCE_REQUIRED" in result.reason
+    assert not FeatureStore(root=tmp_path).db_path.exists()
+
+
+def test_terminal_close_keeps_trade_time_separate_from_session_boundary(tmp_path):
+    batch = _batch()
+    evidence = _evidence(batch)
+    store = FeatureStore(root=tmp_path)
+    result = TCM.materialize_ose_terminal_close(
+        batch,
+        contract_month="202612",
+        verification_evidence=evidence,
+        store=store,
+    )
+    assert result.status == TCM.STATUS_MATERIALIZED
+    assert result.source_trade_timestamp == _dt(24, 6, 44, 58)
+    assert result.session_close_timestamp == _dt(24, 6, 45)
+    assert result.available_at == _dt(24, 6, 46)
+    assert result.source_snapshot_ids == (batch.source_snapshot_id, evidence.evidence_id)
+
+    bundle = build_model_input(
+        "OSE_MICRO_FUTURES",
+        as_of=_dt(24, 7, 0),
+        contract_code="JNU2612",
+        requested_frequency="DAILY",
+        min_points=1,
+        feature_name="terminal_close",
+        feature_version="w3.2-contract-daily-close-1",
+        store=store,
+    )
+    assert bundle.status == "READY"
+    assert bundle.source_frequency == "DAILY"
+    assert bundle.last_event_timestamp == _dt(24, 6, 45)
+
+    rows = store.latest_observations(
+        as_of=_dt(24, 7, 0),
+        representation_ids=["OSE_MICRO_FUTURES"],
+        limit=5,
+    )
+    assert len(rows) == 1
+    assert rows[0]["event_timestamp"] == _dt(24, 6, 45).isoformat()
+    assert rows[0]["provider_timestamp"] == _dt(24, 6, 44, 58).isoformat()
+
+
+def test_request_time_not_callback_time_controls_window(tmp_path):
+    batch = _batch()  # callback is 15:46 JST, but request below is 15:44:59 JST.
+    valid = _evidence(batch)
+    early = _rehash(valid, request_time=_dt(24, 6, 44, 59))
+    result = _materialize(batch, tmp_path, evidence=early)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "REQUEST_OUTSIDE_CONTROLLED_WINDOW" in result.reason
+
+
+def test_callback_after_night_open_blocks_even_if_request_was_in_window(tmp_path):
+    batch = _batch(received_at=_dt(24, 8, 0, 1))  # 17:00:01 JST
+    base = TV.TickDetailRuntimeVerificationEvidence(
+        runtime_request_id="tick_detail_test_1",
+        runtime_build_id="TEST_BUILD_C2",
+        request_time=_dt(24, 7, 59, 59),
+        callback_received_at=batch.received_at,
+        requested_market_no=TD.OSE_MARKET_NO,
+        requested_stock_code=batch.stock_code,
+        last_count=20,
+        request_accepted=True,
+        callback_index=TV.CALLBACK_INDEX,
+        callback_mark=1,
+        returned_market_no=batch.market_no,
+        returned_stock_code=batch.stock_code,
+        source_snapshot_id=batch.source_snapshot_id,
+        timestamp_basis_status=TD.TIMESTAMP_BASIS_RUNTIME_VERIFIED,
+        timestamp_basis_method=TV.TIMESTAMP_BASIS_METHOD_OSE_LOCAL_CLOCK,
+        timestamp_crosscheck_passed=True,
+    )
+    evidence = replace(base, evidence_id=TV.canonical_evidence_id(base))
+    result = _materialize(batch, tmp_path, evidence=evidence)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "CALLBACK_OUTSIDE_CONTROLLED_WINDOW" in result.reason
+
+
+def test_runtime_evidence_source_snapshot_mismatch_blocks(tmp_path):
+    batch = _batch()
+    evidence = _rehash(_evidence(batch), source_snapshot_id="w33_tick_other")
+    result = _materialize(batch, tmp_path, evidence=evidence)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "RUNTIME_EVIDENCE_SOURCE_SNAPSHOT_MISMATCH" in result.reason
+
+
+def test_runtime_evidence_request_code_mismatch_blocks(tmp_path):
+    batch = _batch()
+    evidence = _rehash(_evidence(batch), requested_stock_code="JNU2703")
+    result = _materialize(batch, tmp_path, evidence=evidence)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "REQUEST_BATCH_CODE_MISMATCH" in result.reason
+
+
+def test_runtime_evidence_id_tamper_blocks(tmp_path):
+    batch = _batch()
+    evidence = replace(_evidence(batch), evidence_id="w33_verify_tampered")
+    result = _materialize(batch, tmp_path, evidence=evidence)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "RUNTIME_EVIDENCE_ID_INVALID" in result.reason
+
+
+def test_noncanonical_raw_snapshot_id_blocks(tmp_path):
+    batch = replace(_batch(), source_snapshot_id="caller_supplied")
+    evidence = _rehash(_evidence(_batch()), source_snapshot_id="caller_supplied")
+    result = _materialize(batch, tmp_path, evidence=evidence)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "SOURCE_SNAPSHOT_ID_CANONICAL_MISMATCH" in result.reason
+
+
+def test_evidence_creation_does_not_mutate_raw_snapshot_identity():
+    batch = _batch()
+    before = batch.source_snapshot_id
+    evidence = _evidence(batch)
+    assert batch.timestamp_basis_status == TD.TIMESTAMP_BASIS_UNVERIFIED
+    assert batch.source_snapshot_id == before
+    assert TD.canonical_tick_detail_snapshot_id(batch) == before
+    assert evidence.source_snapshot_id == before
+
+
+def test_one_second_closing_auction_print_is_allowed_but_event_stays_at_close(tmp_path):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    result = _materialize(batch, tmp_path, evidence=_evidence(batch))
+    assert result.status == TCM.STATUS_MATERIALIZED
+    assert result.source_trade_timestamp == _dt(24, 6, 45, 1)
+    assert result.session_close_timestamp == _dt(24, 6, 45)
+
+
+def test_c2_3_materialized_daily_close_flows_into_w3_2_precommit(
+    tmp_path, monkeypatch,
+):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    evidence = _evidence(batch)
+    store = FeatureStore(root=tmp_path / "feature-store")
+
+    materialized = TCM.materialize_ose_terminal_close(
+        batch,
+        contract_month="202612",
+        verification_evidence=evidence,
+        store=store,
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+
+    snapshot, status = FC.osaka_forward_input_from_feature_store(
+        as_of=_dt(24, 7, 0),
+        contract_code="JNU2612",
+        store=store,
+    )
+    assert status["status"] == "READY"
+    assert status["forward_input_status"] == "CANDIDATE"
+    assert snapshot is not None
+    assert snapshot.trading_date == "2026-09-24"
+    assert snapshot.session_close_timestamp == _dt(24, 6, 45)
+    assert snapshot.available_at == batch.received_at
+    assert snapshot.contract_code == "JNU2612"
+    assert snapshot.contract_month == "202612"
+    assert snapshot.source_frequency == "DAILY"
+    assert snapshot.source_snapshot_ids == [
+        batch.source_snapshot_id,
+        evidence.evidence_id,
+    ]
+
+    audit = PA.PredictionAuditDB(tmp_path / "audit.duckdb")
+    monkeypatch.setattr(FC, "_now_utc", lambda: _dt(24, 7, 0))
+    precommit = FC.precommit_osaka_from_feature_store(
+        contract_code="JNU2612",
+        db=audit,
+        store=store,
+    )
+    assert precommit.status == FC.STATUS_PRECOMMITTED
+    pred = audit.get_prediction(precommit.prediction_id)
+    assert pred is not None
+    assert pred.feature_cutoff_timestamp == batch.received_at
+    assert pred.label_window_id == "2026-09-25"
+    lineage = audit.get_lineage(precommit.prediction_id)
+    assert len(lineage) == 1
+    assert lineage[0].source_snapshot_ids == [
+        batch.source_snapshot_id,
+        evidence.evidence_id,
+    ]
+
+
+def test_c2_3_daily_close_is_not_visible_before_callback_availability(tmp_path):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    evidence = _evidence(batch)
+    store = FeatureStore(root=tmp_path / "feature-store")
+    materialized = TCM.materialize_ose_terminal_close(
+        batch,
+        contract_month="202612",
+        verification_evidence=evidence,
+        store=store,
+    )
+    assert materialized.status == TCM.STATUS_MATERIALIZED
+
+    snapshot, status = FC.osaka_forward_input_from_feature_store(
+        as_of=_dt(24, 6, 45, 59),
+        contract_code="JNU2612",
+        store=store,
+    )
+    assert snapshot is None
+    assert status["status"] == "NO_ELIGIBLE_ROWS"
+    assert status["forward_input_status"] == "NOT_READY"
+
+
+def test_c2_3_daily_closes_drive_full_w3_2_forward_cycle(tmp_path, monkeypatch):
+    store = FeatureStore(root=tmp_path / "feature-store")
+    audit = PA.PredictionAuditDB(tmp_path / "audit.duckdb")
+
+    source_batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 1, 42005.0, 102, volume=1844),
+    ])
+    source_evidence = _evidence(source_batch)
+    source_close = TCM.materialize_ose_terminal_close(
+        source_batch,
+        contract_month="202612",
+        verification_evidence=source_evidence,
+        store=store,
+    )
+    assert source_close.status == TCM.STATUS_MATERIALIZED
+
+    monkeypatch.setattr(FC, "_now_utc", lambda: _dt(24, 7, 0))
+    precommit = FC.precommit_osaka_from_feature_store(
+        contract_code="JNU2612",
+        db=audit,
+        store=store,
+    )
+    assert precommit.status == FC.STATUS_PRECOMMITTED
+    assert precommit.target_trading_date == "2026-09-25"
+
+    outcome_batch = TD.TickDetailBatch(
+        market_no=TD.OSE_MARKET_NO,
+        stock_code="JNU2612",
+        rows=[
+            _row(15, 40, 0, 42080.0, 201, day=25),
+            _row(15, 45, 1, 42105.0, 202, volume=1500, day=25),
+        ],
+        received_at=_dt(25, 6, 46),
+    )
+    outcome_batch = replace(
+        outcome_batch,
+        source_snapshot_id=TD.canonical_tick_detail_snapshot_id(outcome_batch),
+    )
+    outcome_evidence = _evidence(
+        outcome_batch,
+        request_time=_dt(25, 6, 45, 30),
+    )
+    outcome_close = TCM.materialize_ose_terminal_close(
+        outcome_batch,
+        contract_month="202612",
+        verification_evidence=outcome_evidence,
+        store=store,
+    )
+    assert outcome_close.status == TCM.STATUS_MATERIALIZED
+
+    monkeypatch.setattr(FC, "_now_utc", lambda: _dt(25, 7, 0))
+    settled = FC.settle_osaka_from_feature_store(
+        precommit.prediction_id,
+        db=audit,
+        store=store,
+    )
+    assert settled.status == FC.STATUS_SETTLED
+    outcomes = audit.get_outcomes(precommit.prediction_id)
+    assert len(outcomes) == 1
+    assert outcomes[0].actual_value == pytest.approx(42105.0)
+    assert outcomes[0].source_snapshot_ids == [
+        outcome_batch.source_snapshot_id,
+        outcome_evidence.evidence_id,
+    ]
+
+    manifest, evaluation, readiness = FC.build_forward_evaluation(
+        db=audit,
+        evaluation_as_of=_dt(25, 8, 0),
+        window_start=_dt(24, 0, 0),
+        window_end=_dt(26, 0, 0),
+    )
+    assert len(manifest.members) == 1
+    assert evaluation.status == "EVALUATED"
+    assert evaluation.sample_count == 1
+    assert evaluation.point.mae == pytest.approx(100.0)
+    assert readiness["CALIBRATED"] is False
+    assert readiness["PREDICTIVE_EVIDENCE"] == "NOT_ESTABLISHED"
+    assert readiness["TRADING_EDGE"] == "NOT_ESTABLISHED"
+
+
+def test_trade_two_seconds_after_day_close_blocks_fail_closed(tmp_path):
+    batch = _batch(rows=[
+        _row(15, 40, 0, 42000.0, 101),
+        _row(15, 45, 2, 42005.0, 102, volume=1844),
+    ])
+    forged = _rehash(_evidence(_batch()), source_snapshot_id=batch.source_snapshot_id)
+    result = _materialize(batch, tmp_path, evidence=forged)
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "TIMESTAMP_BASIS_CROSSCHECK_FAILED" in result.reason
+
+
+def test_contract_month_must_match_requested_jnu_code(tmp_path):
+    batch = _batch()
+    result = _materialize(batch, tmp_path, evidence=_evidence(batch), month="202703")
+    assert result.status == TCM.STATUS_BLOCKED
+    assert "CONTRACT_MONTH_CODE_MISMATCH" in result.reason
+
+
+def test_zero_volume_row_cannot_be_selected_as_terminal_trade(tmp_path):
+    batch = _batch(rows=[
+        _row(15, 44, 58, 42000.0, 101),
+        _row(15, 44, 59, 99999.0, 102, volume=0),
+    ])
+    result = _materialize(batch, tmp_path, evidence=_evidence(batch))
+    assert result.status == TCM.STATUS_MATERIALIZED
+    assert result.source_trade_timestamp == _dt(24, 6, 44, 58)
+
+
+def test_repeat_is_idempotent_but_conflicting_close_is_rejected(tmp_path):
+    store = FeatureStore(root=tmp_path)
+    batch = _batch()
+    evidence = _evidence(batch)
+    one = TCM.materialize_ose_terminal_close(
+        batch, contract_month="202612", verification_evidence=evidence, store=store,
+    )
+    two = TCM.materialize_ose_terminal_close(
+        batch, contract_month="202612", verification_evidence=evidence, store=store,
+    )
+    assert one.status == TCM.STATUS_MATERIALIZED
+    assert two.status == TCM.STATUS_ALREADY_MATERIALIZED
+
+    changed = _batch(rows=[
+        _row(15, 44, 40, 41995.0, 100),
+        _row(15, 44, 59, 42010.0, 102),
+    ])
+    conflict = TCM.materialize_ose_terminal_close(
+        changed,
+        contract_month="202612",
+        verification_evidence=_evidence(changed),
+        store=store,
+    )
+    assert conflict.status == TCM.STATUS_BLOCKED
+    assert "CONFLICTING_TERMINAL_CLOSE" in conflict.reason
+
+
+def test_runtime_exchange_builder_binds_matching_request_callback():
+    batch = _batch()
+    request = TickDetailRequestTrace(
+        request_id="tick_detail_7",
+        request_time_utc=_dt(24, 6, 45, 30),
+        market_no=TD.OSE_MARKET_NO,
+        stock_code=batch.stock_code,
+        last_count=20,
+        accepted=True,
+    )
+    callback = TickDetailCallbackTrace(
+        request_id="tick_detail_7",
+        callback_received_at_utc=batch.received_at,
+        callback_mark=1,
+        callback_index=TV.CALLBACK_INDEX,
+        returned_market_no=batch.market_no,
+        returned_stock_code=batch.stock_code,
+    )
+    evidence = TV.build_ose_runtime_verification_from_exchange(
+        batch,
+        request_trace=request,
+        callback_trace=callback,
+        runtime_build_id="TEST_BUILD_C2",
+    )
+    assert evidence.runtime_request_id == "tick_detail_7"
+    assert evidence.source_snapshot_id == batch.source_snapshot_id
+    assert evidence.evidence_id == TV.canonical_evidence_id(evidence)
+
+
+def test_runtime_exchange_builder_recomputes_timestamp_basis():
+    batch = _batch(rows=[_row(10, 0, 0, 42000.0, 101)])
+    request = TickDetailRequestTrace(
+        request_id="tick_detail_8",
+        request_time_utc=_dt(24, 6, 45, 30),
+        market_no=TD.OSE_MARKET_NO,
+        stock_code=batch.stock_code,
+        last_count=20,
+        accepted=True,
+    )
+    callback = TickDetailCallbackTrace(
+        request_id="tick_detail_8",
+        callback_received_at_utc=batch.received_at,
+        callback_mark=1,
+        callback_index=TV.CALLBACK_INDEX,
+        returned_market_no=batch.market_no,
+        returned_stock_code=batch.stock_code,
+    )
+    with pytest.raises(ValueError, match="TIMESTAMP_BASIS_CROSSCHECK_FAILED"):
+        TV.build_ose_runtime_verification_from_exchange(
+            batch,
+            request_trace=request,
+            callback_trace=callback,
+            runtime_build_id="TEST_BUILD_C2",
+        )
+
+
+def test_runtime_exchange_builder_rejects_uncorrelated_callback():
+    batch = _batch()
+    request = TickDetailRequestTrace(
+        request_id="tick_detail_7",
+        request_time_utc=_dt(24, 6, 45, 30),
+        market_no=TD.OSE_MARKET_NO,
+        stock_code=batch.stock_code,
+        last_count=20,
+        accepted=True,
+    )
+    callback = TickDetailCallbackTrace(
+        request_id="",
+        callback_received_at_utc=batch.received_at,
+        callback_mark=1,
+        callback_index=TV.CALLBACK_INDEX,
+        returned_market_no=batch.market_no,
+        returned_stock_code=batch.stock_code,
+    )
+    with pytest.raises(ValueError, match="RUNTIME_REQUEST_CALLBACK_CORRELATION_MISMATCH"):
+        TV.build_ose_runtime_verification_from_exchange(
+            batch,
+            request_trace=request,
+            callback_trace=callback,
+            runtime_build_id="TEST_BUILD_C2",
+        )

@@ -65,7 +65,7 @@ def test_request_dedup():
 
 
 def test_datalake_cache_reuse(tmp_path, monkeypatch):
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
     clear_caches()
     a = _load_latest_micro_settlement()
     b = _load_latest_micro_settlement()  # cache hit
@@ -165,7 +165,7 @@ def test_target_proxy_separation():
 
 # --- 13: compact lazy compute ---
 def test_packet_compact_lazy_compute(tmp_path, monkeypatch):
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
     compact = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
     audit = build_analysis_packet(market="osaka", detail_level="audit", save_analysis=False)
     assert len(compact["data_coverage_summary"]) <= len(audit["data_coverage_summary"])
@@ -174,7 +174,7 @@ def test_packet_compact_lazy_compute(tmp_path, monkeypatch):
 
 # --- 14: failure isolation ---
 def test_failure_isolation(tmp_path, monkeypatch):
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
 
     def boom():
         raise RuntimeError("provider down")
@@ -192,7 +192,7 @@ def test_failure_isolation(tmp_path, monkeypatch):
 
 # --- 15: optimization output equivalence ---
 def test_optimization_output_equivalence(tmp_path, monkeypatch):
-    monkeypatch.setenv("MARKET_AI_HUB_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(_tmp_settlement_root(tmp_path)))
     clear_caches()
     cold = build_analysis_packet(market="osaka", detail_level="normal", save_analysis=False)
     warm = build_analysis_packet(market="osaka", detail_level="normal", save_analysis=False)

@@ -7,10 +7,32 @@ recording:
   normalized_parquet: true
   parquet_flush_seconds: 30
   latest_snapshot_seconds: 1
+  subscription_revalidation_seconds: 300
   max_dynamic_subscriptions: 200
+  max_buffer_records: 100000
   keep_connection_until_process_exit: true
   logout_after_agent_use: false
   secret_backend: WINDOWS_CREDENTIAL_MANAGER_ONLY
+durable_spool:
+  enabled: true
+  dir: spool
+  max_bytes: 268435456
+  max_records: 100000
+auto_reconnect:
+  enabled: false
+  max_attempts: 3
+  initial_delay_seconds: 5
+  max_delay_seconds: 30
+  connect_timeout_seconds: 15
+  login_timeout_seconds: 25
+jnu_microstructure:
+  enabled: true
+  market_no: 207
+  code_prefix: JNU
+  max_contracts: 2
+  stock_tick: true
+  five_tick: true
+  fail_soft: true
 storage:
   root: live/yuanta
   latest_file: latest.json
@@ -21,6 +43,12 @@ dynamic_requests:
   processed: control/processed
   failed: control/failed
   allowed_markets: [1, 2, 3, 202, 203, 204, 207, 209, 215]
+tick_detail_measurements:
+  enabled: false
+  timeout_seconds: 5
+  max_last_count: 20
+  raw_dir: evidence/tick_detail/raw
+  evidence_dir: evidence/tick_detail/verification
 subscriptions:
   - key: taifex_tmf
     factor: TW_INDEX

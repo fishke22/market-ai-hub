@@ -23,6 +23,7 @@ import math
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 from market_ai_hub.research.v2.prediction_audit import (
@@ -46,12 +47,14 @@ PAIRING_REJECTIONS = (
     "WRONG_TARGET", "WRONG_HORIZON", "WRONG_MODEL", "WRONG_CALIBRATION_DOMAIN",
     "MISSING_OUTCOME", "AMBIGUOUS_OUTCOME", "LEAKAGE_FUTURE", "OUTSIDE_WINDOW",
     "NOT_PROBABILITY", "NON_BINARY_OUTCOME", "NOT_BOUND", "EMPTY_VALUE",
+    "NONFINITE_VALUE",
 )
 # 致命（資料集本身不合法 -> BLOCKED）vs 稀疏（缺 outcome -> 不致命）
 BLOCKING_PAIRING_REJECTIONS = frozenset({
     "CROSS_PREDICTION", "WRONG_PROBABILITY_TYPE", "WRONG_EVENT_DEFINITION",
     "WRONG_TARGET", "WRONG_HORIZON", "WRONG_MODEL", "WRONG_CALIBRATION_DOMAIN",
     "AMBIGUOUS_OUTCOME", "LEAKAGE_FUTURE", "OUTSIDE_WINDOW", "NOT_PROBABILITY",
+    "NONFINITE_VALUE",
 })
 NON_BLOCKING_PAIRING_REJECTIONS = frozenset({
     "MISSING_OUTCOME", "NON_BINARY_OUTCOME", "NOT_BOUND", "EMPTY_VALUE",
@@ -348,6 +351,11 @@ def build_evaluation_dataset(
                                                     detail=f"{len(bound)} bound outcomes"))
                 continue
             out = bound[0]
+            if out.label_type != art.label_type:
+                rejected.append(EvaluationRejection(
+                    prediction_id=pid, forecast_artifact_id=aid, reason="WRONG_EVENT_DEFINITION",
+                    detail=f"artifact label {art.label_type!r} != outcome label {out.label_type!r}"))
+                continue
             if out.prediction_id != pid:
                 rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
                                                     reason="CROSS_PREDICTION", detail=out.outcome_id))
@@ -357,6 +365,33 @@ def build_evaluation_dataset(
                                                     reason="LEAKAGE_FUTURE",
                                                     detail="outcome available before forecast_origin"))
                 continue
+            if artifact_type in NUMERIC_ARTIFACT_TYPES:
+                if artifact_type == "POINT":
+                    numeric_fields = [("value", art.value)]
+                elif artifact_type == "QUANTILE":
+                    numeric_fields = [("value", art.value), ("quantile_level", art.quantile_level)]
+                else:
+                    numeric_fields = [
+                        ("lower_value", art.lower_value),
+                        ("upper_value", art.upper_value),
+                        ("nominal_coverage", art.nominal_coverage),
+                    ]
+                missing_numeric = [name for name, value in numeric_fields if value is None]
+                if missing_numeric:
+                    rejected.append(EvaluationRejection(
+                        prediction_id=pid, forecast_artifact_id=aid,
+                        reason="EMPTY_VALUE", detail="missing numeric fields: " + ",".join(missing_numeric)))
+                    continue
+                nonfinite_numeric = [
+                    name for name, value in numeric_fields
+                    if not math.isfinite(float(value))
+                ]
+                if nonfinite_numeric:
+                    rejected.append(EvaluationRejection(
+                        prediction_id=pid, forecast_artifact_id=aid,
+                        reason="NONFINITE_VALUE",
+                        detail="nonfinite artifact fields: " + ",".join(nonfinite_numeric)))
+                    continue
             if artifact_type == "EVENT_PROBABILITY":
                 if art.value is None:
                     rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
@@ -377,6 +412,11 @@ def build_evaluation_dataset(
                 rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
                                                     reason="MISSING_OUTCOME",
                                                     detail="outcome not numerically settled"))
+                continue
+            if not math.isfinite(float(out.actual_value)):
+                rejected.append(EvaluationRejection(
+                    prediction_id=pid, forecast_artifact_id=aid,
+                    reason="NONFINITE_VALUE", detail="nonfinite outcome actual_value"))
                 continue
             if artifact_type == "EVENT_PROBABILITY" and float(out.actual_value) not in (0.0, 1.0):
                 rejected.append(EvaluationRejection(prediction_id=pid, forecast_artifact_id=aid,
@@ -581,6 +621,20 @@ def evaluation_result_to_calibration_evidence(result: EvaluationResult) -> dict:
 
 # ── 真實資料 readiness（不建立 DB、不補值） ──
 def actual_evaluation_readiness(db: PredictionAuditDB | None = None) -> dict:
+    """Read candidate readiness without creating/migrating a database or claiming evaluation."""
+    import duckdb
+    try:
+        return _candidate_readiness(db)
+    except (duckdb.Error, OSError, ValueError, TypeError) as exc:
+        return {
+            "db_present": Path(db.path).exists() if db is not None else default_audit_db_path().exists(),
+            "ACTUAL_PROBABILITY_EVALUATION": "BLOCKED",
+            "ACTUAL_CALIBRATION_EVIDENCE": "NONE_YET",
+            "reason": "AUDIT_DB_UNREADABLE_" + type(exc).__name__,
+        }
+
+
+def _candidate_readiness(db: PredictionAuditDB | None = None) -> dict:
     """檢查 audit DB 是否已有真實 settled probabilistic samples。
 
     回傳 ACTUAL_PROBABILITY_EVALUATION / ACTUAL_CALIBRATION_EVIDENCE。
@@ -595,7 +649,7 @@ def actual_evaluation_readiness(db: PredictionAuditDB | None = None) -> dict:
                 "ACTUAL_PROBABILITY_EVALUATION": "INSUFFICIENT_EVIDENCE",
                 "ACTUAL_CALIBRATION_EVIDENCE": "NONE_YET",
             }
-        db = PredictionAuditDB()
+        db = PredictionAuditDB(default_audit_db_path(), read_only=True)
 
     settled = 0
     for pid in db.list_prediction_ids():
@@ -616,8 +670,9 @@ def actual_evaluation_readiness(db: PredictionAuditDB | None = None) -> dict:
         "db_present": True,
         "prediction_count": len(db.list_prediction_ids()),
         "settled_event_probability_samples": settled,
-        "ACTUAL_PROBABILITY_EVALUATION": ("EVALUATED" if settled >= MIN_PROBABILITY_SAMPLES
+        "ACTUAL_PROBABILITY_EVALUATION": ("READY_FOR_EVALUATION" if settled >= MIN_PROBABILITY_SAMPLES
                                           else "INSUFFICIENT_EVIDENCE"),
+        "readiness_scope": "UNVALIDATED_CANDIDATE_COUNT_ONLY",
         "ACTUAL_CALIBRATION_EVIDENCE": "NONE_YET",
     }
 

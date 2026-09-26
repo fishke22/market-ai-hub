@@ -250,8 +250,10 @@ Legacy規則相反：
 ### 啟動與 single-instance
 - 手動：`scripts/start_yuanta_live_recorder.ps1`
 - 前景診斷：`scripts/start_yuanta_live_recorder.ps1 -Foreground`
+- 啟動/maintenance 前只讀 owner preflight：`scripts/check_yuanta_recorder_owner.ps1`。
 - Windows 使用者 Startup 已配置自動呼叫同一啟動腳本。
-- 啟動腳本會先讀 `data/live/yuanta/status.json` 並檢查 PID；已有 RUNNING process 時只回 `YUANTA_LIVE_ALREADY_RUNNING`，不得建立第二個登入。
+- 啟動腳本會先跑 owner preflight；健康既有 owner 只回 `YUANTA_LIVE_ALREADY_RUNNING`，不得建立第二個登入。duplicate/unverified owner、runtime/disk build mismatch 或 tracked measurement gate 被誤開時會在新 process 前 fail closed。
+- preflight 以 `status.json` 的 PID 為 owner truth，會把 venv wrapper parent + actual interpreter child 視為同一 invocation chain；只有獨立第二條 recorder process chain 才報 `BLOCKED_DUPLICATE_OWNER_RISK`。它同時核對 heartbeat、runtime/disk build、runtime measurement gate 與 tracked safe default，且不執行 broker action。
 
 ### Agent 讀取與追加訂閱
 任何 agent 需要即時行情時：
@@ -259,8 +261,22 @@ Legacy規則相反：
 2. 直接讀 `data/live/yuanta/latest.json` 取得最新快照。
 3. 若需要額外商品，使用：
    `scripts/request_yuanta_quote.ps1 -MarketNo <market> -Symbol <symbol>`
+   此入口會先跑 owner preflight；只有健康 `SAFE_DEFAULT_OWNER_HEALTHY` 或 `MAINTENANCE_OWNER_RUNNING` 且 status=RUNNING/health 無異常時才會進一步建立 inbox request，否則在 broker mutation 前 fail closed。
 4. recorder 會在**既有 SPARK connection**上追加 `SubscribeWatchlistAll`；agent 不讀密碼、不 Login、不 Logout。
 5. request 會移到 `control/processed` 或 `control/failed`，fail-closed。
+
+### 受控 OSE Tick-detail measurement（平常停用）
+- `config/yuanta_live_recorder.yaml` 的 `tick_detail_measurements.enabled` 預設為 `false`。
+- 只有明確 maintenance-window 授權後，才可受控重啟 recorder 到已發布 current build。不要把 tracked safe default 改成 true；一般本機維護可使用 `scripts/start_yuanta_live_recorder.ps1 -EnableTickDetailMeasurements` 做 runtime-only 啟用。
+- **WebCodex 特例：** one-shot Runner command 結束後，其背景 child 不保證能繼續存活。受控 measurement 必須用 `scripts/start_yuanta_live_recorder.ps1 -Foreground -EnableTickDetailMeasurements` 啟動成 long-running Runner Job；保持該 Job 存活，再從另一個工具呼叫檢查 status / queue measurement / queue shutdown。不要用 shell detachment trick 繞過 Runner lifecycle。
+- 正常維護停機使用 `scripts/stop_yuanta_live_recorder.ps1`；它先跑 owner preflight。若 `NO_RUNNING_OWNER`，直接回 `YUANTA_LIVE_NOT_RUNNING`，不會留下 stale shutdown request；若有 duplicate/unverified owner，fail closed。只有單一可識別 owner 才送 control-inbox `shutdown`，讓 recorder 自己走 close/dispose + pending flush。不要把 `Stop-Process` 當正常維護流程。
+- 啟用後仍只由**同一個 recorder owner**執行；agent 不自行 Login/Logout。
+- 受控入口：`scripts/request_yuanta_tick_detail_measurement.ps1 -Symbol JNU<YYMM> [-LastCount 20]`。此入口在 queue 前強制 owner preflight：必須是 `MAINTENANCE_OWNER_RUNNING`、status=RUNNING、runtime measurement gate=true、tracked gate=false、runtime/disk build一致且 health 無異常；任何一項不成立都 fail closed，不建立 measurement request。
+- request 只允許 OSE market 207、exact `JNU\d{4}`、`LastCount<=20`，且 request/callback 都必須落在 15:45–17:00 JST。
+- recorder 啟動時凍結 `runtime_build_id`；measurement 會重新計算目前磁碟 fingerprint，若與 process build 不同就在碰 API 前 fail closed。
+- evidence builder / materializer 會重新從 raw batch + request/callback times 驗證 timestamp basis，不接受 caller 自行聲稱 cross-check 成功。
+- raw tick 值只寫本機 `evidence/tick_detail/raw`；control result 與 verification evidence 不公開價格。
+- 2026-09-25 maintenance-window 授權已取得。第三次 foreground Runner Job 已成功取得 JNU2612 real raw evidence；C2.3 current source/config build_id=`afd52f88a351541a`。後續 safe-default recorder 已以同一 build RUNNING，measurement runtime gate=false。下一次 live remeasurement 前先跑 owner preflight，再安全 handover 唯一 owner；不得因看到 parent+child 兩個 Python PID 就誤判成兩個 broker owners。owner-preflight commit=`bef25d54ebea22bcb93d8466f657fe7d460496e9`。
 
 ### 長期資料
 - 主訓練格式：`data/live/yuanta/parquet/YYYY-MM-DD/*.parquet`

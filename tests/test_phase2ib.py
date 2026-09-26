@@ -1,6 +1,8 @@
 """Phase 2I-B — reconstruction pack / documentation / portability tests。"""
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -43,6 +45,28 @@ def test_capabilities_manifest_valid():
     assert d["osaka_micro_research"]["status"] == "AVAILABLE"
 
 
+def test_w7_portability_matrix_keeps_external_gates_unverified():
+    d = yaml.safe_load(_read("docs/development/W7_PORTABILITY_ACCEPTANCE.yaml"))
+    assert d["schema"] == "W7_PORTABILITY_ACCEPTANCE_V1"
+    cells = d["cells"]
+    for name in (
+        "non_repo_cwd", "external_data_root_cjk_space",
+        "fresh_bootstrap_venv_current_windows", "source_backup_restore_different_path",
+        "scheduled_tasks_rebind_dry_run", "mcp_client_config_rebind",
+    ):
+        assert cells[name]["status"] == "PASS"
+    for name in (
+        "full_dependency_install_fresh_venv", "new_windows_clean_machine",
+        "yuanta_wincred_recreation", "yuanta_certificate_reimport",
+        "yuanta_com_registration_new_machine",
+    ):
+        assert cells[name]["status"] == "UNVERIFIED_EXTERNAL_GATE"
+    assert cells["private_research_data_consistent_restore"]["status"] == "PASS"
+    assert cells["private_research_data_consistent_restore"]["evidence"] == "W7.8"
+    assert cells["c2_3_live_runtime_reverification"]["status"] == "WAITING_TIME_WINDOW"
+    assert all(cell["status"] != "COMPLETE" for cell in cells.values())
+
+
 # --- 3/4: MCP JSON ---
 def test_mcp_json_valid():
     for f in ("generic-stdio.json", "cherry-studio.json"):
@@ -55,6 +79,29 @@ def test_mcp_json_no_secret():
         txt = _read(f"examples/mcp/{f}").lower()
         for kw in ("password", "token", "secret", "api_key", "apikey"):
             assert kw not in txt
+
+
+def test_render_mcp_config_uses_explicit_relocated_root_from_non_repo_cwd(tmp_path):
+    relocated = tmp_path / "新 MCP 路徑" / "MARKET_AI_HUB"
+    command = relocated / ".venv" / ("Scripts" if sys.platform == "win32" else "bin") / (
+        "market-ai-mcp.exe" if sys.platform == "win32" else "market-ai-mcp"
+    )
+    command.parent.mkdir(parents=True)
+    command.write_bytes(b"")
+    script = ROOT / "scripts" / "render_mcp_config.py"
+    for client in ("generic", "cherry"):
+        result = subprocess.run(
+            [sys.executable, "-B", str(script), "--client", client,
+             "--project-root", str(relocated), "--require-command"],
+            cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        payload = json.loads(result.stdout)
+        server = payload["mcpServers"]["market-ai"]
+        assert Path(server["command"]) == command
+        assert server["args"] == []
+        assert "<PROJECT>" not in result.stdout
+        assert str(ROOT) not in result.stdout
 
 
 # --- 5/6: skills ---
@@ -133,7 +180,119 @@ def test_license_present():
     assert "Apache License" in txt and "2.0" in txt
 
 
+def test_windows_lock_setuptools_security_floor():
+    lock = _read("requirements-lock-windows-x64.txt")
+    match = re.search(r"^setuptools==(\d+)\.(\d+)\.(\d+)", lock, re.MULTILINE)
+    assert match, "Windows lock must pin setuptools explicitly"
+    assert tuple(map(int, match.groups())) >= (83, 0, 0)
+    assert "GHSA-5rjg-fvgr-3xxf" in lock
+    assert "GHSA-h35f-9h28-mq5c" in lock
+
+
+def test_ci_pins_node24_actions_and_runner_image():
+    workflow = _read(".github/workflows/ci.yml")
+    assert "runs-on: ubuntu-24.04" in workflow
+    assert "uses: actions/checkout@v7" in workflow
+    assert "uses: actions/setup-python@v7" in workflow
+    assert "ubuntu-latest" not in workflow
+    assert "actions/checkout@v4" not in workflow
+    assert "actions/setup-python@v5" not in workflow
+
+
+def test_yuanta_certificate_check_is_generic_store_only():
+    text = _read("scripts/check_yuanta_certificate.ps1")
+    assert "certificate_store_nonempty" in text
+    assert "certificate_store_has_unexpired" in text
+    assert "yuanta_certificate_identity_verified: false" in text
+    assert "yuanta_official_signature_verified: false" in text
+    assert "GENERIC_STORE_ONLY_REQUIRES_OFFICIAL_YUANTA_SIGNATURE_CHECK" in text
+    assert "certificate_present:" not in text
+    assert "certificate_valid:" not in text
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows relocation preflight")
+def test_external_relocation_preflight_is_read_only_and_cannot_close_external_gates():
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(ROOT / "scripts" / "check_external_relocation_gates.ps1"), "-Json"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout.lstrip("\ufeff"))
+    assert payload["schema"] == "EXTERNAL_RELOCATION_PREFLIGHT_V1"
+    assert payload["read_only"] is True
+    gates = payload["gates"]
+    assert set(gates) == {
+        "full_dependency_install_fresh_venv", "new_windows_clean_machine",
+        "yuanta_wincred_recreation", "yuanta_certificate_reimport",
+        "yuanta_com_registration_new_machine",
+    }
+    assert all(g["status"] == "UNVERIFIED_EXTERNAL_GATE" for g in gates.values())
+    cert = gates["yuanta_certificate_reimport"]
+    assert cert["yuanta_certificate_identity_verified"] is False
+    assert cert["yuanta_official_signature_verified"] is False
+    lowered = result.stdout.lower()
+    for forbidden in ("password", "thumbprint", "private key", "subject=", "account="):
+        assert forbidden not in lowered
+
+
 # --- 14: reconstruction required files ---
+def test_reconstruct_verify_is_independent_of_caller_cwd_and_uses_runtime_build_identity():
+    text = _read("scripts/reconstruct_verify.ps1")
+    root_idx = text.index("$Root = Split-Path -Parent $PSScriptRoot")
+    chdir_idx = text.index("Set-Location -LiteralPath $Root")
+    manifest_idx = text.index("open('config/system_manifest.yaml'")
+    assert root_idx < chdir_idx < manifest_idx
+    assert '$m -eq "runtime_introspected"' in text
+    assert "from market_ai_hub.services.build_info import build_fingerprint" in text
+    assert '$runtimeBuild -match "^[0-9a-f]{16}$"' in text
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows Scheduled Task scripts")
+def test_scheduled_task_dry_run_rebinds_to_relocated_repo(tmp_path):
+    relocated = tmp_path / "搬移 路徑" / "MARKET_AI_HUB"
+    scripts = relocated / "scripts"
+    scripts.mkdir(parents=True)
+    for name in ("register_research_tasks.ps1", "register_forward_shadow_task.ps1"):
+        shutil.copy2(ROOT / "scripts" / name, scripts / name)
+    (scripts / "run_daily_forward_cycle.ps1").write_text("# dry-run fixture\n", encoding="utf-8")
+    py = relocated / ".venv" / "Scripts" / "python.exe"
+    py.parent.mkdir(parents=True)
+    py.write_bytes(b"")
+
+    research = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(scripts / "register_research_tasks.ps1"), "-DryRun"],
+        cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert research.returncode == 0, research.stdout + research.stderr
+    research_plan = json.loads(research.stdout.lstrip("\ufeff"))
+    assert Path(research_plan["repo_root"]) == relocated
+    assert len(research_plan["tasks"]) == 2
+    assert all(Path(task["working_directory"]) == relocated for task in research_plan["tasks"])
+    assert all(str(relocated) in task["execute"] for task in research_plan["tasks"])
+    assert str(ROOT) not in research.stdout
+
+    forward = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(scripts / "register_forward_shadow_task.ps1"), "-DryRun"],
+        cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert forward.returncode == 0, forward.stdout + forward.stderr
+    forward_plan = json.loads(forward.stdout.lstrip("\ufeff"))
+    assert Path(forward_plan["repo_root"]) == relocated
+    assert str(relocated / "scripts" / "run_daily_forward_cycle.ps1") in forward_plan["arguments"]
+    assert str(ROOT) not in forward.stdout
+
+
+def test_forward_shadow_registration_refreshes_existing_path_by_default():
+    text = _read("scripts/register_forward_shadow_task.ps1")
+    assert "[switch]$DryRun" in text
+    assert "[switch]$PreserveExisting" in text
+    assert "Register-ScheduledTask" in text and "-Force" in text
+    assert "if ($existing -and $PreserveExisting)" in text
+
+
 def test_reconstruction_required_files():
     required = [
         "README.md", "config/system_manifest.yaml", "docs/development/AI_RECONSTRUCTION_GUIDE.md",

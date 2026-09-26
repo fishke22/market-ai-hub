@@ -73,6 +73,9 @@ class AnalysisPacket(BaseModel):
 
     data_quality: dict[str, Any] = Field(default_factory=dict)
     data_coverage_summary: list[dict[str, Any]] = Field(default_factory=list)
+    # W2: persisted V2-A.2 factor-observation provenance (source/quality, not a trading signal).
+    factor_observation_summary: list[dict[str, Any]] = Field(default_factory=list)
+    model_input_readiness: dict[str, Any] = Field(default_factory=dict)
 
     research_gates: dict[str, Any] = Field(default_factory=dict)
     reanalysis_conditions: list[str] = Field(default_factory=list)
@@ -122,8 +125,8 @@ class AnalysisPacket(BaseModel):
     def render(self, detail_level: str) -> dict:
         d = self.model_dump(mode="json")
         if detail_level == "compact":
-            for k in ("upcoming_events", "data_coverage_summary", "data_reused",
-                      "data_fetched", "data_stale", "contradictions", "data_quality"):
+            for k in ("upcoming_events", "data_coverage_summary", "factor_observation_summary",
+                      "data_reused", "data_fetched", "data_stale", "contradictions", "data_quality"):
                 # compact 精簡長 list / debug 細節
                 if k in d:
                     d[k] = d[k][:3] if isinstance(d[k], list) else {}

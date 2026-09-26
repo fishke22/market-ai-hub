@@ -44,10 +44,14 @@ class RandomWalk(_PointBaseline):
     name = "random_walk"
 
     def _point(self, closes, steps):
+        if steps < 1:
+            raise ValueError("steps must be >= 1")
         rets = closes.pct_change().dropna()
+        if len(rets) == 0:
+            return float(closes.iloc[-1])
         rng = np.random.default_rng(42)
-        shock = float(rng.choice(rets.to_numpy())) if len(rets) else 0.0
-        return float(closes.iloc[-1] * (1 + shock))
+        shocks = rng.choice(rets.to_numpy(), size=steps, replace=True)
+        return float(closes.iloc[-1] * np.prod(1.0 + shocks))
 
 
 class Drift(_PointBaseline):
@@ -71,9 +75,9 @@ class SeasonalNaive(_PointBaseline):
 
     def _point(self, closes, steps):
         lag = 5  # 週級季節性（daily）
-        if len(closes) <= lag:
+        if len(closes) < lag:
             return float(closes.iloc[-1])
-        return float(closes.iloc[-lag])
+        return float(closes.iloc[-lag + (steps - 1) % lag])
 
 
 class _DirectionBaseline(ModelAdapter):

@@ -9,16 +9,16 @@ on:
 jobs:
   lightweight-tests:
     name: Lightweight tests (no GPU, no model weights)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -40,4 +40,4 @@ jobs:
       - name: Run lightweight tests (unit only)
         # integration tests need model weights / MCP subprocess; live tests need network.
         # Neither runs in public CI.
-        run: python -m pytest tests -q -m "not integration and not live"
+        run: python -m pytest tests -q -m "not integration and not live and not optional_model and not optional_integration and not private_data and not broker_diagnostic"

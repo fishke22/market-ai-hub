@@ -37,8 +37,8 @@ OSE Micro / JNU 是 JPX Futures，應走一般 Futures / SPARK 路徑。
 ```
 powershell -ExecutionPolicy Bypass -File scripts\check_yuanta_certificate.ps1
 ```
-- expected：`certificate_present: true`、`certificate_valid: true`。
-- failure：到元大憑證中心做「憑證簽驗」。
+- 這只做 generic Windows certificate-store preflight；`certificate_store_has_unexpired: true` **不等於**元大憑證已驗證。
+- 正式 acceptance：到元大憑證中心做「憑證簽驗」且成功；repo 腳本不會讀 subject/thumbprint/private key 來猜身份。
 
 ## 6. 安裝 SPARK prerequisites
 - .NET 8 x64（`dotnet --list-runtimes` 確認 8.x）。
@@ -50,7 +50,9 @@ powershell -ExecutionPolicy Bypass -File scripts\check_yuanta_certificate.ps1
 powershell -ExecutionPolicy Bypass -File scripts\setup_yuanta_futures_x86.ps1
 ```
 - expected：`RESULT: READY_FOR_AUTH`。
-- failure：缺 32-bit Python → 安裝 Python 3.11 32-bit。
+- 預設：用 Windows `py -3.11-32` 找 32-bit Python。
+- 若 Python 放在自訂路徑：設定 `MARKET_AI_PYTHON_X86`，或使用 `-PythonX86 "<python.exe>"`；不要修改 script 寫死使用者目錄。
+- failure：缺 32-bit Python → 安裝 Python 3.11 32-bit；指定錯誤/非 32-bit interpreter 時會在安裝依賴前停止。
 
 ## 8. 設定 WinCred
 - 期貨/證券帳號 preset + **Legacy 登入ID**（身份證ID，不是期貨帳號）：

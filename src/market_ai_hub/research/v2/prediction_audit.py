@@ -3,6 +3,8 @@
 2H.1：prediction metadata + V2-A.2 factor lineage + outcome（分表、不可合併）。
 2H.2：把「預測當時實際輸出的 forecast artifact」納入同一 append-only chain，並以
       `append_prediction_bundle()` 單一 transaction 原子寫入 prediction + lineage + artifacts。
+2H.3（W3）：prediction identity 另綁定 sample_origin + label window；若有 sealed label window，
+      outcome 必須在 horizon window 到期後才可 append，且 target_period 必須匹配。
 
 不變式（machine-enforced）：
 - `feature_cutoff_timestamp <= forecast_origin`（BLOCKED_TEMPORAL_ORDER）
@@ -23,7 +25,7 @@
 不在本棒：calibration fitting / Brier / log-loss / model training / trading / broker / recorder。
 Yuanta live capability 不是 gate：live → 存 live lineage；unavailable → 存 unavailable lineage。
 
-Schema: V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.2"。
+Schema: V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"。
 """
 from __future__ import annotations
 
@@ -34,9 +36,10 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.2"
+V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"
 
 PREDICTION_STATUSES = ("PENDING", "SUPERSEDED", "VOID")
+PREDICTION_SAMPLE_ORIGINS = ("FORWARD_PRECOMMITTED", "RETROSPECTIVE_REPLAY", "UNKNOWN")
 LINEAGE_AVAILABILITY = ("AVAILABLE", "NOT_AVAILABLE", "EXTERNAL_ENTITLEMENT_BLOCKED", "UNKNOWN")
 OUTCOME_KINDS = ("RETURN", "STATE", "DIRECTION", "TOUCH", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM")
 
@@ -57,6 +60,8 @@ BLOCKED_ARTIFACT_PREDICTION_MISMATCH = "BLOCKED_ARTIFACT_PREDICTION_MISMATCH"
 BLOCKED_ARTIFACT_NOT_FOUND = "BLOCKED_ARTIFACT_NOT_FOUND"
 BLOCKED_ARTIFACT_OUTCOME_MISMATCH = "BLOCKED_ARTIFACT_OUTCOME_MISMATCH"
 BLOCKED_OUTCOME_TEMPORAL = "BLOCKED_OUTCOME_TEMPORAL"
+BLOCKED_OUTCOME_IMMATURE = "BLOCKED_OUTCOME_IMMATURE"
+BLOCKED_OUTCOME_SCOPE = "BLOCKED_OUTCOME_SCOPE"
 
 # 出現在 prediction/lineage payload 即視為 outcome leakage 的 key
 _OUTCOME_KEYS = frozenset({
@@ -76,8 +81,9 @@ _ARTIFACT_OUTCOME_KINDS = {
     "NOT_AVAILABLE": set(),
 }
 
-_DT_FIELDS = ("forecast_origin", "feature_cutoff_timestamp", "created_at", "generated_at",
-              "event_timestamp", "available_at", "provider_timestamp", "received_at")
+_DT_FIELDS = ("forecast_origin", "feature_cutoff_timestamp", "label_window_start", "label_window_end",
+              "created_at", "generated_at", "event_timestamp", "available_at",
+              "provider_timestamp", "received_at")
 
 
 def label_scope(label_type: str) -> str:
@@ -131,6 +137,14 @@ class ArtifactOutcomeMismatchError(PredictionAuditError):
 
 class OutcomeTemporalError(PredictionAuditError):
     code = BLOCKED_OUTCOME_TEMPORAL
+
+
+class OutcomeMaturityError(PredictionAuditError):
+    code = BLOCKED_OUTCOME_IMMATURE
+
+
+class OutcomeScopeError(PredictionAuditError):
+    code = BLOCKED_OUTCOME_SCOPE
 
 
 # ── canonical serialization / identity ──
@@ -325,6 +339,10 @@ class PredictionRecord:
     calendar_id: str = ""
     frequency: str = "DAILY"
     horizon: str = "1d"
+    sample_origin: str = "UNKNOWN"
+    label_window_id: str = ""
+    label_window_start: datetime | None = None
+    label_window_end: datetime | None = None
     forecast_origin: datetime | None = None
     feature_cutoff_timestamp: datetime | None = None
     build_id: str = ""
@@ -344,8 +362,23 @@ class PredictionRecord:
     def __post_init__(self):
         if self.status not in PREDICTION_STATUSES:
             raise PredictionAuditError(f"unknown prediction status: {self.status!r}")
+        if self.sample_origin not in PREDICTION_SAMPLE_ORIGINS:
+            raise PredictionAuditError(f"unknown sample_origin: {self.sample_origin!r}")
         _require_aware("forecast_origin", self.forecast_origin)
         _require_aware("feature_cutoff_timestamp", self.feature_cutoff_timestamp)
+        for n in ("label_window_start", "label_window_end"):
+            value = getattr(self, n)
+            if value is not None:
+                _require_aware(n, value)
+        if (self.label_window_start is None) != (self.label_window_end is None):
+            raise PredictionAuditError("label_window_start/end must be both set or both absent")
+        if self.label_window_start is not None and self.label_window_end is not None:
+            if self.label_window_start < self.forecast_origin:
+                raise PredictionAuditError("label_window_start < forecast_origin")
+            if self.label_window_end < self.label_window_start:
+                raise PredictionAuditError("label_window_end < label_window_start")
+            if not self.label_window_id:
+                raise PredictionAuditError("label_window_id required when label window is sealed")
         object.__setattr__(self, "source_snapshot_ids", _canon_ids(self.source_snapshot_ids))
 
     def model_dump(self) -> dict:
@@ -411,13 +444,12 @@ def forecast_artifact_payload(record: ForecastArtifactRecord) -> dict:
 
 
 def is_public_probability(artifact: ForecastArtifactRecord) -> bool:
-    """True 只在有真實 CalibrationEvidence 時；否則只能是內部 audit artifact。"""
-    return bool(
-        artifact.artifact_type in ("EVENT_PROBABILITY", "CLASS_SCORE")
-        and artifact.calibration_status_at_origin == "CALIBRATED"
-        and artifact.calibration_evidence_id
-        and artifact.value is not None
-    )
+    """Audit metadata never authorizes publication.
+
+    2I.1 has no fitted evidence resolver. Publication must use the typed
+    Price/Probability Map eligibility gate, not caller-declared status/IDs.
+    """
+    return False
 
 
 def make_lineage(**kwargs) -> FactorLineageRecord:
@@ -486,8 +518,8 @@ def make_outcome(**kwargs) -> OutcomeRecord:
 
 # ── storage ──
 def default_audit_db_path() -> Path:
-    from market_ai_hub.config.settings import project_root
-    return project_root() / "data" / "audit" / "prediction_audit.duckdb"
+    from market_ai_hub.config.runtime_paths import data_root
+    return data_root() / "audit" / "prediction_audit.duckdb"
 
 
 def _utc_naive(dt: datetime | None):
@@ -511,15 +543,20 @@ def _restore(payload: dict) -> dict:
 class PredictionAuditDB:
     """Append-only audit store (LOCAL_ONLY). Public API exposes NO UPDATE / DELETE."""
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path | None = None, *, read_only: bool = False) -> None:
         self.path = str(path) if path is not None else str(default_audit_db_path())
+        self.read_only = read_only
+        if read_only:
+            if not Path(self.path).is_file():
+                raise FileNotFoundError(self.path)
+            return
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
     def _conn(self):
         import duckdb
-        return duckdb.connect(self.path)
+        return duckdb.connect(self.path, read_only=self.read_only)
 
     def _init(self) -> None:
         with self._conn() as con:
@@ -646,11 +683,19 @@ class PredictionAuditDB:
                     f"{BLOCKED_ID_COLLISION}: prediction_id {pid} exists with different payload")
             for a in artifacts:
                 row = con.execute(
-                    "SELECT payload_json FROM forecast_artifacts WHERE forecast_artifact_id = ?",
+                    "SELECT prediction_id, payload_json FROM forecast_artifacts "
+                    "WHERE forecast_artifact_id = ?",
                     [a.forecast_artifact_id]).fetchone()
-                if row is not None and row[0] != canonical_json(forecast_artifact_payload(a)):
-                    raise IdCollisionError(
-                        f"{BLOCKED_ID_COLLISION}: forecast_artifact_id {a.forecast_artifact_id}")
+                if row is not None:
+                    existing_prediction_id, existing_payload = row
+                    if existing_payload != canonical_json(forecast_artifact_payload(a)):
+                        raise IdCollisionError(
+                            f"{BLOCKED_ID_COLLISION}: forecast_artifact_id {a.forecast_artifact_id}")
+                    if existing_prediction_id != pid:
+                        raise ArtifactBindingError(
+                            f"{BLOCKED_ARTIFACT_PREDICTION_MISMATCH}: "
+                            f"forecast_artifact_id {a.forecast_artifact_id} is already bound to "
+                            f"{existing_prediction_id}")
             now = datetime.now(timezone.utc)
             self._insert_prediction_row(con, record, payload_json, now)
             self._insert_lineage_rows(con, pid, lineage)
@@ -687,7 +732,7 @@ class PredictionAuditDB:
                 raise ArtifactBindingError(
                     f"{BLOCKED_ARTIFACT_PREDICTION_MISMATCH}: {record.forecast_artifact_id}")
             if (record.outcome_kind not in _ARTIFACT_OUTCOME_KINDS.get(art.artifact_type, set())
-                    or label_scope(record.label_type) != label_scope(art.label_type)):
+                    or record.label_type != art.label_type):
                 raise ArtifactOutcomeMismatchError(
                     f"{BLOCKED_ARTIFACT_OUTCOME_MISMATCH}: {art.artifact_type}/"
                     f"{art.label_type} vs {record.outcome_kind}/{record.label_type}")
@@ -695,6 +740,15 @@ class PredictionAuditDB:
                 and record.available_at < pred.forecast_origin):
             raise OutcomeTemporalError(
                 f"{BLOCKED_OUTCOME_TEMPORAL}: available_at < forecast_origin")
+
+        if pred.label_window_end is not None:
+            if record.available_at is None or record.available_at < pred.label_window_end:
+                raise OutcomeMaturityError(
+                    f"{BLOCKED_OUTCOME_IMMATURE}: available_at < label_window_end")
+            if record.target_period != pred.label_window_id:
+                raise OutcomeScopeError(
+                    f"{BLOCKED_OUTCOME_SCOPE}: target_period {record.target_period!r} != "
+                    f"label_window_id {pred.label_window_id!r}")
 
         payload = outcome_payload(record)
         oid = record.outcome_id or outcome_identity(payload)
@@ -812,9 +866,9 @@ class PredictionAuditDB:
 def v2_schema_versions() -> dict[str, str]:
     """Assemble the actual V2 schema versions (no hardcoding)."""
     from market_ai_hub.research.v2 import (
-        asof, calibration_evaluation, catalyst_response, extension_exhaustion,
-        factor_representation, gap_session, labels, sequential_update, session_truth,
-        state_machine,
+        asof, calibration_evaluation, catalyst_response, evaluation_governance,
+        extension_exhaustion, factor_representation, forward_cycle, gap_session, labels,
+        sequential_update, session_truth, state_machine, tick_detail_source,
     )
     return {
         "asof": asof.V2_ASOF_SCHEMA_VERSION,
@@ -828,4 +882,7 @@ def v2_schema_versions() -> dict[str, str]:
         "sequential_update": sequential_update.V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION,
         "prediction_audit": V2_PREDICTION_AUDIT_SCHEMA_VERSION,
         "calibration_evaluation": calibration_evaluation.V2_CALIBRATION_EVALUATION_SCHEMA_VERSION,
+        "evaluation_governance": evaluation_governance.W3_EVALUATION_GOVERNANCE_SCHEMA_VERSION,
+        "forward_cycle": forward_cycle.W3_FORWARD_CYCLE_SCHEMA_VERSION,
+        "tick_detail_source": tick_detail_source.W3_TICK_DETAIL_SOURCE_SCHEMA_VERSION,
     }

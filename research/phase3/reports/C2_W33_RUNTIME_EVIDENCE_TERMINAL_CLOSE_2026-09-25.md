@@ -1,0 +1,147 @@
+# C2 W3.3 Runtime Evidence / Terminal-Close Correctness — 2026-09-25
+
+## 結論
+
+C2 離線 correctness gate **PASS**。Implementation commit: `92e178e4ea6cad632d071747efe1c273bcc79efc`; source build_id: `b6cfc2ceae89d221`.
+
+這個 PASS 只表示：raw `GetStkTickDetail` snapshot、SPARK request/callback trace、typed runtime verification evidence、contract-specific DAILY terminal-close materializer、Feature Store derived-Daily gate 與 W3.2 model-input boundary在離線反例下能 fail closed。它**不是** OSE timestamp basis 已實機驗證、DATA READY、actual forward evidence、CALIBRATED、PREDICTIVE EVIDENCE 或 TRADING EDGE。
+
+本棒沒有 broker login/logout/restart/subscription/order/account/position/balance 操作；現場 recorder owner 未被打斷。Actual runtime timestamp verification = **NONE_YET**；ACTUAL_FORWARD_EVIDENCE = **NONE_YET**。
+
+## 已修正的 correctness 缺口
+
+1. Raw `TickDetailBatch` 永遠保持 `UNVERIFIED_OSE_TIMESTAMP_BASIS`；caller 不再能把 raw batch 自行升級為 verified。
+2. Raw snapshot canonical identity 排除 verification state；驗證狀態改變不再造成 snapshot identity 自相矛盾。
+3. SPARK runtime 保留 actual request time、bounded request id、market/code/count/acceptance 與 callback receive time/returned market/code；account 不進 trace。
+4. 相同 market/code 有多個 outstanding requests 時 callback 不猜 request id；保持 uncorrelated，不能產生有效 evidence。
+5. 新 `TickDetailRuntimeVerificationEvidence` 綁定 runtime request id、request/callback times、requested/returned market/code、raw snapshot id、timestamp-basis method/crosscheck，並用 deterministic evidence id 做完整性檢查。該 hash 是 integrity id，不是 broker signature。
+6. Materializer 不再信任 status 字串；必須取得與 raw batch canonical snapshot 完全匹配的 typed evidence。
+7. controlled window 以**實際 request time**驗證 15:45 <= JST < 17:00；callback 也必須在 controlled window 內。15:44:59 request / 15:45:01 callback 會 BLOCK。
+8. source trade timestamp 與 session close boundary 分離：provider timestamp 保留最後有效成交時間，DAILY feature event timestamp 使用已驗證 session close boundary。
+9. Feature Store 新增明確 `DERIVED_DAILY` gate；TICK 不能藉此默認成 DAILY，future contract 必須 CONTRACT / roll NONE / exact contract identity / PIT-safe / session-close timestamp matching。
+10. derived DAILY lineage 同時包含 raw source snapshot id 與 runtime verification evidence id。
+
+## 反例
+
+已覆蓋：
+- raw batch 自行宣告 runtime verified → constructor reject；
+- 缺 runtime evidence → BLOCK；
+- evidence source snapshot mismatch → BLOCK；
+- noncanonical raw snapshot id → BLOCK；
+- requested/callback market/code mismatch → BLOCK；
+- evidence id tamper → BLOCK；
+- request 在 15:45 前、callback 在 15:45 後 → BLOCK；
+- callback >= 17:00 → BLOCK；
+- uncorrelated request/callback → evidence builder reject；
+- duplicate outstanding identical tick-detail requests → callback 不猜 correlation；
+- after-close tick / wrong contract month / zero-volume terminal row / conflicting close → fail closed；
+- valid path → DAILY terminal_close 可進既有 Feature Store/model-input contract，trade time 與 close boundary 分開。
+
+## 驗證
+
+- C2/W3.3 focused: `35 passed`.
+- Related W2/W3/C1 regression: `134 passed`.
+- 首輪完整 offline profile：`1831 passed, 24 deselected, 3 failed`；三個 failure 全為 stale build-id snapshot，實際 source fingerprint 已從 C1 `c64b...` 變為 C2 `b6c...`。只更新三個既有 freeze assertions，沒有刪除或放寬測試。
+- 最終 offline profile（明確排除現場 recorder 已持有的 `test_single_instance_lock_releases_after_error`）：`1834 passed, 24 deselected, 132 warnings in 140.87s`，exit 0。
+- changed-file secret scan: 0 hits。
+- `git diff --check`: PASS。
+
+## 尚未完成
+
+- OSE `StickDetail.TimeStamp` basis 尚未做 controlled live cross-check。
+- 尚無真實 runtime evidence artifact。
+- 尚無真實 contract DAILY terminal-close row 可宣稱 DATA READY。
+- W3.2 actual forward prediction/outcome sample 仍為 NONE_YET。
+- calibration fitting 未開始。
+- C2 controlled-measurement runtime adoption / recorder restart 仍需明確 maintenance-window 授權；W1/W2 per-field recorder adoption 已另行觀測成立。
+
+## 發布與工作樹邊界
+
+Implementation commit 只包含 C2 code/tests。開工前已 staged 的：
+- `docs/architecture/v2-tick-detail-source-contract.md`
+- `research/phase3/reports/W33_TICK_DETAIL_SOURCE_2026-09-25.md`
+
+在 `92e178e` implementation checkpoint 時仍屬 pre-existing staged W3.3 work，沒有被偷偷帶入 implementation commit；後續 controlled-path handoff 已逐段重新核對並將它們更新到 C2.2 現況。
+
+下一個 bounded package 是 **C2 runtime measurement**：只在使用者明確允許安全維護窗口後，透過既有單一 owner 路徑收集 matched request/callback + timestamp-basis cross-check evidence，再由本次 materializer 產生第一筆 eligible DAILY terminal close。沒有授權就保持 offline，不 restart/login。
+
+
+## 後續 C2 controlled-measurement path（同日追加）
+
+後續 initial control-path commit `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf` 把「未來如何在不建立第二個
+broker owner 的前提下取得真實證據」做成正式 control path；correlation-hardening commit = `9496eb9afa65e647b5fceca86610247ff24e258e`；review corrections = `30d32754ff284a6b32370b236ed1fc40283304e9`、`0203e9becf0f0894c3d9f33cfdc2aece448db921`、latest source `873e6bd9697efe1bc2c67d1767c708b23af2df10`；current source/config build_id = `d0f179c3460497e7`。
+`tick_detail_measurements.enabled` 預設仍為 `false`，因此發布程式本身不會
+自動觸發 broker query。
+
+新增控制包括：exact OSE/JNU contract、actual request/callback 15:45–17:00 JST window、
+outstanding-request ambiguity block、同 process 同 contract 禁止二次 attempt、evidence path containment、
+五秒 callback cap、startup-frozen `runtime_build_id` 與 disk fingerprint mismatch fail-closed、
+raw/evidence 持久化與重載驗證。
+timestamp-basis cross-check 也明確拒絕 UTC-like 與 Taipei-like raw clock 反例；review hardening 之後 evidence validation 會重新計算 cross-check，不再信 caller-supplied verified flags。另修正 optional Feature Store provenance query 遇 DuckDB/IO failure 時 fail closed，以及 legacy receipt-only packet freshness 不再標 FRESH。
+
+驗證：review-round focused `74 passed, 1 deselected`；related regression `199 passed, 2 deselected`；final offline profile `1854 passed, 24 deselected, 132 warnings in 124.53s`，exit 0；targeted changed-file secret scan 0；diff check PASS。
+
+現場 recorder 雖已有 W1/W2 `PER_FIELD_ONLY` provenance，但其啟動時間早於目前 C2 measurement/review commits through `873e6bd`，所以
+**C2_CONTROL_PATH_RUNTIME_ADOPTION_PENDING**。本棒沒有 restart/login/logout，也沒有 queue
+`request_yuanta_tick_detail_measurement.ps1`。真實 timestamp-basis evidence 仍為 `NONE_YET`。
+
+## 第一次已授權 maintenance attempt（2026-09-25）
+
+- Maintenance-control commit: `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`；request-script repair: `1452a45cf0c4de631d213eaa8648c3eae3b90211`。
+- 15:56 JST 時 calendar 判定 2026-09-25 為有效 OSE derivatives session；FunctionList resolver 以 2026-09-25 as-of 唯一解析 active/nearest OSE micro quote contract = `JNU2612`（market 207, verified=true）。舊 recorder 配置同時訂閱兩個月份，所以 `JNU2703` 的舊 callback 不代表它是主合約。
+- Maintenance 開始前舊 owner PID `6432/14952` 已不存在。最後 stale status heartbeat = `2026-09-25T06:46:17.888693Z`，status=`DEGRADED`，`pending_records=772`，`dropped_records=0`；因此可能有 buffered-data gap，不能宣稱零損失。
+- Control/evidence 目錄沒有當日 tick-detail measurement request/result/raw/evidence，故尚未消耗唯一 measurement。
+- 只做一次 current-build runtime-only owner start。launcher 顯示 `YUANTA_LIVE_STARTING pid=9060`，之後 PID/recorder child 均消失，沒有 fresh `status.json`，`recorder.out.log` / `recorder.err.log` 都是 0 bytes。依預先承諾的 fail-closed 規則，本次**沒有 retry broker login，也沒有送 GetStkTickDetail**。
+- 後續只做 non-login diagnostics：build fingerprint、OrderApiExposureGuard、WinCred credential/password existence、FunctionList/default 42 subscriptions、JNU 2612/2703 + PM variants、SparkRuntime constructor、Start-Process + CLI argument mechanics 全部 PASS。這能排除多個 pre-login 問題，但舊 code 沒有 startup stage telemetry，所以不能誠實宣稱失敗發生在 instantiate/open/connect/login 的哪一個精確步驟。
+- 因此狀態 = **FAIL_CLOSED_STARTUP_UNOBSERVED / RECORDER_NOT_RUNNING / RUNTIME_TIMESTAMP_VERIFIED=NONE_YET / ELIGIBLE_DAILY_CLOSE=NONE_YET / ACTUAL_FORWARD_EVIDENCE=NONE_YET**。
+
+為避免下一次再發生「背景 process 被建立就誤報成功」，source commit `b9cfcb0e302e1520027d2c69adf363d15baf00c4`（build_id `ba7c0e1b9ca9d62c`）新增 startup stage telemetry 與 start-script fresh-status gate。可觀測 stage 包含 `PRE_BROKER_READY / INSTANTIATE / OPEN_PROD / WAIT_CONNECTED / LOGIN_REQUEST / WAIT_LOGIN / SUBSCRIBE / RUNNING`；失敗只落地安全的 error type、login msg code、build/gate/status，不保存 credential。Start script 只有看到 fresh RUNNING/DEGRADED、build matching，且 maintenance gate 符合要求時才回報成功。
+
+該修補驗證：focused `42 passed, 2 deselected`；broader regression `151 passed, 2 deselected`；final offline profile `1858 passed, 24 deselected, 132 warnings in 125.40s`，exit 0；targeted secret scan 0；`git diff --check` PASS。
+
+## 第二次 maintenance attempt：login 成功、Runner child lifetime fail-closed
+
+- 新的使用者 continuation 在 15:31 Asia/Taipei / 16:31 JST 再次確認：2026-09-25 是有效 OSE derivatives session；HEAD/remote=`d8cf0ab846ca22611edfd1235579b1edba52f002`、worktree clean、CI #160 SUCCESS、tracked `tick_detail_measurements.enabled=false`、recorder process count=0、FunctionList active nearest contract=`JNU2612`。
+- 本次只做一個新的 owner start。start script 回報 `YUANTA_LIVE_STARTING pid=39864`，接著 fresh status 回報真正 recorder PID `33448`、`login_msg_code=0001`、`startup_stage=RUNNING`、runtime build=`ba7c0e1b9ca9d62c`、runtime measurement gate=true、subscriptions=42、pending=0、dropped=0、persistence_error=null。
+- 約 12 秒後 PID `33448` 已不存在；status heartbeat 停在 `2026-09-25T07:32:13.645637Z`，`latest.json` quote count=0，沒有 fresh W1/W2 provenance。status 沒有轉成 `START_FAILED` 或 clean `STOPPED`，recorder stdout/stderr 仍為 0 bytes，近期 CrashDumps/WER 沒有對應 python dump。
+- 這組證據顯示 broker login 已成功，失敗發生在 one-shot WebCodex launcher 返回之後；行為與 Runner 回收 child process 相符，但沒有把它宣稱成已證實的 Windows crash/root cause。
+- 依量測前 gate，fresh heartbeat + W1/W2 provenance 不成立，所以**沒有 queue GetStkTickDetail**；同一 execution 也沒有第二次 login retry。
+- WebCodex 下一次必須改用 recorder `-Foreground` 作為 long-running Runner Job，保持原 execution 存活，再從其他呼叫送 control inbox measurement/shutdown。若工具沒有 detached-process 能力，不得用 shell trick 繞過 Runner lifecycle。
+
+## 第三次 maintenance attempt：real raw capture + C2.3
+
+- Foreground Runner Job 路徑成功保持 recorder 存活；fresh status=RUNNING、SPARK login `0001`、runtime measurement gate=true、fresh W1/W2 `PER_FIELD_ONLY` callbacks。FunctionList 再次解析 exact active nearest contract=`JNU2612`。
+- 只 queue 一筆 operator request `tick-detail-01892509e2e742619eef0c0d07349d39`（runtime request=`tick_detail_1`, LastCount=20）。C2.2 result=`TICK_DETAIL_TIMESTAMP_BASIS_BLOCKED / RAW_TRADE_AFTER_DAY_CLOSE`；canonical raw snapshot=`w33_tick_cbce3cba39291cd1f14e`。
+- Raw artifact typed reload PASS，20 rows 的 raw clock 範圍為 15:39:47–15:45:01；control/verification metadata 不公開價格。JPX 官方交易時間為 15:40 結束 continuous trading、15:45 closing auction、17:00 night open；Yuanta 官方只將 `StickDetail.TimeStamp` 定義為 DateTime/時間，未說明 OSE auction-second/timezone convention。
+- C2.3 將 runtime evidence schema 升為 `W3.3-C2.3`、timestamp method 升為 `OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`，只接受**一秒** closing-auction print grace。`15:45:02` 反例仍 fail closed；session event timestamp 固定 15:45:00，provider timestamp 保留真實 +1 秒。
+- C2.3 build_id=`afd52f88a351541a`。focused=`59 passed`；broader=`154 passed, 2 deselected`；full offline=`1861 passed, 24 deselected, 132 warnings in 133.26s`，exit 0。
+- C2.3 source commit=`3e05af13762d430f875a35f2b288cf33188ce733`；GitHub source CI #162=SUCCESS。第一版 C2.3 handoff publication commit=`3f4dda90485cf1a86bc16114e2edec40e837eff8`。
+- C2.2 blocked result沒有持久化完整 typed callback evidence，因此不事後補造 C2.3 evidence。**RUNTIME_TIMESTAMP_VERIFIED / eligible DAILY terminal close / ACTUAL_FORWARD_EVIDENCE 仍為 NONE_YET**。
+- Foreground recorder 已透過 control-inbox graceful shutdown，Runner Job exit 0；目前 recorder NOT RUNNING。
+
+## C2.3 post-publication positive-chain regression
+
+- test-only commit `0d2693f` 補上一個完整 C2.3 正向案例，不改產品 source 或 build fingerprint。
+- 模擬 same-owner measurement 回傳有效 `15:45:01` closing-auction print；`_tick_detail_measurement` 必須成功落地 canonical raw artifact + typed evidence artifact。
+- `load_runtime_measurement` 必須重新驗 schema=`W3.3-C2.3`、timestamp method=`OSE_SESSION_LOCAL_CLOCK_CROSSCHECK_V2`、cross-check=true 與 canonical bindings。
+- materializer 必須成功建立 exact-contract DAILY terminal close；provider source trade timestamp 保留 `15:45:01`，session close/event timestamp 固定 `15:45:00`。
+- 驗證：measurement/materializer focused `38 passed`；broader W2/W3/C1/quote `155 passed, 2 deselected`；full offline `1862 passed, 24 deselected, 132 warnings in 135.52s`，exit 0；`git diff --check` PASS；targeted secret scan 0。
+- 這只證明離線正向鏈已被 regression 鎖住；沒有產生新的真實 runtime evidence，也不改變 `RUNTIME_TIMESTAMP_VERIFIED=NONE_YET`。
+
+## C2.3 → W3.2 cross-module bridge regression
+
+- test-only commit `3ce826817834b20d26d671cd24a0aec8c1821e4a` 不改產品 source/build，只把已存在的 C2.3 materializer、canonical Feature Store、W3.2 forward-cycle 與 W3.1 evaluation 串成一條可回歸的工程鏈。
+- source-day：verified C2.3 `15:45:01` closing-auction print materialize 成 exact-contract DAILY close；W3.2 adapter 必須讀到同一 contract/month、DAILY、PIT-safe、raw snapshot id + typed evidence id，並可 precommit。
+- leakage 反例：在 callback/`available_at` 之前查詢同一 DAILY row 必須 `NO_ELIGIBLE_ROWS`，不能把收盤後才收到的資料回填到較早 forecast origin。
+- target-day：第二個 C2.3 DAILY close 必須用相同 `JNU2612`/`202612` lineage 完成 settlement，再由 W3.1 evaluation 讀到恰好一個 settled forward sample。
+- synthetic evaluation 明確維持 `CALIBRATED=false`、`PREDICTIVE_EVIDENCE=NOT_ESTABLISHED`、`TRADING_EDGE=NOT_ESTABLISHED`；不能把測試 fixture 當真實市場 evidence。
+- 驗證：focused materializer/W3.2 `45 passed`；broader W2/W3/C1/quote `158 passed, 2 deselected`；full offline `1865 passed, 24 deselected, 132 warnings in 144.28s`，exit 0；`git diff --check` PASS；targeted secret scan 0。
+- 產品 source/config build 未變，仍為 `afd52f88a351541a`。真正下一 gate 仍是一筆有效 OSE 15:45–17:00 JST 視窗內的 C2.3 typed runtime remeasurement。
+
+## 17:30 Asia/Taipei read-only recorder observation
+
+- 這次只讀 process/status，沒有 broker login/logout/restart/subscription/measurement/order/account 操作。
+- process tree 顯示 venv Python parent PID `25480` → actual interpreter child PID `26476`；`status.json` 的 owner PID 是 `26476`，因此兩個 matching Python processes 屬同一啟動鏈，不應解讀為兩個 broker owners。
+- current status=`RUNNING`、login_msg_code=`0001`、subscriptions=42、quote heartbeat fresh、health_reasons=[]、dropped_records=0、persistence_error=null、runtime_build_id=`afd52f88a351541a`。
+- `tick_detail_measurements_runtime_enabled=false`，tracked config 也維持 `tick_detail_measurements.enabled=false`；目前是 safe-default quote recorder，不是 maintenance measurement owner。
+- 後續應保留這個 single owner；只有在下一個有效 OSE maintenance window 才做安全 handover，不得直接再開第二 owner。

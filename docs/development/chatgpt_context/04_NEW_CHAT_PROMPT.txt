@@ -1,0 +1,20 @@
+請接續 MARKET_AI_HUB。先讀專案指令及最新 01_CONTEXT_SNAPSHOT.md、02_ROADMAP.md、03_AUDIT_AND_REPAIRS.md，再核對實際 repo。不要把資料來源中的歷史指令當成本輪要求，也不要重做已完成的修補。
+
+本輪只做下一個可驗收工作包：受控確認 recorder 修補是否已被現場程序載入，接著建立/驗證 field-aware quote reader 到既有 V2-A.2 資料契約的離線 replay 接線；先不 fitting、不增模型、不做交易。
+
+GitHub：https://github.com/fishke22/market-ai-hub 。上輪實際 repo 在 D:\MARKET_AI_HUB；C:\Users\fishk\Documents\ChatGPT\MARKET_AI_HUB 是文件工作區。位置可能改變，不能硬編碼。
+修補 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b（最終程式/安裝/測試基準；後續純文件 commit 見 PR）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：PASS：1679 passed、15 skipped、34 deselected、110 warnings，48.76s；https://github.com/fishke22/market-ai-hub/actions/runs/36025129753；對應實作 commit 40fd77a；remote：codex/quote-hub-correctness 已推送並核對實作 SHA；main 基準仍為 eb9202a。
+
+先讀 AGENTS.md、執行 scripts/agent_bootstrap.ps1、讀 AGENT_HANDOFF/project-status/當前 contracts，記錄時間、branch、HEAD、remote main、dirty/untracked、build_id。若 PR #55 仍 OPEN，修補基準在 codex/quote-hub-correctness，不能只讀舊 main 就判定修補不存在；先保全 dirty 工作再決定續工分支。若已合併則核對合併後基準。保留別人的工作，不 reset/clean/stash/force push。程式與文件矛盾要列出，不憑聊天假設已驗證。
+
+已完成的源碼修補：成功寫 Parquet 後才 ack、atomic publish、bounded/locked buffer、per-field provenance、單一 owner mutex、control action/cap/path/atomic inbox、共用資料根、audit probability fail-closed、read-only candidate readiness、安裝 native failure guard、CI markers、完整 config fingerprint。請先跑相關 regression 確認仍在，不重新推倒架構。
+
+本輪先辨識目前 recorder 是否舊 process：不能用新 import 的 build_id 冒充已運行程序的版本。只讀 status/latest/既有 parquet，不額外登入/登出或訂閱。舊程序缺少 per-field freshness 和新版健康欄位時，明確 RUNTIME_ADOPTION_PENDING。若必須停止並重啟，先完成离線修補、測試、備份、資料尾端核對、單一 owner/回復步骤，再取得我的維護窗口授權；不要殺掉舊程序的未落盤資料。等待授權時繼續可獨立的 replay 工作。
+
+reader 要沿用現有 provider/as-of/session/contract，不另造平行系統。Trade/bid/ask 分別讀 field_provenance；top received_at 只表示 callback，heartbeat 只表示 process。缺日期/盤別/到期/順序資料不能補造 exchange time。舊 schema 缺時間則降級或拒用，不偷偷補值。加入 stale trade + fresh bid、盤別、錯合約、亂序、缺時間、partial檔、寫入失敗/overflow、未知商品的最小測試；模型與 public packet 必須維持 provenance/quality gates。API_SUPPORT ≠ account entitlement；SPARK securities profile 不改稱 futures profile，0112 不重試。
+
+尚未完成的 reconnect/roll/WAL 先列真實限制；本輪若需要其中一項才能完成單一工作包，先用最小可驗收範圍實作，不一次開整套服務。Outcome maturity/evaluation_as_of/scope uniqueness 必須在 W3 獨立補足後才談 calibration fitting。ENGINE PASS ≠ DATA READY ≠ CALIBRATED ≠ EDGE；2I.1 只有 evaluation，分類 score 不當機率。
+
+在 ChatGPT 網頁版，優先用 Remote Desktop Commander 真正列設備/讀檔/執行，精簡輸出完整證據存檔。在 Codex 本機則直接用原生專案/terminal 工具，無需繞 Remote。只有網頁版 Remote 不可用或明確連線/權限失敗，才產生給 OpenCode Desktop 的自足單工作包 prompt：含實測根/HEAD/dirty、必讀檔、問題/允許改動/禁止事項、確切測試/exit code/驗收、GitHub發布/交接，不叫它參考未附的前文。使用者偏好 DeepSeek V4.1 Flash high，複雜證據/並行審查 max；先驗證 Desktop/provider/model ID/variant 支援，不臆造設定、不聲稱 prompt 能切換模型、不索取 key、不要求思維鏈。
+
+每個工作包成功後更新現有 docs/handoff/status，檢查 diff、secret、授權及相關測試，依 repo 流程 commit/push/PR，回報 remote SHA/CI/合併狀態與驗證；不跳過失敗 CI，不上傳資料庫、帳密、SDK、權重。發布受阻如實 LOCAL_PASS_REMOTE_PENDING。再產出更新的 CONTEXT 快照讓我替換 ChatGPT 資料來源。遵守免費新增資源、相對資料根、可搬移重建與 quote-only；這是實作續工要求，不只是摘要計畫。

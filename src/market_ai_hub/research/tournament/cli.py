@@ -50,10 +50,13 @@ def build_adapters():
 
 
 def _best_baseline_and_model(summaries: dict) -> dict:
-    base = [s for s in summaries.values() if s["model"] in BASELINE_NAMES and s.get("mae") is not None]
-    models = [s for s in summaries.values() if s["model"] in MODEL_NAMES and s.get("mae") is not None]
+    base = [s for s in summaries.values() if s["model"] in BASELINE_NAMES and s.get("mae") is not None
+            and s.get("coverage_rate") == 1.0]
+    models = [s for s in summaries.values() if s["model"] in MODEL_NAMES and s.get("mae") is not None
+              and s.get("coverage_rate") == 1.0]
     out = {"best_baseline": None, "best_baseline_mae": None, "best_model": None,
-           "best_model_mae": None, "model_vs_best_baseline_delta": None}
+           "best_model_mae": None, "model_vs_best_baseline_delta": None,
+           "comparison_basis": "FULL_COVERAGE_ONLY"}
     if base:
         b = min(base, key=lambda s: s["mae"])
         out["best_baseline"] = b["model"]
@@ -62,7 +65,8 @@ def _best_baseline_and_model(summaries: dict) -> dict:
         m = min(models, key=lambda s: s["mae"])
         out["best_model"] = m["model"]
         out["best_model_mae"] = m["mae"]
-    if out["best_baseline_mae"] and out["best_model_mae"]:
+    if (out["best_baseline_mae"] is not None and out["best_model_mae"] is not None
+            and out["best_baseline_mae"] != 0):
         out["model_vs_best_baseline_delta"] = round(
             (out["best_model_mae"] - out["best_baseline_mae"]) / out["best_baseline_mae"], 4
         )
@@ -81,15 +85,16 @@ def _regime_tag(df) -> str:
 def _print_leaderboard(result: dict) -> None:
     print(f"\n=== {result['target']} / {result['horizon']} (n_forecast_origins={result['n_origins']}) ===")
     rows = sorted(result["summaries"].values(), key=lambda s: (s.get("mae") is None, s.get("mae") or 1e9))
-    print(f"{'model':<20} {'task':<10} {'MAE':>10} {'RMSE':>10} {'MASE':>8} {'cov':>6} {'dir_acc':>8} {'fail%':>6}")
+    print(f"{'model':<20} {'task':<10} {'MAE':>10} {'RMSE':>10} {'MASE':>8} {'intcov':>6} {'valid':>9} {'fullcov':>7} {'fail%':>6}")
     for s in rows:
         mae = f"{s['mae']:.4f}" if s.get("mae") is not None else "-"
         rmse = f"{s['rmse']:.4f}" if s.get("rmse") is not None else "-"
         mase = f"{s['mase']:.3f}" if s.get("mase") is not None else "-"
         cov = f"{s['coverage']:.3f}" if s.get("coverage") is not None else "-"
-        da = f"{s['direction_accuracy']:.3f}" if s.get("direction_accuracy") is not None else "-"
+        valid = f"{s.get('effective_sample_size', 0)}/{s.get('sample_size', 0)}"
+        fullcov = f"{s['coverage_rate']:.3f}" if s.get("coverage_rate") is not None else "-"
         fr = f"{s['failure_rate']:.2f}" if s.get("failure_rate") is not None else "-"
-        print(f"{s['model']:<20} {s['task']:<10} {mae:>10} {rmse:>10} {mase:>8} {cov:>6} {da:>8} {fr:>6}")
+        print(f"{s['model']:<20} {s['task']:<10} {mae:>10} {rmse:>10} {mase:>8} {cov:>6} {valid:>9} {fullcov:>7} {fr:>6}")
     bm = _best_baseline_and_model(result["summaries"])
     print(f"  BEST_BASELINE={bm['best_baseline']} (MAE={bm['best_baseline_mae']}) | "
           f"BEST_MODEL={bm['best_model']} (MAE={bm['best_model_mae']}) | "
@@ -127,6 +132,10 @@ def cmd_run(args) -> int:
             for name, s in r["summaries"].items():
                 store.save(exam.exam_hash(), target, horizon, regime, window,
                            REVISIONS.get(name, ""), s)
+            revisions = {name: REVISIONS.get(name, "") for name in r["summaries"]}
+            for comparison in r.get("pairwise_comparisons", []):
+                store.save_pairwise(exam.exam_hash(), target, horizon, regime, window,
+                                    revisions, comparison)
             _print_leaderboard(r)
     return 0
 
@@ -156,13 +165,23 @@ def cmd_inspect(args) -> int:
 
 def cmd_compare(args) -> int:
     store = PerformanceStore()
-    a = {r["horizon"]: r for r in store.inspect(args.model_a)}
-    b = {r["horizon"]: r for r in store.inspect(args.model_b)}
-    for h in sorted(set(a) | set(b)):
-        ra, rb = a.get(h), b.get(h)
-        ma = f"{ra['mae']:.4f}" if ra and ra.get("mae") is not None else "-"
-        mb = f"{rb['mae']:.4f}" if rb and rb.get("mae") is not None else "-"
-        print(f"{h:<5} {args.model_a}={ma:<10} {args.model_b}={mb:<10}")
+    rows = store.pairwise(model_a=args.model_a, model_b=args.model_b)
+    if not rows:
+        print(f"no current paired results for {args.model_a} vs {args.model_b}")
+        return 1
+    for row in rows:
+        direct = row["model_a"] == args.model_a
+        metric_a = row["model_a_metric_common"] if direct else row["model_b_metric_common"]
+        metric_b = row["model_b_metric_common"] if direct else row["model_a_metric_common"]
+        coverage_a = row["model_a_coverage_rate"] if direct else row["model_b_coverage_rate"]
+        coverage_b = row["model_b_coverage_rate"] if direct else row["model_a_coverage_rate"]
+        metric = row.get("metric") or "NOT_EVALUABLE"
+        print(
+            f"{row['target']}/{row['horizon']} metric={metric} common_n={row['common_origin_count']} "
+            f"common_coverage={row['common_origin_coverage_rate']} "
+            f"{args.model_a}={metric_a} full_coverage={coverage_a} "
+            f"{args.model_b}={metric_b} full_coverage={coverage_b}"
+        )
     return 0
 
 

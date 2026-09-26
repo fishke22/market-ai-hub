@@ -102,6 +102,55 @@ def test_baseline_presence():
         assert n in names, n
 
 
+def test_seasonal_naive_respects_forecast_horizon():
+    from market_ai_hub.research.tournament.baselines import SeasonalNaive
+    closes = pd.Series([10., 20., 30., 40., 50.])
+    assert [SeasonalNaive()._point(closes, h) for h in (1, 2, 5, 6, 10)] == [10, 20, 50, 10, 50]
+
+
+def test_interval_metrics_preserve_origin_alignment():
+    from market_ai_hub.research.tournament.engine import ModelRun
+    run = ModelRun(model="partial", task="price", points=[10., None, 30.],
+                   actuals=[10., 20., 30.], origin_prices=[9., 19., 29.],
+                   p10=[9., 19., None], p90=[11., None, 31.])
+    result = TournamentEngine()._summarize(run, 1)
+    assert result["coverage"] == 1.0
+    assert result["interval_sample_size"] == 1
+    assert result["interval_width"] == pytest.approx(0.2)
+
+
+def test_invalid_quantile_flag_is_not_evaluated():
+    from market_ai_hub.research.tournament.adapter import ModelAdapter
+    class InvalidQuantiles(ModelAdapter):
+        def forecast(self, df, steps):
+            return ForecastResult(point=100., p10=90., p90=110., quantile_valid=False)
+    result = TournamentEngine().run(ExamSpec("X", "1d", "v1", "v1", 60, 2),
+                                    _df(), [InvalidQuantiles()])
+    assert result["summaries"]["adapter"]["coverage"] is None
+
+
+@pytest.mark.parametrize("adapter_type", ["XGBoostAdapter", "LightGBMAdapter"])
+def test_classifier_predicts_origin_not_training_row(monkeypatch, adapter_type):
+    from market_ai_hub.features import features
+    from market_ai_hub.models import baseline_ml
+    from market_ai_hub.research.tournament import v1_adapters
+    frame = pd.DataFrame({"close": [100., 110., 90., 120., 80., 130.], "x": range(6)})
+    monkeypatch.setattr(features, "build_features", lambda df: df)
+    monkeypatch.setattr(baseline_ml, "FEATURE_INPUT", ["x"])
+    seen = {}
+    class Classifier:
+        def __init__(self, key):
+            pass
+        def fit(self, x, y):
+            seen["train"] = x.index.tolist()
+        def predict(self, x):
+            seen["predict"] = x.index.tolist()
+            return [1]
+    monkeypatch.setattr(baseline_ml, "BaselineClassifier", Classifier)
+    getattr(v1_adapters, adapter_type)().forecast(frame, 2)
+    assert seen == {"train": [0, 1, 2, 3], "predict": [5]}
+
+
 # ── Tournament engine（快速 adapter，不需載入深模型）──
 
 def _df(n=200):
@@ -139,7 +188,9 @@ def test_performance_store_roundtrip(tmp_path):
     store = PerformanceStore(root=tmp_path)
     store.save("abc123", "X", "1d", "normal", ("2026-01-01", "2026-06-01"), "rev1",
                {"model": "m1", "task": "price", "sample_size": 10, "effective_sample_size": 10,
-                "failure_rate": 0.0, "mae": 1.0, "rmse": 1.1, "mase": 0.9, "pinball_loss": 0.5,
+                "failure_count": 0, "abstention_count": 0, "nonfinite_count": 0,
+                "invalid_target_count": 0, "failure_rate": 0.0, "coverage_rate": 1.0,
+                "mae": 1.0, "rmse": 1.1, "mase": 0.9, "pinball_loss": 0.5,
                 "coverage": 0.8, "interval_width": 0.1, "calibration_error": 0.0,
                 "direction_accuracy": 0.6, "balanced_accuracy": 0.5, "macro_f1": 0.5, "mcc": 0.1,
                 "runtime_seconds": 1.0, "peak_vram_mb": 0.0})
@@ -174,4 +225,4 @@ def test_gpu_cleanup():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "fd90af1f1f11b5be"
+    assert build_fingerprint()["build_id"] == "1037d45ff8e65884"

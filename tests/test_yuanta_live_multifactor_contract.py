@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import yaml
+import pytest
 
 from market_ai_hub.integrations.yuanta.capabilities import PROVIDER_STATUS
 from market_ai_hub.integrations.yuanta.spark_futures_quote_probe import _matches_requested_quote
@@ -58,13 +59,18 @@ def test_persistent_recorder_contract_is_single_login_and_parquet_first():
     assert rec["normalized_parquet"] is True
     assert rec["raw_jsonl"] is False
     assert cfg["dynamic_requests"]["enabled"] is True
+    assert cfg["tick_detail_measurements"]["enabled"] is False
+    assert cfg["tick_detail_measurements"]["max_last_count"] == 20
 
 
 def test_agent_entry_scripts_exist():
     for name in (
         "start_yuanta_live_recorder.ps1",
+        "stop_yuanta_live_recorder.ps1",
         "request_yuanta_quote.ps1",
+        "request_yuanta_tick_detail_measurement.ps1",
         "get_yuanta_live_status.ps1",
+        "check_yuanta_recorder_owner.ps1",
     ):
         assert (ROOT / "scripts" / name).exists()
 
@@ -76,6 +82,7 @@ def test_guide_documents_persistent_hub_and_no_relogin():
     assert "request_yuanta_quote.ps1" in (ROOT / "docs" / "development" / "AGENT_HANDOFF.md").read_text(encoding="utf-8")
 
 
+@pytest.mark.broker_diagnostic
 def test_default_recorder_subscriptions_use_actual_contract_codes_not_near_aliases():
     from market_ai_hub.integrations.yuanta.live_quote_recorder import (
         CONFIG_PATH, _load_config, resolve_default_subscriptions,
@@ -117,3 +124,72 @@ def test_yuanta_credential_bootstrap_is_interactive_and_no_cli_password():
     assert "--password" not in src and "--secret" not in src
     assert "write_credential" in src
     assert "CRED_TARGET_SECURITIES" in src and "CRED_TARGET_LEGACY_LOGIN_ID" in src
+
+
+def test_tick_detail_request_script_uses_single_regex_escape():
+    text = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
+    assert r"[ValidatePattern('^JNU\d{4}$')]" in text
+    assert r"[ValidatePattern('^JNU\\d{4}$')]" not in text
+    assert text.count("action = \"tick_detail_measurement\"") == 1
+    assert text.count("YUANTA_TICK_DETAIL_MEASUREMENT_QUEUED") == 1
+
+
+def test_maintenance_scripts_keep_measurement_runtime_only_and_shutdown_graceful():
+    start = (ROOT / "scripts" / "start_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    stop = (ROOT / "scripts" / "stop_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    assert "EnableTickDetailMeasurements" in start
+    assert "--enable-tick-detail-measurements" in start
+    assert "YUANTA_LIVE_RUNNING" in start
+    assert "START_FAILED" in start
+    assert "YUANTA_LIVE_START_TIMEOUT_NO_FRESH_STATUS" in start
+    assert 'action = "shutdown"' in stop
+    assert "Stop-Process" not in stop
+
+
+def test_owner_preflight_is_read_only_parent_child_aware_and_fail_closed():
+    text = (ROOT / "scripts" / "check_yuanta_recorder_owner.ps1").read_text(encoding="utf-8")
+    assert "status.pid" in text
+    assert "owner_invocation_pids" in text
+    assert "independent_matching_pids" in text
+    assert "SAFE_DEFAULT_OWNER_HEALTHY" in text
+    assert "BLOCKED_DUPLICATE_OWNER_RISK" in text
+    assert "BLOCKED_OWNER_UNVERIFIED" in text
+    assert "BLOCKED_RUNTIME_BUILD_STALE" in text
+    assert "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED" in text
+    assert "runtime_build_id" in text and "disk_build_id" in text
+    assert "runtime_measurement_gate" in text
+    assert "tracked_measurement_gate" in text
+    assert "broker_action_performed = $false" in text
+    for forbidden in ("Stop-Process", "Start-Process", "YuantaOrd", "logout(", ".login("):
+        assert forbidden not in text
+
+
+def test_start_stop_scripts_consume_owner_preflight_before_mutation():
+    start = (ROOT / "scripts" / "start_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    stop = (ROOT / "scripts" / "stop_yuanta_live_recorder.ps1").read_text(encoding="utf-8")
+    for text in (start, stop):
+        assert "check_yuanta_recorder_owner.ps1" in text
+        assert "BLOCKED_DUPLICATE_OWNER_RISK" in text
+        assert "BLOCKED_OWNER_UNVERIFIED" in text
+    assert start.index("$PreflightRaw") < start.index("$RecorderArgs")
+    assert "BLOCKED_RUNTIME_BUILD_STALE" in start
+    assert "BLOCKED_TRACKED_MEASUREMENT_GATE_ENABLED" in start
+    assert stop.index('classification -eq "NO_RUNNING_OWNER"') < stop.index('action = "shutdown"')
+    assert "YUANTA_LIVE_NOT_RUNNING" in stop
+
+
+def test_request_scripts_require_verified_running_owner_before_queue():
+    quote = (ROOT / "scripts" / "request_yuanta_quote.ps1").read_text(encoding="utf-8")
+    tick = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
+    for text in (quote, tick):
+        assert "check_yuanta_recorder_owner.ps1" in text
+        assert text.index("$PreflightRaw") < text.index("$Inbox")
+        assert text.index("$PreflightRaw") < text.index("New-Item -ItemType Directory")
+    assert "SAFE_DEFAULT_OWNER_HEALTHY" in quote
+    assert "MAINTENANCE_OWNER_RUNNING" in quote
+    assert "YUANTA_QUOTE_REQUEST_BLOCKED_" in quote
+    assert 'classification -ne "MAINTENANCE_OWNER_RUNNING"' in tick
+    assert "-not $Preflight.runtime_measurement_gate" in tick
+    assert "$Preflight.tracked_measurement_gate" in tick
+    assert "$Preflight.runtime_build_id -ne $Preflight.disk_build_id" in tick
+    assert "YUANTA_TICK_DETAIL_REQUEST_BLOCKED_" in tick

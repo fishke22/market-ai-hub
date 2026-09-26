@@ -158,3 +158,19 @@ actual settled probabilistic sample = NONE_YET
 
 NO calibration fitting · NO model training · NO threshold 調參 · NO probability 對外發布 ·
 NO 資料下載 · NO order / trading · NO position / account query · NO recorder。
+
+## 2026-09-24 readiness correction
+
+The readiness probe opens an existing DuckDB with `read_only=True`, without schema
+migration. Missing DB stays absent; unreadable/incompatible schema returns BLOCKED.
+Candidate counts alone return READY_FOR_EVALUATION with
+`readiness_scope=UNVALIDATED_CANDIDATE_COUNT_ONLY`, never EVALUATED.
+Only evaluate_manifest performs binding/scope/quality checks and computes metrics.
+The evaluation result enum and schema 2I.1 remain unchanged. No fitting was added.
+
+## 2026-09-25 W3.1 governance overlay
+
+Future calibration/fitting evidence must first pass
+`docs/architecture/v2-evaluation-governance-contract.md`: explicit `evaluation_as_of`, matured
+2H.3 label window, exact model/version/event/label/sample-origin scope and duplicate/supersession
+checks. This is an upstream eligibility gate; the 2I.1 formulas and schema remain unchanged.

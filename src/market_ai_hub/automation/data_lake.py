@@ -9,7 +9,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-DATA_ROOT_ENV = "MARKET_AI_HUB_DATA_ROOT"
+DATA_ROOT_ENV = "MARKET_AI_DATA_ROOT"
+LEGACY_DATA_ROOT_ENV = "MARKET_AI_HUB_DATA_ROOT"
 
 SUB_DIRS = ["raw", "normalized", "features", "predictions", "analysis_archive", "cache", "manifests"]
 
@@ -30,12 +31,18 @@ class DataManifest(BaseModel):
 
 
 def default_data_root() -> Path:
-    env = os.environ.get(DATA_ROOT_ENV)
-    if env:
-        return Path(env)
+    """Use the canonical runtime path resolver; legacy env is migration-only fallback."""
+    from market_ai_hub.config.runtime_paths import data_root
     from market_ai_hub.config.settings import project_root
 
-    return project_root() / "data"
+    canonical = os.environ.get(DATA_ROOT_ENV, "").strip()
+    if canonical:
+        return data_root()
+    legacy = os.environ.get(LEGACY_DATA_ROOT_ENV, "").strip()
+    if legacy:
+        p = Path(legacy).expanduser()
+        return p if p.is_absolute() else project_root() / p
+    return data_root()
 
 
 class DataLakeManager:

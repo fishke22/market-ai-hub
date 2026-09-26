@@ -36,9 +36,11 @@ def random_walk(series: pd.Series, steps: int = 1, seed: int = 42) -> float:
     rets = series.pct_change().dropna()
     if len(rets) == 0:
         return float(series.iloc[-1])
+    if steps < 1:
+        raise ValueError("steps must be >= 1")
     rng = np.random.default_rng(seed)
-    shock = float(rng.choice(rets.to_numpy()))  # 抽一個歷史報酬當殘差
-    return float(series.iloc[-1] * (1 + shock))
+    shocks = rng.choice(rets.to_numpy(), size=steps, replace=True)
+    return float(series.iloc[-1] * np.prod(1.0 + shocks))
 
 
 def drift(series: pd.Series, steps: int = 1) -> float:
@@ -65,20 +67,18 @@ PRICE_BASELINES = {
 def classification_baselines(y_true: np.ndarray, train_labels: np.ndarray | None = None) -> dict:
     """分類 baseline 的預測（與模型預測同長度），供準確率比較。
 
-    - majority_class：以 train 多數類（缺 train 則以 y_true 多數類）always-predict
+    - majority_class：只可由 train 多數類建立；缺 train labels 時為 None
     - always_flat：always predict 0（flat）
     """
     y_true = np.asarray(y_true)
+    majority_pred = None
     if train_labels is not None and len(train_labels):
         from collections import Counter
 
         majority = Counter(np.asarray(train_labels).tolist()).most_common(1)[0][0]
-    else:
-        from collections import Counter
-
-        majority = Counter(y_true.tolist()).most_common(1)[0][0]
+        majority_pred = np.full(len(y_true), majority, dtype=int)
     return {
-        "majority_class": np.full(len(y_true), majority, dtype=int),
+        "majority_class": majority_pred,
         "always_flat": np.zeros(len(y_true), dtype=int),
     }
 
@@ -130,15 +130,16 @@ def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray,
     mcc = float(matthews_corrcoef(y_true, y_pred))
     # baseline 門檻（不固定 50%）
     bases = classification_baselines(y_true, train_labels)
-    majority_acc = float((y_true == bases["majority_class"]).mean())
+    majority_pred = bases["majority_class"]
+    majority_acc = None if majority_pred is None else float((y_true == majority_pred).mean())
     uniform = 1 / len(np.unique(y_true)) if len(np.unique(y_true)) else 1 / 3
-    threshold = max(majority_acc, uniform)
+    threshold = max(majority_acc, uniform) if majority_acc is not None else uniform
     return {
         "accuracy": acc, "balanced_accuracy": bal, "macro_f1": macro_f1, "mcc": mcc,
         "majority_class_baseline_accuracy": majority_acc,
         "uniform_baseline_accuracy": uniform,
         "baseline_threshold": threshold,
-        "beats_majority_baseline": bal > threshold,
+        "beats_majority_baseline": None if majority_acc is None else bal > threshold,
     }
 
 

@@ -1,0 +1,23 @@
+請接續 MARKET_AI_HUB，執行金融模型可信度補強，不要重新搭建已完成的架構。請先完整讀取我上傳的 MODEL_CREDIBILITY_PLAN_2026-09-25.md 與 MODEL_CREDIBILITY_VALIDATION_2026-09-25.md；它們是有日期的上下文，不代表你已讀取舊對話或已永久記住。
+
+實際 repo 曾位於 D:\MARKET_AI_HUB，GitHub：https://github.com/fishke22/market-ai-hub 。先核對目前路徑、branch、HEAD、dirty/staged files，讀 AGENTS.md，執行 scripts/agent_bootstrap.ps1，讀 docs/development/AGENT_HANDOFF.md、project-status.md 與目前階段 contract。保留其他工作者的修改。路徑可搬移，runtime 路徑沿用 project/data-root resolver，不硬編碼磁碟；搬機重建 venv、SDK／WinCred 另驗證。
+
+工具：在 Codex 直接用 repo/終端；若你是 ChatGPT 網頁專案，有可用 Remote Desktop Commander 才以其讀檔、修改、跑測試，批次讀相關片段以省 token。只有確實連線不可用時，才產生一份自足 prompt 讓我貼 OpenCode Desktop。目標是我選用的 DeepSeek V4.1 Flash／high 或 max，但需核實安裝版本、provider/model ID 與實際可用 variant，不能臆造配置鍵；先查 https://opencode.ai/docs/models/ 及供應商第一方文件。不要宣稱已替我切換模型。
+
+目前上下文：W2、W3.1 governance、W3.2 precommitted forward-cycle 已有 engine；W3.3 tick-detail source 有程式及離線合約，但 OSE 時區／收盤資料需 runtime 證據。不要重做。CALIBRATION FITTING 未開始、實際 forward evidence 尚無，是文件的截至狀態；啟動時重新核實。ENGINE PASS != DATA READY != CALIBRATED != PREDICTIVE EVIDENCE != TRADING EDGE。
+
+本次已有修正（先以 HEAD/diff/test 驗證，勿盲目重貼）：outcome 與 artifact 精確 label 綁定及歷史錯配拒絕；季節基準依 horizon 取值；區間上下界 origin 對齊、quantile_valid gate、有效 interval n；移除固定 Wilson(0.5,200) 假信賴區間；XGBoost/LightGBM 改用最新特徵預測且只用成熟標籤訓練。修正 build 曾為 eca898aa6fc222c2，後續變動應重新計算。舊排行榜需版本隔離並重跑，不能挪用舊績效。
+
+現在優先完成 C1：沿用既有 tournament／performance_store／W3.1／2I.1，修正模型失敗、拒答、非有限數值的有效样本統計；共同 origins 成對比較同時揭露全體覆蓋率；審查 random_walk 忽略 horizon／單一 shock、classification_baselines 缺 train labels 時使用測試答案、rates regime 回看索引與其他實際 callers。先重現，再最小修正，禁止為了綠燈放寬真實性門檻。不對真實資料庫作破壞遷移，不重寫歷史結果。
+
+為後續 C3/C4 事前定義：按商品、合約、horizon、事件族與版本分開；train→selection→calibration→final test→forward，標籤重疊須 purge/gap；記錄所有試驗，使用時間區塊成對不確定性，樣本門檻按事件基率／有效樣本／誤差容忍決定，不採 2 筆或任意數字當可信門檻。POINT、QUANTILE、INTERVAL、EVENT 各自指標，不把分類分數、分位數或模型共識叫勝率。
+
+新增模型順序：目前不新增大型基礎模型。先重用已存在基準與 LR/Ridge；資料成立後 EWMA→單一 Student-t GARCH 風險 challenger，或既有 LightGBM quantile；一次一種。模型是否採用取決於同考卷未見資料改善、尾部／覆蓋、成本與穩定性。缺資料就明確拒答。不得把 GARCH 模擬直接當經校準 touch／first-passage 機率。
+
+另一條資料工序 C2：沿用 W3.3，先確認單一 recorder owner、維護窗口授權及既有 runtime adoption。沒有授權不得重啟／另登入，沒有完整時區／逐合約／收盤語義不得把 tick、last deal 或 settlement 當 terminal close。受阻時繼續 C1 離線施工，不反覆 retry broker。quote-only，禁止 order/account/position/balance 路徑，不洩漏憑證。
+
+Price Map 最終需中心、上下區域與 model failure；Probability Map 分 terminal、touch、first passage。日 OHLC 不足以推斷同日先後，未知就 NOT_AVAILABLE。底層程式負責算，主腦只能用白話解讀可追溯的 artifact：商品／時間／期限、現在位置、證據、風險、失效條件；不可編造數字或給未驗證的個人化下單量。
+
+本輪交付：完成一個有明確驗收的 C1 小包，附根因、改動、先失敗後通過的測試、最終 test profile/exit code、HEAD/build、仍待證據項目；更新 durable handoff 與下一步。只提交本包檔案，secret/diff check 後 commit/push，更新現有對應 PR 或建立必要 PR，回報 URL 與 CI；不可把 push 當 merge，不 force-push 他人分支。不要只給計畫便停止，也不要一次展開所有新模型。
+
+若只能交給 OpenCode：輸出一個可直接貼上的完整施工 prompt，內含上述 repo 定位、讀取順序、本輪 C1 範圍、禁止事項、驗收指令與完成定義；不要求它讀不存在的舊聊天。保留短回報、批次工具呼叫與錯誤後調整策略，避免反覆貼整份 repo 浪費 token。

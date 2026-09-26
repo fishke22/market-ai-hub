@@ -11,7 +11,12 @@
   警告：TradingView MCP 有大量 tools，可能增加 context/tool-selection noise。預設推薦 MODE A。
 
 ## 改路徑
-把 `<PROJECT>` 換成實際專案路徑（如 `D:\\MARKET_AI_HUB`）。
+template 內的 `<PROJECT>` 只作人類可讀 placeholder。正式重建/搬移請不要手改，改用：
+```powershell
+python scripts\render_mcp_config.py --client generic --require-command
+python scripts\render_mcp_config.py --client cherry --require-command
+```
+需要檔案時再加 `--output <path>`；產生器不會自動寫入任何第三方 client 設定。
 
 ## 用 python -m 替代 exe
 ```json
