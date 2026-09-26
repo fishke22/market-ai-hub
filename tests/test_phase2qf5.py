@@ -120,11 +120,13 @@ def test_taiex_weekend_cache_invalidated():
 
 # ── §26：position guard ──
 
-def test_position_policy_risk_only():
+def test_position_policy_research_decision_support():
     from market_ai_hub.services.public_view import position_guidance_policy
 
     p = position_guidance_policy()
-    assert p["mode"] == "RISK_ANALYSIS_ONLY"
+    assert p["mode"] == "RESEARCH_DECISION_SUPPORT"
+    assert p["legacy_mode"] == "RISK_ANALYSIS_ONLY"
+    assert p["execution_mode"] == "NO_ORDER"
     assert p["personalized_trade_action"] == "PROHIBITED"
 
 
@@ -134,7 +136,11 @@ def test_position_no_personalized_action():
     p = position_guidance_policy()
     for f in ("ADD_POSITION", "REDUCE_POSITION", "STOP_PRICE", "TAKE_PROFIT_PRICE", "PERSONALIZED_ORDER_SIZE"):
         assert f in p["forbidden"]
-    for a in ("EXPOSURE", "PNL_SENSITIVITY", "SCENARIO_ANALYSIS"):
+    for a in (
+        "EXPOSURE", "PNL_SENSITIVITY", "SCENARIO_ANALYSIS",
+        "RESEARCH_STANCE", "CONDITIONAL_RESEARCH_ACTION",
+        "HYPOTHESIS_INVALIDATION", "WAIT_OR_OBSERVE",
+    ):
         assert a in p["allowed"]
 
 
@@ -142,8 +148,11 @@ def test_position_guidance_policy_in_packet():
     from market_ai_hub.packet.builder import build_analysis_packet
 
     p = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
-    assert p["position_guidance_policy"]["mode"] == "RISK_ANALYSIS_ONLY"
+    assert p["position_guidance_policy"]["mode"] == "RESEARCH_DECISION_SUPPORT"
+    assert p["position_guidance_policy"]["execution_mode"] == "NO_ORDER"
     assert p["position_guidance_policy"]["personalized_trade_action"] == "PROHIBITED"
+    assert p["research_decision_support"]["research_stance_allowed"] is True
+    assert p["research_decision_support"]["conditional_action_framework_allowed"] is True
 
 
 # ── §21：Micro position arithmetic（exposure math）──

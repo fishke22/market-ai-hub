@@ -68,6 +68,58 @@ def test_analyze_osaka_public_safe():
     assert "confidence" not in out["chronos"]
 
 
+    assert out["research_decision_support"]["research_stance"] == "INSUFFICIENT_EVIDENCE"
+    assert out["research_decision_support"]["evidence_scope"] == "PROXY_ONLY"
+    assert out["research_decision_support"]["conditional_action_framework"]["execution_order_authorized"] is False
+
+
+def test_osaka_public_research_stance_is_separate_from_validated_direction():
+    from market_ai_hub.services.public_view import sanitize_analysis_output
+
+    raw = {
+        "symbol": "^N225",
+        "price_forecast_ensemble": {
+            "status": "OK",
+            "expected_return": 0.00033,
+        },
+        "direction_classification_ensemble": {
+            "status": "NO_ELIGIBLE_VOTES",
+            "raw_direction_research": {
+                "raw_argmax": {"xgboost": "up", "lightgbm": "up"},
+                "raw_class_scores": {
+                    "xgboost": {"class_1": 0.55},
+                    "lightgbm": {"class_1": 0.77},
+                },
+            },
+        },
+        "ensemble": {
+            "model": "ensemble",
+            "model_metadata": {
+                "direction_status": "NO_VALIDATED_MODEL_CONSENSUS",
+                "direction_value": None,
+                "eligible_direction_vote_count": 0,
+            },
+        },
+        "confidence_inputs": {"model_disagreement": "MEDIUM"},
+    }
+    out = sanitize_analysis_output(raw, market="osaka")
+    ds = out["research_decision_support"]
+    assert out["direction_status"] == "NO_VALIDATED_MODEL_CONSENSUS"
+    assert out["direction_value"] is None
+    assert ds["validated_direction_available"] is False
+    assert ds["research_stance"] == "SLIGHT_BULLISH_LEAN"
+    assert ds["research_stance_strength"] == "WEAK_UNVALIDATED"
+    assert ds["basis"]["price_ensemble_tilt"] == "NEAR_FLAT"
+    assert ds["basis"]["raw_classifier_tilt_research_only"] == "UP"
+    assert ds["conditional_action_framework"]["current"] == "WAIT_FOR_FRESH_DIRECT_CONFIRMATION"
+    assert (
+        ds["conditional_action_framework"]["if_fresh_direct_confirms_research_stance"]
+        == "PRIORITIZE_BULLISH_RESEARCH_SCENARIO"
+    )
+    assert "raw_direction_research" not in out["direction_classification_ensemble"]
+    assert "raw_class_scores" not in str(out["direction_classification_ensemble"])
+
+
 def test_analyze_taiwan_public_safe():
     from market_ai_hub.services.public_view import sanitize_analysis_output
 

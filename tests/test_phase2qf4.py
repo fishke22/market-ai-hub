@@ -67,6 +67,8 @@ def test_display_policy_in_packet():
     p = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
     dp = p["display_policy"]
     assert dp["may_present_direction"] is False
+    assert dp["may_present_research_stance"] is True
+    assert dp["may_present_conditional_research_action"] is True
     assert dp["may_present_probabilities"] is False
     assert dp["may_present_support_resistance"] is False
     assert dp["may_present_trading_advice"] is False

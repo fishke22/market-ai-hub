@@ -4,6 +4,14 @@
 
 原始修補基準 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b；後續 W1/W2/W3/JNU/reconnect 修補累積於 PR #55，已於 2026-09-26 merge 到 main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`。Merged build=`1037d45ff8e65884`；最終 docs-only CI `36231436018` PASS；post-merge reconnect+JNU smoke `29 passed, 21 deselected`。
 
+## 2026-09-26 research decision-support correctness closure
+
+Observed defect: the analysis system had enough research evidence to produce a useful lean, but the public contract hard-coded formal-direction/trading-advice guards and the Cherry prompt interpreted them as a blanket ban on prediction/advice. This produced a misleading refusal even though the correct distinction is formal validated direction vs unvalidated research stance.
+
+Repair keeps evidence gates intact. Public analysis now derives a qualitative `research_decision_support` from same-scope price-ensemble expected return plus qualitative unvalidated classifier tilt. Osaka is PROXY_ONLY; no stale Direct Micro settlement is compared with proxy forecast. Raw classifier numeric scores are removed before public output. Formal direction remains `NO_VALIDATED_MODEL_CONSENSUS`, public probability remains unavailable, and the output explicitly marks `not_trading_edge=true`.
+
+Conditional action is machine-readable but non-executing: wait for fresh Direct confirmation; prioritize the matching research scenario if confirmed; cancel/reassess on conflict; refresh on stale/missing data. Order placement, personalized size, and invented exact entry/stop/target remain false/forbidden. Focused tests=`37 passed`; actual Osaka smoke returned `SLIGHT_BULLISH_LEAN / WEAK_UNVALIDATED / PROXY_ONLY`; build freeze=`3 passed`; full offline regression=`1966 passed, 1 skipped, 35 deselected, 110 warnings`, exit 0. Build=`e8dc080886d0b5a2`.
+
 ## 2026-09-26 W3.2-EP1 / MCP / security closeout
 
 W3.2-EP1 adds a real future-facing raw EVENT_PROBABILITY producer without backfill. The event is `TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D`; the source close threshold is frozen at prediction time in 2H.4 `event_threshold_value`. Beta(1,1) history is causal (`outcome.available_at <= forecast_origin`) and exact-contract scoped (`contract_code + contract_month`, CONTRACT, roll NONE). Different rollover contracts cannot share prior counts or suppress each other's same-window prediction. Raw artifacts are always `UNCALIBRATED` and audit publication remains fail-closed.

@@ -8,6 +8,8 @@ probability lie / direction lie / proxy-direct lie / support lie / trade instruc
 """
 from __future__ import annotations
 
+import math
+
 from typing import Any
 
 # ── 2Q-F.5 §6：canonical instrument display names ──
@@ -26,12 +28,26 @@ def canonical_instrument_name(instrument: str) -> str:
 
 # ── 2Q-F.5 §20/§26：position-aware research guard ──
 POSITION_GUIDANCE_POLICY = {
-    "mode": "RISK_ANALYSIS_ONLY",
+    "mode": "RESEARCH_DECISION_SUPPORT",
+    "legacy_mode": "RISK_ANALYSIS_ONLY",
+    "execution_mode": "NO_ORDER",
     "personalized_trade_action": "PROHIBITED",
-    "allowed": ["EXPOSURE", "PNL_SENSITIVITY", "SCENARIO_ANALYSIS"],
+    "allowed": [
+        "EXPOSURE",
+        "PNL_SENSITIVITY",
+        "SCENARIO_ANALYSIS",
+        "RESEARCH_STANCE",
+        "CONDITIONAL_RESEARCH_ACTION",
+        "HYPOTHESIS_INVALIDATION",
+        "WAIT_OR_OBSERVE",
+    ],
     "forbidden": [
-        "ADD_POSITION", "REDUCE_POSITION", "STOP_PRICE",
-        "TAKE_PROFIT_PRICE", "PERSONALIZED_ORDER_SIZE",
+        "PLACE_ORDER",
+        "ADD_POSITION",
+        "REDUCE_POSITION",
+        "STOP_PRICE",
+        "TAKE_PROFIT_PRICE",
+        "PERSONALIZED_ORDER_SIZE",
     ],
 }
 
@@ -139,6 +155,132 @@ def public_view(payload: dict, *, audit: bool = False) -> dict:
 _MODEL_KEYS = ("chronos", "timesfm", "xgb", "lgbm", "ensemble", "ensemble_result")
 
 
+_RESEARCH_FLAT_REFERENCE = 0.005
+
+
+def _finite_float(value: object) -> float | None:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+def _raw_classifier_tilt(payload: dict) -> str:
+    direction = payload.get("direction_classification_ensemble") or {}
+    raw = direction.get("raw_direction_research") or {}
+    argmax = raw.get("raw_argmax") or {}
+    values = [
+        str(v).strip().lower()
+        for v in argmax.values()
+        if str(v).strip().lower() in {"up", "down", "flat"}
+    ]
+    if not values:
+        return "UNAVAILABLE"
+    unique = set(values)
+    if len(unique) == 1:
+        return {"up": "UP", "down": "DOWN", "flat": "FLAT"}[values[0]]
+    return "MIXED"
+
+
+def research_decision_support(payload: dict, *, market: str = "osaka") -> dict:
+    """Derive a public research stance without promoting it to validated direction/probability.
+
+    The price tilt is computed only inside the model's own forecast scope. For Osaka that scope is
+    ^N225 PROXY, so it is never compared with a stale/direct Micro settlement to create a fake return.
+    """
+    price = payload.get("price_forecast_ensemble") or {}
+    expected_return = _finite_float(price.get("expected_return"))
+    if expected_return is None:
+        ens = payload.get("ensemble") or {}
+        mm = ens.get("model_metadata") or {}
+        expected_return = _finite_float((mm.get("price_ensemble") or {}).get("expected_return"))
+
+    if expected_return is None:
+        price_tilt = "UNAVAILABLE"
+    elif expected_return > _RESEARCH_FLAT_REFERENCE:
+        price_tilt = "UP"
+    elif expected_return < -_RESEARCH_FLAT_REFERENCE:
+        price_tilt = "DOWN"
+    else:
+        price_tilt = "NEAR_FLAT"
+
+    classifier_tilt = _raw_classifier_tilt(payload)
+
+    if price_tilt == "UP":
+        stance = "MIXED" if classifier_tilt in {"DOWN", "MIXED"} else "BULLISH_LEAN"
+    elif price_tilt == "DOWN":
+        stance = "MIXED" if classifier_tilt in {"UP", "MIXED"} else "BEARISH_LEAN"
+    elif price_tilt == "NEAR_FLAT":
+        if classifier_tilt == "UP":
+            stance = "SLIGHT_BULLISH_LEAN"
+        elif classifier_tilt == "DOWN":
+            stance = "SLIGHT_BEARISH_LEAN"
+        elif classifier_tilt == "MIXED":
+            stance = "MIXED"
+        else:
+            stance = "NEUTRAL"
+    elif classifier_tilt == "UP":
+        stance = "SLIGHT_BULLISH_LEAN"
+    elif classifier_tilt == "DOWN":
+        stance = "SLIGHT_BEARISH_LEAN"
+    elif classifier_tilt == "MIXED":
+        stance = "MIXED"
+    else:
+        stance = "INSUFFICIENT_EVIDENCE"
+
+    ensemble = payload.get("ensemble") or {}
+    mm = ensemble.get("model_metadata") or {}
+    validated_direction = mm.get("direction_value")
+    eligible_votes = int(mm.get("eligible_direction_vote_count") or 0)
+    validated_direction_available = bool(validated_direction) and eligible_votes > 0
+    disagreement = (payload.get("confidence_inputs") or {}).get("model_disagreement", "N/A")
+
+    if stance in {"BULLISH_LEAN", "BEARISH_LEAN"}:
+        strength = "MODERATE_UNVALIDATED"
+    elif stance == "INSUFFICIENT_EVIDENCE":
+        strength = "NONE"
+    else:
+        strength = "WEAK_UNVALIDATED"
+
+    if "BULLISH" in stance:
+        confirmation_action = "PRIORITIZE_BULLISH_RESEARCH_SCENARIO"
+    elif "BEARISH" in stance:
+        confirmation_action = "PRIORITIZE_BEARISH_RESEARCH_SCENARIO"
+    else:
+        confirmation_action = "KEEP_NEUTRAL_OR_MIXED_RESEARCH_SCENARIO"
+
+    osaka_proxy = market == "osaka"
+    return {
+        "status": "RESEARCH_ONLY",
+        "research_stance": stance,
+        "research_stance_strength": strength,
+        "evidence_scope": "PROXY_ONLY" if osaka_proxy else "MARKET_ANALYSIS_SCOPE",
+        "validated_direction_available": validated_direction_available,
+        "validated_direction": validated_direction if validated_direction_available else None,
+        "public_probability_available": False,
+        "not_trading_edge": True,
+        "basis": {
+            "price_ensemble_expected_return_research": expected_return,
+            "price_ensemble_tilt": price_tilt,
+            "raw_classifier_tilt_research_only": classifier_tilt,
+            "model_disagreement": disagreement,
+            "flat_reference_threshold": _RESEARCH_FLAT_REFERENCE,
+            "flat_reference_note": "qualitative research dead-band; not a validated trading threshold",
+        },
+        "conditional_action_framework": {
+            "current": "WAIT_FOR_FRESH_DIRECT_CONFIRMATION" if osaka_proxy else "RESEARCH_SCENARIO_ONLY",
+            "if_fresh_direct_confirms_research_stance": confirmation_action,
+            "if_fresh_direct_conflicts": "REASSESS_AND_CANCEL_CURRENT_RESEARCH_LEAN",
+            "if_data_stale_or_missing": "WAIT_AND_REFRESH",
+            "if_validated_layer_changes": "RECOMPUTE_FROM_VALIDATED_LAYER",
+            "execution_order_authorized": False,
+            "personalized_order_size_authorized": False,
+            "exact_entry_stop_target_authorized": False,
+        },
+    }
+
+
 def sanitize_analysis_output(d: dict, *, market: str = "osaka", audit: bool = False) -> dict:
     """analyze_osaka_nikkei / analyze_taiwan_stock 的 public-safe view。
 
@@ -154,12 +296,16 @@ def sanitize_analysis_output(d: dict, *, market: str = "osaka", audit: bool = Fa
         v = out.get(k)
         if isinstance(v, dict) and "status" not in v:
             out[k] = sanitize_forecast_dump(v)
-    # price_forecast_ensemble / direction_classification_ensemble：移除 class_probabilities / raw agreement
+    # price_forecast_ensemble / direction_classification_ensemble：public 只留可解讀摘要。
+    # raw classifier scores/argmax 先供 research_decision_support 聚合，之後不直接暴露數值。
+    out["research_decision_support"] = research_decision_support(d, market=market)
     for k in ("price_forecast_ensemble", "direction_classification_ensemble"):
         v = out.get(k)
         if isinstance(v, dict):
             v = dict(v)
             v.pop("class_probabilities", None)
+            if k == "direction_classification_ensemble":
+                v.pop("raw_direction_research", None)
             out[k] = v
 
     # 移除 raw legacy direction fields（改用 authoritative contract）
