@@ -251,7 +251,7 @@ def test_dynamic_request_on_existing_default_preserves_future_dynamic_intent(tmp
     assert result["status"] == "ALREADY_SUBSCRIBED_NOT_LIVE_VERIFIED"
 
 
-def test_watchlist_all_call_signature_documents_vendor_sample_optional_language_arg():
+def test_watchlist_all_call_signature_keeps_explicit_optional_language_arg():
     root = Path(__file__).resolve().parents[1]
     vendor = root / "vendor/yuanta_spark/2.2026.0918.0/YuantaSparkAPI_win-x64_Python/YSendOrder.py"
     recorder = root / "src/market_ai_hub/integrations/yuanta/live_quote_recorder.py"
@@ -264,16 +264,20 @@ def test_watchlist_all_call_signature_documents_vendor_sample_optional_language_
                 out[node.func.attr].append(len(node.args))
         return out
 
-    vendor_counts = counts(vendor)
     recorder_counts = counts(recorder)
-    assert 2 in vendor_counts["SubscribeWatchlistAll"]
-    assert 2 in vendor_counts["UnSubscribeWatchlistAll"]
     # Installed 2.2026.0918.0 DLL reflection shows a third optional Lng parameter
     # (default NORMAL); recorder keeps explicit UTF8 rather than changing runtime behavior.
     assert recorder_counts["SubscribeWatchlistAll"] == [3]
     assert recorder_counts["UnSubscribeWatchlistAll"] == [3]
     text = recorder.read_text(encoding="utf-8")
     assert "enumLangType.UTF8" in text
+
+    # The bundled SDK is intentionally not tracked/published. When it exists locally, retain
+    # the cross-check that its Python sample legally omits the optional third argument.
+    if vendor.exists():
+        vendor_counts = counts(vendor)
+        assert 2 in vendor_counts["SubscribeWatchlistAll"]
+        assert 2 in vendor_counts["UnSubscribeWatchlistAll"]
 
 
 def test_control_rejects_action_limit_and_traversal(tmp_path, monkeypatch):
