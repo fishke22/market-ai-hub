@@ -1,9 +1,20 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 durable crash spool/WAL OFFLINE PASS; runtime adoption remains pending because the existing safe-default recorder is still on the prior build.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 bounded reconnect lifecycle OFFLINE PASS on a stacked branch; live adoption and integration with the concurrent JNU workstream remain pending.
 
 ## Current repair checkpoint
+
+### 2026-09-26 W1 bounded quote reconnect lifecycle
+
+Implementation commit `feeefe3`; isolated source/config build=`4bf516de97b2a9c9`; branch=`codex/w1-reconnect-lifecycle`, stacked from published PR #55 head `b7bcf98` because the main worktree has concurrent JNU microstructure changes in the same recorder/config files. Publication: stacked PR #56 OPEN; latest-head CI pending.
+
+Installed/public SDK evidence exposes `Open`, `Close`, `Dispose`, `Login`, `LogOut` and OnResponse connection states, but no separate `Reconnect()` method. Recovery therefore uses bounded full-runtime replacement: flush durable-spool pending data, locally retire the faulted runtime, create a fresh runtime, wait for official Connect, obtain a fresh WinCred password, wait for Login OnResponse success, then restore the complete desired quote subscription union. Close/Dispose failure blocks another runtime; failed candidates and re-subscribe failures consume bounded retries and fail closed.
+
+Tracked `auto_reconnect.enabled=false` remains the safe default, and tick-detail maintenance refuses auto reconnect. Validation on the reconnect-only isolated worktree: focused=`26 passed, 21 deselected`; related Yuanta/W1/W2/C2=`147 passed, 2 deselected`; full offline=`1915 passed, 7 skipped, 35 deselected, 110 warnings in 79.84s`, exit 0; diff check PASS; changed/untracked secret scan=0. No broker action was performed.
+
+Read-only main-worktree preflight at publication time observed `NO_RUNNING_OWNER`, status=`STOPPED`, no matching owner process, broker_action_performed=false. That is not authorization to start a recorder. The concurrent JNU workstream remains separate and must not be folded into this commit.
+
 
 ### 2026-09-26 W1 durable crash spool/WAL
 
@@ -220,7 +231,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-W1 automatic reconnect lifecycle contract, offline-only: first verify the installed/public SDK lifecycle surface and define a bounded reconnect/re-login/resubscribe state machine with single-owner, subscription-truth and durability invariants. Do not invent reconnect semantics that the SDK evidence does not support; live adoption remains a separate authorized handover.
+Reconcile stacked `codex/w1-reconnect-lifecycle` with the concurrent JNU workstream only after that workstream has an owned commit, then rerun merged regressions. Live enablement remains a separate authorized single-owner handover; tracked auto reconnect stays disabled until then.
 
 ## Truthfulness rules
 

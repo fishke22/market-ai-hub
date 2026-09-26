@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W1 DURABLE_SPOOL OFFLINE_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
+- Current phase: **W1 BOUNDED_RECONNECT OFFLINE_PASS / STACKED_INTEGRATION_PENDING / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**b7c1f3d08a383d65**（2026-09-26 W1 durable-spool source/config fingerprint；現有 recorder runtime 仍是舊 build `afd52f88a351541a`，所以不代表 runtime adoption）
+- build_id：**4bf516de97b2a9c9**（reconnect-only isolated fingerprint；不含 concurrent JNU workstream，也不代表 live runtime adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -10,6 +10,16 @@
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 W1 bounded quote reconnect lifecycle
+
+- Implementation commit `feeefe3`; branch `codex/w1-reconnect-lifecycle`; isolated build `4bf516de97b2a9c9`; stacked PR #56 OPEN; latest-head CI pending.
+- No hidden reconnect API is assumed. Recovery is bounded full-runtime replacement: durable flush -> local retire -> fresh Open -> official Connect -> Login result -> full quote re-subscribe.
+- Cleanup/re-subscribe failure fails closed; retry/backoff is bounded. Tick-detail maintenance and auto reconnect are mutually exclusive.
+- Tracked `auto_reconnect.enabled=false`; OFFLINE PASS != LIVE ADOPTION.
+- Validation: focused `26 passed, 21 deselected`; related `147 passed, 2 deselected`; full offline `1915 passed, 7 skipped, 35 deselected, 110 warnings in 79.84s`; diff check PASS; secret scan 0.
+- Main worktree concurrently contains JNU microstructure changes on overlapping files. Read-only preflight observed `NO_RUNNING_OWNER`; this is not start authorization.
+- Next: merge/reconcile only after the JNU workstream has an owned commit, then rerun merged regressions. Live enablement is separate.
 
 ## 2026-09-26 W1 durable crash spool/WAL
 

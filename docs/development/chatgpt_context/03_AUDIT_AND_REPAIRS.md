@@ -87,6 +87,10 @@
 - 驗證：core 101 passed；Feature Store/operator 127 passed；broader 303 passed/2 deselected；default 1773 passed/23 deselected/132 warnings，156.48s，exit 0；changed implementation/test secret scan 0 hits；diff check PASS。
 - W3.2 = ENGINE PASS，不是 FORWARD EVIDENCE。沒有 scheduler、broker action、calibration fitting 或交易。
 
+## 2026-09-26 W1 bounded reconnect checkpoint
+
+Reconnect-only stacked branch `codex/w1-reconnect-lifecycle`, commit `feeefe3`, isolated build `4bf516de97b2a9c9` is OFFLINE PASS; stacked PR #56 is OPEN and latest-head CI is pending. It uses bounded full-runtime replacement, not a guessed hidden reconnect API. Tracked auto reconnect remains disabled; live adoption and integration with the concurrent JNU workstream are pending. Main-worktree read-only preflight observed `NO_RUNNING_OWNER`, which is not start authorization.
+
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
@@ -102,4 +106,4 @@
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W1 connection detection、contract revalidation、durable crash spool/WAL 已 offline PASS，但現有 owner 尚未 adoption current disk build。下一個不需 broker 維護窗口的 W1 工作包是 automatic reconnect lifecycle contract：先核對 installed/public SDK lifecycle surface，再以 bounded state machine 定義 reconnect/re-login/resubscribe、single-owner、subscription truth 與 durability invariants；證據不足就 fail closed，不憑猜測實作。live adoption 仍需之後的受控 single-owner handover。W4 calibration fitting 只能在真正 forward outcome 足夠成熟後啟動。長期 Price/Probability Map 設計見 02_ROADMAP.md。
+下一棒先核對 stacked reconnect branch remote/CI、主 worktree dirty ownership與 JNU workstream commit。Reconnect isolated OFFLINE PASS；先等 overlapping JNU workstream 有 owned commit，再做 merge/conflict review 與 merged regression。tracked auto reconnect 保持 disabled；live adoption 仍需另行受控 single-owner handover，`NO_RUNNING_OWNER` 不是啟動授權。

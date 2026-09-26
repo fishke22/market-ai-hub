@@ -12,6 +12,15 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 ### 2026-09-26 最新 W1 接手結果
 
+#### reconnect-only stacked checkpoint
+
+Reconnect package commit=`feeefe3`, branch=`codex/w1-reconnect-lifecycle`, isolated build=`4bf516de97b2a9c9`, based on published PR #55 head `b7bcf98`. Publication: stacked PR #56 OPEN; latest-head CI pending. Main worktree has concurrent JNU microstructure edits in the same recorder/config files, so this package was rebuilt and validated in an isolated worktree rather than mixing ownership.
+
+Reconnect uses bounded full-runtime replacement only: durable pending flush -> retire faulted runtime -> fresh Open -> official Connect -> fresh WinCred password -> Login OnResponse -> complete quote re-subscribe. No hidden `Reconnect()` API is assumed. Tracked `auto_reconnect.enabled=false`; tick-detail maintenance refuses auto reconnect.
+
+Validation: focused=`26 passed, 21 deselected`; related=`147 passed, 2 deselected`; full offline=`1915 passed, 7 skipped, 35 deselected, 110 warnings in 79.84s`, exit 0; diff check PASS; secret scan 0. Read-only main-worktree preflight observed `NO_RUNNING_OWNER`/`STOPPED` with no broker action; that is not start authorization.
+
+
 實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。最新 W1 durable crash spool/WAL implementation commit=`e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`，目前 source/config build=`b7c1f3d08a383d65`；前一個 connection-event fail-closed implementation commit=`223ddd88e3a308a21c95176992001041d1eefeb0`。
 
 最新核心修正：tracked config 啟用 bounded durable spool（100000 records / 256 MiB）。callback 只有在 checksummed WAL record 寫入、flush+fsync 並 atomic publish 後才算 accepted；append failure 不更新 latest 並鎖存 spool error。restart 在 credentials/runtime 之前驗 ack checksum、record checksum、連續序號、partial/final conflict 與 quota，corruption 直接 `SPOOL_RECOVERY` fail closed。Parquet 使用 deterministic WAL batch id、`_wal_seq`/record hash 與 COMMITTED manifest；W2 replay 缺/壞 manifest 即拒讀，publish-before-ack crash 由 WAL 覆寫同一路徑後再 commit，不產第二批。**這是 offline disk correctness，現有 live owner 尚未 adoption。**
@@ -173,4 +182,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 single safe-default owner 仍 RUNNING，但 runtime build=`afd52f88a351541a`、disk build=`b7c1f3d08a383d65`，所以 owner preflight 應為 `BLOCKED_RUNTIME_BUILD_STALE`；不要再開第二 owner，parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。durable crash spool/WAL 已 offline PASS；下一個不需 broker 維護窗口的 W1 工作包是 automatic reconnect lifecycle contract：先用 installed/public SDK evidence 定義 bounded reconnect/re-login/resubscribe state machine、single-owner/subscription-truth/durability invariants，不支援的語義就 fail closed，不憑猜測。live adoption 或 C2.3 maintenance 仍須之後受控 handover到 current build `b7c1f3d08a383d65`。C3/C4 仍等待真實 C1/C2 輸入。
+先核對 stacked reconnect branch remote/CI、主 worktree dirty ownership與 JNU workstream owned commit。不要把 concurrent JNU 變更納入 reconnect commit，也不要 reset/stash/clean。Reconnect isolated OFFLINE PASS，tracked default disabled；下一工作包是 JNU workstream commit 後的 merge/conflict review 與 merged regression。Live enablement仍需另行受控 single-owner handover；`NO_RUNNING_OWNER` 本身不是啟動授權。
