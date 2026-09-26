@@ -1,15 +1,22 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **C2.3 TERMINAL_CLOSE_AUTOMATION_OFFLINE_PASS / W3.2 OPERATIONAL_CYCLE_OFFLINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET / TASK_AND_RUNTIME_ADOPTION_PENDING**
-- Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**35669ded63f487ed**（W3.2 persisted-artifact terminal-close operator source/config fingerprint；OFFLINE PASS，不代表 real DAILY input 或 live adoption）
-- Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
+- Current phase: **W5.1 FIRST_PASSAGE_ENGINE_MERGED_POSTMERGE_VERIFIED / W4.1 CALIBRATION_FITTING_ENGINE_MERGED_POSTMERGE_VERIFIED / C2.3+W3.2 RUNTIME_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Gate: **LOCAL ENGINEERING THROUGH W5.1 PASS; evidence gates remain closed until real forward samples exist. W4 CALIBRATED is forbidden without separate one-use FINAL_OOS evidence.**
+- build_id：**d92e85fec3660b93**（merged W5 source/config fingerprint；current persistent live owner runtime=disk build verified）
+- Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：RDC read-only inspection on 2026-09-26 observed `NO_RUNNING_OWNER`; current private evidence has one historical raw tick-detail artifact but no typed verification directory. A WebCodex start of current build reached `RUNNING`/`35669ded63f487ed` before the Runner terminated the child, so persistent owner adoption is still pending. Tracked measurement gate=false and tracked auto reconnect=false.
+- Live quote capability：persistent safe-default owner adopted and reverified by RDC on build **d92e85fec3660b93**; heartbeat fresh, runtime=disk build, measurement gates=false, no independent duplicate owner. On 2026-09-26 weekend/non-session the only health reason is `NO_RECENT_CALLBACK_SESSION_UNCHECKED`.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 W4.1 + W5.1 final engineering closure
+
+- W4.1: implementation `5ec760a`; PR #61; CI `36240929664` PASS; merged `54542a1443eee9a8a73a130b602abeba0fca941b`. Governed sigmoid fitting consumes only homogeneous W3.1 `FORWARD_PRECOMMITTED EVENT_PROBABILITY` evidence. Validation freezes `EVALUATED_UNCALIBRATED`; a distinct one-use `FINAL_OOS` dataset is required before `CALIBRATED`. Local CI-equivalent `1942 passed / 7 skipped / 35 deselected`; post-merge smoke `61 passed`.
+- W5.1: implementation `906a164`; PR #62; CI `36241924593` PASS; merged `37abd2574e59443d6079e24ebc0a639d3713c51e`. Added daily first-passage `UPPER_FIRST / LOWER_FIRST / NEITHER / AMBIGUOUS_WITHIN_DAILY_BAR` and independent FIRST_PASSAGE audit/calibration semantics. Cross-regression `187 passed`; local CI-equivalent `1950 passed / 7 skipped / 35 deselected`; post-merge smoke `187 passed`.
+- Runtime: `D:\MARKET_AI_HUB` main equals origin/main; safe-default owner adopted on build `d92e85fec3660b93`. C2.3 Scheduled Task is Enabled, polls every 5 minutes, Last Result=0 on this non-session date.
+- Evidence truth: no new real DAILY terminal-close evidence was created on the weekend. Osaka automatic baseline is POINT-only. `ACTUAL_FORWARD_EVIDENCE=NONE_YET`; `ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET`; market `CALIBRATED=FALSE`; trading edge is not claimed.
 
 ## 2026-09-26 C2.3 terminal-close automation + W3.2 exact-JNU operational cycle
 
@@ -17,7 +24,7 @@
 - RDC resolved the private-runtime uncertainty: no running owner; one old raw artifact `w33_tick_cbce3cba39291cd1f14e.json`; no typed `verification/` evidence. The old raw file is not promotable.
 - Added close-window orchestrator: only an OSE session date and 15:45–17:00 JST can reach broker maintenance. It performs controlled single-owner handover, exact-JNU request, typed-evidence requirement, DAILY materialization, W3.2 settlement/precommit, then restores safe-default quote-only runtime. Automated attempts are capped at three per trading date.
 - Added broker-free W3.2 operator to settle pending exact-JNU forward predictions from canonical Feature Store and precommit the next one-session `last_price_naive` baseline. It accepts contract identity only; market values come only from the gated Feature Store.
-- Task registration is designed as a 5-minute poll with timezone-aware internal window; JNU watchdog yields to fresh C2.3 handover state. Task registration/live persistent owner are intentionally deferred until this code is merged.
+- The 5-minute timezone-aware C2.3 Scheduled Task is now registered/Enabled and has non-session Last Result=0. The persistent safe-default owner is also adopted; runtime was subsequently handed over through W4 and W5 to build `d92e85fec3660b93`.
 - Validation: focused `96 passed, 1 deselected`; broader `198 passed, 2 deselected`; CI-equivalent full `1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`, exit 0; compile/dry-run/diff/secret checks PASS.
 - Non-session date today: no tick-detail measurement was sent. Therefore eligible new real DAILY evidence and ACTUAL_FORWARD_EVIDENCE remain NONE_YET.
 

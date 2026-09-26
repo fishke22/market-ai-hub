@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 C2.3 terminal-close automation + W3.2 exact-JNU settle/precommit OFFLINE PASS; implementation=`b0a26f3`; build=`35669ded63f487ed`; publication/runtime registration still pending.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W4.1 calibration fitting + W5.1 first-passage MERGED_POSTMERGE_VERIFIED; live safe-default owner adopted on build `d92e85fec3660b93`; real forward/event-probability evidence still NONE_YET.
 
 ## Current repair checkpoint
+
+### 2026-09-26 W4.1/W5.1 final engineering closure
+
+W4.1 implementation `5ec760a`; PR #61 clean-runner CI `36240929664` PASS; merged main `54542a1443eee9a8a73a130b602abeba0fca941b`. W4 adds governed sigmoid fitting for homogeneous W3.1 `FORWARD_PRECOMMITTED EVENT_PROBABILITY` evidence. VALIDATION can only freeze `EVALUATED_UNCALIBRATED`; public `CALIBRATED` requires a separate one-use `FINAL_OOS` dataset with no refit. Local CI-equivalent: `1942 passed, 7 skipped, 35 deselected`; post-merge W4 smoke: `61 passed`.
+
+W5.1 implementation `906a164`; PR #62 clean-runner CI `36241924593` PASS; merged main `37abd2574e59443d6079e24ebc0a639d3713c51e`. Daily first-passage now yields `UPPER_FIRST / LOWER_FIRST / NEITHER / AMBIGUOUS_WITHIN_DAILY_BAR`; same-bar double touch and gap/missing/provenance ambiguity are never guessed. `FIRST_PASSAGE` is an independent audit label/outcome kind and calibration family. Cross-regression: `187 passed`; local CI-equivalent: `1950 passed, 7 skipped, 35 deselected`; post-merge smoke: `187 passed`.
+
+Runtime adoption is complete. `D:\MARKET_AI_HUB` main equals origin/main W5 merge, product build `d92e85fec3660b93`. RDC verified exactly one safe-default recorder owner, fresh heartbeat, runtime build=disk build, measurement gates=false, and no independent duplicate owner. On this non-OSE-session date the only health reason is `NO_RECENT_CALLBACK_SESSION_UNCHECKED`. `MARKET_AI_HUB_C23_Terminal_Close_Measurement` remains Enabled on a 5-minute poll with Last Result=0.
+
+Truth boundary: ENGINE PASS is not DATA READY. Current Osaka automatic forward baseline remains POINT-only, so `ACTUAL_FORWARD_EVIDENCE=NONE_YET` and real EVENT_PROBABILITY calibration evidence is `NONE_YET`. No market `CALIBRATED` evidence and no trading edge are claimed.
 
 ### 2026-09-26 C2.3 terminal-close automation + W3.2 operational cycle
 
@@ -11,9 +21,9 @@ Implementation commit `b0a26f3`; source/config build remains `35669ded63f487ed` 
 
 New `run_c23_terminal_close_maintenance.ps1` is guarded by the existing OSE close query window. Outside an OSE session date / 15:45–17:00 JST it exits without broker mutation. Inside the window it resolves the exact active JNU contract from the existing FunctionList resolver, performs a controlled single-owner handover to the runtime-only measurement gate, queues one bounded tick-detail request, requires persisted `TICK_DETAIL_RUNTIME_EVIDENCE_RECORDED`, materializes `terminal_close / w3.2-contract-daily-close-1`, then invokes the new broker-free `run_w32_osaka_forward_cycle.py` to settle pending W3.2 exact-JNU predictions and precommit the next one-session baseline. It finally restores the normal quote-only owner. Per trading date, automated maintenance attempts are capped at three; state is metadata-only and never exposes prices.
 
-The queue script now emits the queued request path on capturable stdout instead of `Write-Host`. `register_c23_terminal_close_task.ps1` polls every 5 minutes and relies on the timezone-aware OSE window rather than a fixed local clock. Existing JNU watchdog yields while a fresh C2.3 handover state is `IN_PROGRESS`, reducing duplicate-owner races. The task is not registered by this offline package yet.
+The queue script now emits the queued request path on capturable stdout instead of `Write-Host`. `register_c23_terminal_close_task.ps1` polls every 5 minutes and relies on the timezone-aware OSE window rather than a fixed local clock. Existing JNU watchdog yields while a fresh C2.3 handover state is `IN_PROGRESS`, reducing duplicate-owner races. The task is now registered, Enabled, and has repeated non-session `Last Result=0` executions.
 
-Validation: focused final=`96 passed, 1 deselected`; broader=`198 passed, 2 deselected`; CI-equivalent full offline=`1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`, exit 0; Python compile PASS; PowerShell dry-run/non-session paths PASS; `git diff --check` PASS; changed/untracked secret scan=0. Today is not an OSE session date, so no C2.3 measurement was sent and ACTUAL_FORWARD_EVIDENCE remains NONE_YET. A WebCodex current-build start reached `RUNNING`/build `35669ded63f487ed` but its child was terminated with the Runner lifetime; this is not persistent runtime adoption.
+Validation: focused final=`96 passed, 1 deselected`; broader=`198 passed, 2 deselected`; CI-equivalent full offline=`1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`, exit 0; Python compile PASS; PowerShell dry-run/non-session paths PASS; `git diff --check` PASS; changed/untracked secret scan=0. Today is not an OSE session date, so no C2.3 measurement was sent and ACTUAL_FORWARD_EVIDENCE remains NONE_YET. Post-merge runtime adoption is complete: RDC established and reverified one persistent safe-default owner, later handed over through W4 and W5 to build `d92e85fec3660b93`.
 
 ### 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion
 
@@ -252,7 +262,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-C2.3 close-window automation + W3.2 settle/precommit operator is OFFLINE PASS at `b0a26f3`. Exact next package: publish this branch, then on merged main register `MARKET_AI_HUB_C23_Terminal_Close_Measurement` and establish one persistent safe-default quote owner via Remote Desktop Commander; verify task definition, owner PID/heartbeat/build, durable spool, measurement gates=false, and no duplicate owner. On the next OSE session the task may create the first new C2.3 typed evidence only inside 15:45–17:00 JST. Do not substitute the historical raw-only artifact, continuous bars, or TICK for verified DAILY evidence.
+Local engineering through W5.1 is `MERGED_POSTMERGE_VERIFIED` and the safe-default live owner is adopted on build `d92e85fec3660b93`. Exact next work is evidence-dependent: allow the registered C2.3 close-window task to create the first new typed DAILY terminal-close evidence during a valid OSE maintenance window, then let W3.2 naturally settle/precommit forward samples. W4 fitting must wait for scope-homogeneous real `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples and independent CALIBRATION/VALIDATION/FINAL_OOS windows. Remaining W7 clean-new-Windows/full-install/WinCred/certificate/new-machine-COM cells are external gates and must not be inferred from this machine.
 
 ## Truthfulness rules
 
@@ -270,10 +280,12 @@ V2-G.2  PHASEV2G_SEQUENTIAL_UPDATING_SCAFFOLD_PASS
 V2-H.3  PREDICTION_AUDIT_OUTCOME_MATURITY_PASS
 W3.1    OUTCOME_EVALUATION_GOVERNANCE_PASS
         evaluation_as_of + homogeneous scope + duplicate/supersession gates
-W3.2    PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS
-        ACTUAL_FORWARD_EVIDENCE = NONE_YET; eligible DAILY contract-close input absent
+W3.2    PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / RUNTIME_ADOPTED
+        ACTUAL_FORWARD_EVIDENCE = NONE_YET; first new eligible DAILY contract-close evidence awaits a valid OSE window
 V2-I.1  PHASEV2I_CALIBRATION_EVALUATION_FOUNDATION_PASS
+W4.1    GOVERNED_CALIBRATION_FITTING_ENGINE_PASS
+        ACTUAL_EVENT_PROBABILITY_EVIDENCE = NONE_YET; REAL_CALIBRATION_FIT = NOT_STARTED; CALIBRATED = FORBIDDEN
+W5.1    DAILY_FIRST_PASSAGE_LABEL_ENGINE_PASS
+        FIRST_PASSAGE outcome kind is independent from TOUCH; market probability evidence = NONE_YET
         YUANTA_SPARK_SECURITIES_FUTURES_QUOTE_PROBE_COMPLETE
-V2-I    evaluation engine only — CALIBRATION FITTING NOT STARTED. ACTUAL_CALIBRATION_EVIDENCE =
-        NONE_YET; CALIBRATED is FORBIDDEN until real settled probabilistic samples exist in the DB.
 ```

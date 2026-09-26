@@ -50,7 +50,7 @@ W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊�
 
 ### W3：真實預測、到期結算與前向樣本
 
-**2026-09-25 狀態：W3.1 governance + W3.2 precommitted forward-cycle engines PASS；actual forward evidence 仍 NONE_YET。** 2H.3 已把 sample origin + label window 綁入 prediction identity；W3.2 已固定 OSAKA_MICRO/JNU 1-session baseline 的 precommit/settlement 時序與 Feature Store 契約。現場仍缺合格的 contract DAILY/PIT-safe input，所以沒有真實 forward prediction 被建立。
+**2026-09-26 狀態：W3.1 governance + W3.2 precommitted forward-cycle engine + C2.3 runtime adoption PASS；ACTUAL_FORWARD_EVIDENCE 仍 NONE_YET。** 2H.3 已把 sample origin + label window 綁入 prediction identity；C2.3 task 與 persistent safe-default quote owner 已採用。2026-09-26 非 OSE session，尚未產生第一筆新的合格 contract DAILY terminal-close forward evidence。
 
 建立最小的可運作研究循環，先一個直接商品、一個 horizon、一個簡單 baseline，再依同一契約擴展到各市場族群。不能把每個 callback 當獨立預測樣本。
 
@@ -58,9 +58,11 @@ forecast origin 前封存 prediction、model/version、完整參數、feature cu
 
 2I.1 指標引擎仍只吃 audit DB，現在由 2H.3 + W3.1 governance 先決定 eligible samples；evaluator 仍不能直接補 CSV。歷史來源可經合法 ingestion/replay 建立 audit artifact，但標為 `RETROSPECTIVE_REPLAY`，與真正預先封存的 `FORWARD_PRECOMMITTED` 分開；基礎模型訓練 cutoff 不明時揭露預訓練重疊風險。
 
-工程驗收已通過：未到期、evaluation_as_of 後才可得 outcome、未知來源、重複樣本、錯 model/version/event/label scope、錯 artifact pairing / superseded selection 會拒絕或排除；W3.2 另拒絕不具 PIT/source/contract/roll provenance 的 daily input、錯 precommit 時點與跨合約 settlement。**尚未完成的是 dedicated contract DAILY terminal-close feature 的真實來源與 forward 樣本自然累積，不得用 synthetic 測試代替。**
+工程驗收已通過：未到期、evaluation_as_of 後才可得 outcome、未知來源、重複樣本、錯 model/version/event/label scope、錯 artifact pairing / superseded selection 會拒絕或排除；W3.2 另拒絕不具 PIT/source/contract/roll provenance 的 daily input、錯 precommit 時點與跨合約 settlement。**程式與 runtime 已完成；尚未完成的是合格 real DAILY evidence 與 forward 樣本自然累積，不得用 synthetic 測試代替。**
 
 ### W4：校準與外樣本治理
+
+**2026-09-26 狀態：W4.1 governed calibration fitting engine MERGED_POSTMERGE_VERIFIED；real fitting 尚未開始，因目前沒有合格 EVENT_PROBABILITY forward evidence。ENGINE PASS 不等於 CALIBRATED。**
 
 先在看結果前凍結 protocol：chronological train → calibration → validation → untouched final OOS；rolling/expanding folds，以標籤重疊長度 purge/gap，不能用 random split 或僅按行數假定時間獨立。模型選擇、特徵處理、ensemble 權重與校準 fit 都不可看 final OOS。
 
@@ -74,7 +76,7 @@ forecast origin 前封存 prediction、model/version、完整參數、feature cu
 
 ### W5：Price Map + Probability Map
 
-沿用 `research/price_probability_map.py` 和 `config/zone_policy.yaml`。先完成 terminal distribution，再依資料能力建立 path event。Phase3B.1 目前 deferred，必須先核對 V2 foundation gate，採用正式變更流程後才解除。
+沿用 `research/price_probability_map.py` 和 `config/zone_policy.yaml`。**2026-09-26 W5.1 first-passage labeling 已 MERGED_POSTMERGE_VERIFIED**：跨 daily sessions 可判 `UPPER_FIRST / LOWER_FIRST / NEITHER`；同一 daily bar 雙觸及標 `AMBIGUOUS_WITHIN_DAILY_BAR`，gap/missing/provenance 不足不猜。FIRST_PASSAGE 已與 TOUCH 分離為獨立 audit/calibration family。公開百分比仍需各 event family 的 real CALIBRATED evidence。
 
 | 輸出 | 定義與限制 |
 |---|---|
@@ -94,6 +96,8 @@ skewness/fat-tail/多峰/regime 可以先作描述性診斷；附方法、樣本
 
 ### W6：Reward/Risk、情境及白話層
 
+**2026-09-26 狀態：既有 cost/slippage、NO_ECONOMIC_EDGE gate、WAIT/no-advice safe packet、stale/proxy/calibration fail-closed 均已落碼；W6 當前限制是證據層，不是缺少交易建議功能。**
+
 R/R 由同一情境的可能收益與損失計算，注明幣別、multiplier、entry 假設與成本。高 R/R 不等於正期望值；有中途退出、timeout、gap、兩側都觸及時，要用完整 exit policy，不套不適用的二元勝率公式。
 
 維持 OOS/forward 的 baseline/策略比較，加入 spread、滑價、fees、roll cost、成交可行性、最大回撤、tail loss、turnover、時間穩定度。若沒有正的穩健淨優勢，輸出 NO_ECONOMIC_EDGE；不能因底層預測偏多就推薦追價。
@@ -106,6 +110,8 @@ LLM 使用 compact safe packet：每項數字附可追溯 field/source ID；數�
 有證據後才允許：「根據某 model/version、某 horizon、N 個有效樣本與指定驗證期，上側先觸及機率為 …，估計誤差 …；若 … 則失效」。不能為符合使用者期待省略 N、期間或限制。
 
 ### W7：可移植重建與資料備份
+
+**2026-09-26 狀態：W7.1-W7.8 current-machine portability/backup cells 已 PASS；full fresh dependency install、clean new Windows、WinCred recreation、Yuanta certificate reimport/signature、new-machine COM registration 保持 `UNVERIFIED_EXTERNAL_GATE`。不得用本機成功冒充跨機驗收。**
 
 目標分層：
 

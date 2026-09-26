@@ -1,6 +1,6 @@
 schema: W7_PORTABILITY_ACCEPTANCE_V1
 updated_at: "2026-09-26"
-product_build_id: afd52f88a351541a
+product_build_id: d92e85fec3660b93
 scope_note: "Current-machine relocation evidence is not new-Windows certification."
 cells:
   non_repo_cwd:
@@ -47,4 +47,4 @@ cells:
     reason: "Current-machine DuckDB/SQLite/Parquet snapshot->verify->restore drill passed; live/** and backups/** are excluded."
   c2_3_live_runtime_reverification:
     status: WAITING_TIME_WINDOW
-    reason: "Requires a valid OSE maintenance window and exactly one controlled same-owner measurement."
+    reason: "Scheduled Task and persistent safe-default owner are adopted; first new typed C2.3 measurement still requires a valid OSE maintenance window and exactly one controlled same-owner measurement."

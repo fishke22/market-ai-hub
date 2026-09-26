@@ -4,13 +4,23 @@
 
 ## 1. 先讀這段
 
+### 2026-09-26 最新 W4.1 / W5.1 / runtime 結果
+
+W4.1 implementation=`5ec760a`，PR #61 CI=`36240929664` PASS，merged main=`54542a1443eee9a8a73a130b602abeba0fca941b`。W4 fitting 只接受 W3.1 governed、`FORWARD_PRECOMMITTED`、scope/model/event/distribution 同質的 `EVENT_PROBABILITY`。VALIDATION 只能產生 frozen `EVALUATED_UNCALIBRATED` candidate；獨立 `FINAL_OOS` 必須一次性消耗且不得重 fit，通過後才允許 `CALIBRATED` typed evidence。local CI-equivalent=`1942 passed, 7 skipped, 35 deselected`；post-merge smoke=`61 passed`。
+
+W5.1 implementation=`906a164`，PR #62 CI=`36241924593` PASS，merged main=`37abd2574e59443d6079e24ebc0a639d3713c51e`。新增 daily first-passage label：`UPPER_FIRST / LOWER_FIRST / NEITHER / AMBIGUOUS_WITHIN_DAILY_BAR`；同一 daily bar 雙觸及、gap、missing/provenance 不足一律不猜。`FIRST_PASSAGE` 已是獨立 audit outcome kind / label scope / calibration family，不再借用 TOUCH。cross-regression=`187 passed`；local CI-equivalent=`1950 passed, 7 skipped, 35 deselected`；post-merge smoke=`187 passed`。
+
+目前 `D:\MARKET_AI_HUB` main 已同步 W5 merge；product build=`d92e85fec3660b93`。RDC 已驗證 persistent safe-default owner：唯一 owner、heartbeat fresh、runtime=disk build、measurement gates=false、無 independent duplicate。C2.3 task Enabled、每 5 分鐘、Last Result=0。2026-09-26 非 OSE session，故仍未產生新 C2.3 DAILY evidence。
+
+重要真值：ENGINE PASS != DATA READY != CALIBRATED。Osaka 自動 baseline 仍是 POINT-only；`ACTUAL_FORWARD_EVIDENCE=NONE_YET`、`ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET`、market `CALIBRATED=FALSE`，沒有 trading-edge claim。
+
 ### 2026-09-26 最新 C2.3 自動化 / W3.2 operational cycle 結果
 
-Implementation commit=`b0a26f3`，source/config build 仍為 `35669ded63f487ed`。RDC 已解開先前 WebCodex 無法讀 private runtime 的不確定性：目前沒有 running owner；只有舊 raw `w33_tick_cbce3cba39291cd1f14e.json`，沒有 typed verification 目錄，因此不能離線補造 C2.3 evidence。
+Implementation commit=`b0a26f3`；PR #60 已通過 CI 並 merge。C2.3 task 已註冊且持續 Enabled；persistent safe-default owner 已完成 runtime adoption，後續並受控 handover 到 W5 build `d92e85fec3660b93`。舊 raw `w33_tick_cbce3cba39291cd1f14e.json` 仍不是可追溯升級的 typed verification evidence。
 
 本棒新增 fail-closed close-window orchestrator、5 分鐘 timezone-aware task registration、JNU watchdog maintenance yield、以及 broker-free W3.2 exact-JNU settle/precommit operator。只有 OSE session date 且 15:45–17:00 JST 才能進 maintenance；exact JNU 由既有 FunctionList resolver 決定；每交易日最多三次自動嘗試；成功必須先取得 persisted C2.3 typed evidence，才 materialize DAILY close，再 settle 舊 forward prediction / precommit 下一筆。stdout/state 都不公開價格。
 
-驗證：focused=`96 passed, 1 deselected`；broader=`198 passed, 2 deselected`；CI-equivalent full=`1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`，exit 0；compile、PowerShell dry-run/non-session、diff check、secret scan 全 PASS。今天非 OSE session，所以沒有送 measurement；ACTUAL_FORWARD_EVIDENCE 仍 NONE_YET。task 尚未註冊，persistent safe-default owner 尚未由 RDC 建立，需在 merge 後完成。
+驗證：focused=`96 passed, 1 deselected`；broader=`198 passed, 2 deselected`；CI-equivalent full=`1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`，exit 0；compile、PowerShell dry-run/non-session、diff check、secret scan 全 PASS。今天非 OSE session，所以沒有送 measurement；ACTUAL_FORWARD_EVIDENCE 仍 NONE_YET。task 與 persistent safe-default owner 均已完成 runtime adoption。
 
 ### 2026-09-26 最新 W3.2 persisted-artifact 結果
 
@@ -18,7 +28,7 @@ Implementation commit=`4decd79`，final feature head=`262729b`，PR #58 CI=`3623
 
 驗證：focused=`50 passed`；related=`103 passed`；full isolated offline=`1924 passed, 7 skipped, 35 deselected, 110 warnings in 81.50s`，exit 0；最後 CLI/operator focused=`6 passed`；diff check PASS；secret scan=0。沒有 broker action。
 
-先前 WebCodex 無法讀 private runtime artifact；本輪已依使用者指示改用 RDC 唯讀查核並確認：只有 historical raw、沒有 typed verification evidence。使用者已明確授權繼續施工；但今天不是 OSE session date，故仍不能合法產生新的 C2.3 typed evidence。ACTUAL_FORWARD_EVIDENCE=NONE_YET / CALIBRATION_FITTING_NOT_STARTED，continuous bars/TICK 仍不得冒充 DAILY。
+先前 WebCodex 無法讀 private runtime artifact；本輪已依使用者指示改用 RDC 唯讀查核並確認：只有 historical raw、沒有可 retroactively promotion 的 typed verification evidence。今天不是 OSE session date，故仍不能合法產生新的 C2.3 typed evidence。`ACTUAL_FORWARD_EVIDENCE=NONE_YET / W4_ENGINE_READY / REAL_CALIBRATION_FIT_NOT_STARTED`，continuous bars/TICK 仍不得冒充 DAILY。
 
 
 本專案已超過第一階段。公開 main 已有 Phase 2、多輪安全與資料語義修正、Price/Probability Map 基礎，以及 V2-A 至 V2-I 2I.1。不要把「第二階段施工」解讀成 V2-I 尚未存在，也不要重做它們。
