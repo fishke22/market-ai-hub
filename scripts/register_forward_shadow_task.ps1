@@ -7,6 +7,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $scriptPath = (Resolve-Path (Join-Path $root "scripts\run_daily_forward_cycle.ps1")).Path
 $taskName = "MARKET_AI_HUB_ForwardShadow_Manual"

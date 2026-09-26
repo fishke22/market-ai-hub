@@ -23,18 +23,23 @@ cells:
     evidence: W7.6
   full_dependency_install_fresh_venv:
     status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
     reason: "Would install external packages; requires separately authorized install validation."
   new_windows_clean_machine:
     status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
     reason: "No separate clean Windows machine has been validated."
   yuanta_wincred_recreation:
     status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
     reason: "Credentials are machine-local/private and must be recreated explicitly."
   yuanta_certificate_reimport:
     status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
     reason: "Certificate/private-key handling requires explicit user-controlled restoration."
   yuanta_com_registration_new_machine:
     status: UNVERIFIED_EXTERNAL_GATE
+    preflight: W8.3
     reason: "Proprietary OCX/COM registration has not been validated on a new machine."
   private_research_data_consistent_restore:
     status: PASS

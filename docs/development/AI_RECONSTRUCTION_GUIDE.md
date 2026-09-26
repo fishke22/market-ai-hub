@@ -3,6 +3,11 @@
 給未來 AI Agent（ChatGPT / Codex / Claude / DeepSeek / OpenCode）重建整套系統。不假設你讀過專案歷史。
 
 可移植性目前逐格 truth 先讀 `docs/development/W7_PORTABILITY_ACCEPTANCE.yaml`。其中 `PASS` 只代表該驗收格在其明示 scope 內已有證據；`UNVERIFIED_EXTERNAL_GATE`、`WAITING_TIME_WINDOW` 等未通過格不得被總結成「完整移機完成」。
+新 Windows / WinCred / certificate / COM / full dependency install 的只讀盤點可跑：
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check_external_relocation_gates.ps1 -Json
+```
+此工具永遠不會自行把 external gate 升成 PASS，也不安裝套件、不寫 WinCred、不匯入/匯出憑證、不註冊 COM、不登入券商。
 
 ## STEP 1 — Clone repository
 ```bash

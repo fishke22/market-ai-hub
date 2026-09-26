@@ -37,8 +37,8 @@ OSE Micro / JNU 是 JPX Futures，應走一般 Futures / SPARK 路徑。
 ```
 powershell -ExecutionPolicy Bypass -File scripts\check_yuanta_certificate.ps1
 ```
-- expected：`certificate_present: true`、`certificate_valid: true`。
-- failure：到元大憑證中心做「憑證簽驗」。
+- 這只做 generic Windows certificate-store preflight；`certificate_store_has_unexpired: true` **不等於**元大憑證已驗證。
+- 正式 acceptance：到元大憑證中心做「憑證簽驗」且成功；repo 腳本不會讀 subject/thumbprint/private key 來猜身份。
 
 ## 6. 安裝 SPARK prerequisites
 - .NET 8 x64（`dotnet --list-runtimes` 確認 8.x）。

@@ -199,6 +199,43 @@ def test_ci_pins_node24_actions_and_runner_image():
     assert "actions/setup-python@v5" not in workflow
 
 
+def test_yuanta_certificate_check_is_generic_store_only():
+    text = _read("scripts/check_yuanta_certificate.ps1")
+    assert "certificate_store_nonempty" in text
+    assert "certificate_store_has_unexpired" in text
+    assert "yuanta_certificate_identity_verified: false" in text
+    assert "yuanta_official_signature_verified: false" in text
+    assert "GENERIC_STORE_ONLY_REQUIRES_OFFICIAL_YUANTA_SIGNATURE_CHECK" in text
+    assert "certificate_present:" not in text
+    assert "certificate_valid:" not in text
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows relocation preflight")
+def test_external_relocation_preflight_is_read_only_and_cannot_close_external_gates():
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(ROOT / "scripts" / "check_external_relocation_gates.ps1"), "-Json"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout.lstrip("\ufeff"))
+    assert payload["schema"] == "EXTERNAL_RELOCATION_PREFLIGHT_V1"
+    assert payload["read_only"] is True
+    gates = payload["gates"]
+    assert set(gates) == {
+        "full_dependency_install_fresh_venv", "new_windows_clean_machine",
+        "yuanta_wincred_recreation", "yuanta_certificate_reimport",
+        "yuanta_com_registration_new_machine",
+    }
+    assert all(g["status"] == "UNVERIFIED_EXTERNAL_GATE" for g in gates.values())
+    cert = gates["yuanta_certificate_reimport"]
+    assert cert["yuanta_certificate_identity_verified"] is False
+    assert cert["yuanta_official_signature_verified"] is False
+    lowered = result.stdout.lower()
+    for forbidden in ("password", "thumbprint", "private key", "subject=", "account="):
+        assert forbidden not in lowered
+
+
 # --- 14: reconstruction required files ---
 def test_reconstruct_verify_is_independent_of_caller_cwd_and_uses_runtime_build_identity():
     text = _read("scripts/reconstruct_verify.ps1")

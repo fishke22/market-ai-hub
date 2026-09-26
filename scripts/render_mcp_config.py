@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,8 @@ def render(client: str, project_root: Path) -> dict:
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Render relocation-safe MARKET_AI_HUB MCP client config")
     parser.add_argument("--client", choices=sorted(TEMPLATES), default="generic")
     parser.add_argument("--project-root", default=str(ROOT))

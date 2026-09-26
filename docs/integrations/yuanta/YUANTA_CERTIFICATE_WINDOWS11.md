@@ -34,9 +34,10 @@ Chrome
 ```
 scripts\check_yuanta_certificate.ps1
 ```
-- 只檢查：有沒有可用憑證 / expiry / Windows store access。
-- **不** export private key、不顯示完整 subject / 身分證、不讀 private key。
-- 輸出：`certificate_present` / `certificate_valid` / `days_until_expiry`（PII 全遮罩）。
+- 這支腳本**只**檢查 `Cert:\CurrentUser\My` 是否可讀、是否非空、是否有未過期憑證與最早到期日。
+- 它**無法證明該憑證就是元大憑證**，也無法取代「元大期貨憑證中心 → 憑證簽驗」。
+- 固定輸出 `yuanta_certificate_identity_verified: false`、`yuanta_official_signature_verified: false`，直到外部官方簽驗另有證據。
+- **不** export private key、不顯示 subject / issuer / thumbprint / 身分證、不讀 private key。
 
 ## 憑證需求 matrix（不要寫過度廣泛）
 | 流程 | 憑證需求 |

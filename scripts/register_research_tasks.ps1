@@ -3,6 +3,8 @@
 param([switch]$DryRun)
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Py = (Resolve-Path (Join-Path $Root ".venv\Scripts\python.exe")).Path
 $WorkDir = $Root

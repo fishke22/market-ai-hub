@@ -155,7 +155,7 @@ UAT 另需營業員開固定 IP 防火牆。
 - private key / PFX / 憑證密碼不得進 Git、log、chat。
 - Windows SPARK `Login(Account,Pass)` 不由程式傳 PFX 路徑。
 - Linux/macOS 才依官方 Login contract 傳 PFX path/password。
-- repo 檢查工具：`scripts/check_yuanta_certificate.ps1`，只回報是否存在/有效，不輸出 subject、thumbprint 或 private key。
+- repo 檢查工具：`scripts/check_yuanta_certificate.ps1` 只回報 generic Windows certificate-store 狀態；它不輸出 subject、issuer、thumbprint 或 private key，也**不會把任意未過期憑證冒充成元大憑證已驗證**。正式身份/簽驗證據仍必須來自元大官方憑證中心。
 
 ## 6. MARKET_AI_HUB Windows Credential Manager
 
