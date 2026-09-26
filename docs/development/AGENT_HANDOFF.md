@@ -1,7 +1,7 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 research decision-support layer LOCAL_PASS on product build `e8dc080886d0b5a2`; W3.2-EP1/MCP/security is already merged in PR #64; real forward/event-probability evidence still NONE_YET pending valid OSE sessions.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 research decision-support MERGED_POSTMERGE_VERIFIED on product build `e8dc080886d0b5a2` via PR #65 / CI `36254359610`; CherryStudio stdio MCP smoke PASS; live quote recorder remains on prior build `72c6f533e5ae2341` pending explicit restart/handover authorization. Real forward/event-probability evidence still NONE_YET pending valid OSE sessions.
 
 ## Current repair checkpoint
 
@@ -13,7 +13,7 @@ The user-facing defect was semantic, not a request to weaken evidence gates. The
 
 The conditional action framework is research-only: wait for fresh Direct confirmation; if fresh Direct confirms the research lean, prioritize that research scenario; if it conflicts, cancel/reassess the lean; stale/missing data means refresh/wait. It never authorizes an order, personalized size, or invented exact entry/stop/target. CherryStudio prompt now requires `analyze_*` whenever the user asks prediction/direction/how-to-operate, so the agent cannot stop after gate inspection.
 
-Validation: focused decision-support tests=`37 passed`; actual Osaka public smoke PASS; final build-freeze=`3 passed`; full offline regression=`1966 passed, 1 skipped, 35 deselected, 110 warnings in 210.45s`, exit 0. Publication and post-merge runtime adoption are the remaining steps for this package.
+Validation: focused decision-support tests=`37 passed`; actual Osaka public smoke PASS; final build-freeze=`3 passed`; full offline regression=`1966 passed, 1 skipped, 35 deselected, 110 warnings in 210.45s`, exit 0. PR #65 clean-runner CI `36254359610` PASS and merged main as `f8c7a686af05c1c053d04b9f598a79182e4dada9`. Post-merge focused smoke=`37 passed`; direct CherryStudio-style stdio MCP health/analyze smoke loaded build `e8dc080886d0b5a2` and returned `SLIGHT_BULLISH_LEAN / WEAK_UNVALIDATED / PROXY_ONLY`. The persistent quote recorder is healthy/single-owner but still on `72c6f533e5ae2341`; no broker restart was performed because this user turn did not explicitly authorize one.
 
 ### 2026-09-26 W3.2-EP1 raw EVENT_PROBABILITY + Cherry/MCP closeout
 
