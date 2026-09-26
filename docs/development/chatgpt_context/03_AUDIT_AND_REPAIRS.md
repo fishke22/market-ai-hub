@@ -1,14 +1,22 @@
 # MARKET_AI_HUB 查核與實修報告
 
-查核開始：2026-09-24；最終交接：2026-09-25（Asia/Taipei）。應使用本報告的修補後狀態，不再把初版稽核反例當成現況。
+查核開始：2026-09-24；最新交接：2026-09-26（Asia/Taipei）。應使用本報告的修補後狀態，不再把初版稽核反例當成現況。
 
 原始修補基準 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b；後續 W1/W2/W3/JNU/reconnect 修補累積於 PR #55，已於 2026-09-26 merge 到 main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`。Merged build=`1037d45ff8e65884`；最終 docs-only CI `36231436018` PASS；post-merge reconnect+JNU smoke `29 passed, 21 deselected`。
+
+## 2026-09-26 W4.1/W5.1 correctness closure
+
+W4.1 implementation `5ec760a`, PR #61 CI `36240929664` PASS, merged `54542a1443eee9a8a73a130b602abeba0fca941b`. Fitting is fail-closed: only governed `FORWARD_PRECOMMITTED EVENT_PROBABILITY` data, homogeneous scope, purged non-overlapping windows, minimum sample/class/span gates, deterministic paired-bootstrap non-degradation, frozen validation candidate, one-use FINAL_OOS, no refit after final data. Synthetic tests prove engine behavior only.
+
+W5.1 implementation `906a164`, PR #62 CI `36241924593` PASS, merged `37abd2574e59443d6079e24ebc0a639d3713c51e`. It closes the path-event gap: first-passage labels can be derived from mature daily barriers across sessions, while same-bar double touch is `AMBIGUOUS_WITHIN_DAILY_BAR`. FIRST_PASSAGE is an independent audit outcome kind and calibration family. Cross-regression `187 passed`; CI-equivalent `1950 passed, 7 skipped, 35 deselected`; post-merge `187 passed`.
+
+RDC completed controlled live handover to build `d92e85fec3660b93` with one safe-default owner, fresh heartbeat, runtime=disk build, gates=false and no duplicate owner. C2.3 task remains Enabled and Last Result=0. No weekend measurement was sent. Therefore real forward/event-probability evidence remains NONE_YET and CALIBRATED/trading-edge claims remain forbidden.
 
 ## 2026-09-26 C2.3 automation correctness closure
 
 Implementation `b0a26f3` closes the remaining operational gap between typed C2.3 evidence and natural W3.2 forward-sample accumulation. RDC confirmed there is currently no usable typed verification artifact; the one historical raw artifact cannot be upgraded after the fact. The new orchestrator is controlled-window-only, single-owner, exact-JNU, metadata-only, capped at three attempts per trading date, and restores the safe-default quote owner after maintenance. The new W3.2 operator is broker-free and settles/precommits only the existing homogeneous OSAKA_MICRO/JNU forward scope from canonical Feature Store data. Queue-path output was changed from `Write-Host` to capturable stdout so orchestration cannot silently lose the request identity.
 
-Validation: focused `96 passed, 1 deselected`; broader `198 passed, 2 deselected`; CI-equivalent full `1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`; diff check PASS; changed/untracked secret scan 0; build unchanged `35669ded63f487ed`. No measurement was sent because 2026-09-26 is not an OSE session date. Runtime task registration and persistent-owner adoption remain post-merge gates.
+Validation: focused `96 passed, 1 deselected`; broader `198 passed, 2 deselected`; CI-equivalent full `1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`; diff check PASS; changed/untracked secret scan 0. No measurement was sent because 2026-09-26 is not an OSE session date. PR #60 is merged; C2.3 Scheduled Task and the persistent safe-default quote owner are now runtime-adopted, with the owner later handed over to W5 build `d92e85fec3660b93`.
 
 ## 基準與查核範圍
 
