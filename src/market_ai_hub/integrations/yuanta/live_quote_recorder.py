@@ -31,10 +31,15 @@ from market_ai_hub.integrations.yuanta.credential_store import (
 from market_ai_hub.integrations.yuanta.function_list import load_stock_code_rows
 from market_ai_hub.integrations.yuanta.resolver import function_list_path
 from market_ai_hub.integrations.yuanta.spark_runtime import SparkRuntime
+from market_ai_hub.integrations.yuanta.durable_spool import (
+    DurableQuoteSpool, DurableSpoolError, canonical_bytes,
+    durable_json_replace, durable_replace, sha256_hex,
+)
 
 CONFIG_PATH = project_root() / "config" / "yuanta_live_recorder.yaml"
 _SYMBOL_RE = re.compile(r"^[A-Za-z0-9_./-]{1,40}$")
 _JNU_CONTRACT_RE = re.compile(r"^JNU\d{4}$")
+_DURABLE_BATCH_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _QUOTE_FIELDS = (
     "YstPrice", "OpenRefPrice", "UpStopPrice", "DownStopPrice", "YstVol",
     "OpenPrice", "HighPrice", "LowPrice", "BuyPrice", "SellPrice", "DealPrice",
@@ -147,36 +152,87 @@ def _single_instance(root: Path):
 
 
 class QuoteBuffer:
-    """Bounded callback handoff. Failed writes keep the unacknowledged batch."""
+    """Bounded handoff; optional durable spool is the pending-record source of truth."""
 
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, spool: DurableQuoteSpool | None = None):
         if capacity < 1:
             raise ValueError("buffer capacity must be positive")
         self.capacity = capacity
+        self.spool = spool
         self.records = deque()
         self.lock = threading.Lock()
         self.dropped = 0
         self.latest = {}
+        self.spool_error: str | None = None
+        if self.spool is not None:
+            for record in self.spool.peek(self.spool.max_records):
+                self._merge_latest(record.payload)
 
-    def append(self, payload: dict) -> None:
+    def _merge_latest(self, payload: dict) -> None:
+        key = f"{payload['market_no']}:{payload['instrument_code']}"
+        self.latest[key] = _merge_quote(self.latest.get(key, {}), payload)
+
+    def append(self, payload: dict) -> bool:
+        if self.spool is not None:
+            try:
+                self.spool.append(payload)
+            except (DurableSpoolError, OSError, ValueError) as exc:
+                with self.lock:
+                    self.dropped += 1
+                    self.spool_error = type(exc).__name__
+                return False
+            with self.lock:
+                self._merge_latest(payload)
+            return True
         with self.lock:
-            key = f"{payload['market_no']}:{payload['instrument_code']}"
-            self.latest[key] = _merge_quote(self.latest.get(key, {}), payload)
+            self._merge_latest(payload)
             if len(self.records) >= self.capacity:
                 self.dropped += 1
-            else:
-                self.records.append(payload)
+                return False
+            self.records.append(payload)
+            return True
 
     def snapshot(self):
         with self.lock:
-            return dict(self.latest), len(self.records), self.dropped
+            latest = dict(self.latest)
+            dropped = self.dropped
+        if self.spool is not None:
+            return latest, self.spool.stats()["pending_records"], dropped
+        with self.lock:
+            return latest, len(self.records), dropped
+
+    def durability_status(self) -> dict:
+        if self.spool is None:
+            return {"mode": "BUFFERED_NOT_ZERO_LOSS", "spool_error": None}
+        return {
+            "mode": "DURABLE_SPOOL_FSYNC_BEFORE_ACCEPT",
+            "spool_error": self.spool_error,
+            **self.spool.stats(),
+        }
 
     def flush(self, root: Path, batch_size: int = 100000) -> str | None:
+        if self.spool is not None:
+            batch = self.spool.peek(batch_size)
+            if not batch:
+                return None
+            batch_id = self.spool.batch_id(batch)
+            rows = [
+                {**item.payload, "_wal_seq": item.seq, "_wal_record_sha256": item.payload_sha256}
+                for item in batch
+            ]
+            result = _write_parquet(root, rows, batch_id=batch_id)
+            try:
+                self.spool.ack_through(batch[-1].seq, batch_id=batch_id)
+            except (DurableSpoolError, OSError) as exc:
+                with self.lock:
+                    self.spool_error = type(exc).__name__
+                raise
+            return result
         with self.lock:
             batch = list(self.records)[:batch_size]
         if not batch:
             return None
-        result = _write_parquet(root, batch)  # exceptions propagate; no ack on failure
+        result = _write_parquet(root, batch)
         with self.lock:
             for _ in batch:
                 self.records.popleft()
@@ -656,21 +712,84 @@ def _dynamic_requests(root: Path, cfg: dict, rt: SparkRuntime, account: str,
     return False
 
 
-def _write_parquet(root: Path, records: list[dict]) -> str | None:
+def _durable_batch_manifest(path: Path, batch_id: str, records: list[dict]) -> dict:
+    received = [str(x.get("received_at")) for x in records if x.get("received_at")]
+    return {
+        "version": 1,
+        "status": "COMMITTED",
+        "batch_id": batch_id,
+        "record_count": len(records),
+        "first_received_at": min(received) if received else None,
+        "last_received_at": max(received) if received else None,
+        "input_sha256": sha256_hex(canonical_bytes(records)),
+        "parquet_sha256": sha256_hex(path.read_bytes()),
+        "schema": sorted({key for record in records for key in record}),
+    }
+
+
+def _write_parquet(root: Path, records: list[dict], *, batch_id: str | None = None) -> str | None:
     if not records:
         return None
     import pandas as pd
     from uuid import uuid4
+
     out = root / "parquet" / _utcnow().strftime("%Y-%m-%d")
     out.mkdir(parents=True, exist_ok=True)
-    p = out / ("part-" + uuid4().hex + ".parquet")
+    if batch_id is not None and not _DURABLE_BATCH_RE.fullmatch(batch_id):
+        raise ValueError("invalid durable batch id")
+    name = ("part-" + batch_id) if batch_id is not None else ("part-" + uuid4().hex)
+    p = out / (name + ".parquet")
     tmp = p.with_suffix(".partial")
+    manifest = out / (name + ".manifest.json")
+    failed = out / (name + ".failed.json")
+
     try:
+        if batch_id is not None and manifest.exists():
+            if not p.exists():
+                raise RuntimeError("durable batch manifest exists without parquet")
+            frame = pd.read_parquet(p)
+            if "_wal_seq" not in frame or "_wal_record_sha256" not in frame:
+                raise RuntimeError("existing durable batch lacks WAL identity")
+            actual = list(zip(frame["_wal_seq"].astype(int), frame["_wal_record_sha256"].astype(str)))
+            expected = [(int(x["_wal_seq"]), str(x["_wal_record_sha256"])) for x in records]
+            if actual != expected:
+                raise RuntimeError("existing durable batch identity mismatch")
+            expected_manifest = _durable_batch_manifest(p, batch_id, records)
+            observed = json.loads(manifest.read_text(encoding="utf-8"))
+            for key in ("status", "batch_id", "record_count", "input_sha256", "parquet_sha256"):
+                if observed.get(key) != expected_manifest.get(key):
+                    raise RuntimeError("durable batch manifest mismatch")
+            failed.unlink(missing_ok=True)
+            return str(p)
+        # Parquet without a committed manifest is an interrupted publish. Rewrite the
+        # same deterministic path from WAL before committing the manifest.
+
         pd.DataFrame(records).to_parquet(tmp, index=False)
-        os.replace(tmp, p)
+        with tmp.open("rb+") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        durable_replace(tmp, p)
+        if batch_id is not None:
+            durable_json_replace(manifest, _durable_batch_manifest(p, batch_id, records))
+            failed.unlink(missing_ok=True)
+        return str(p)
+    except Exception as exc:
+        if batch_id is not None:
+            try:
+                durable_json_replace(failed, {
+                    "version": 1,
+                    "status": "FAILED",
+                    "batch_id": batch_id,
+                    "record_count": len(records),
+                    "input_sha256": sha256_hex(canonical_bytes(records)),
+                    "error_type": type(exc).__name__,
+                    "failed_at": _utcnow().isoformat(),
+                })
+            except Exception:
+                pass
+        raise
     finally:
         tmp.unlink(missing_ok=True)
-    return str(p)
 
 
 def run(
@@ -711,6 +830,28 @@ def _run_locked(
     rec = cfg["recording"]
     status_path = _within(root, str(cfg["storage"].get("status_file", "status.json")))
     latest_path = _within(root, str(cfg["storage"].get("latest_file", "latest.json")))
+    started_at = _utcnow()
+    spool_cfg = cfg.get("durable_spool", {})
+    spool = None
+    if spool_cfg.get("enabled", False):
+        try:
+            spool = DurableQuoteSpool(
+                _within(root, str(spool_cfg.get("dir", "spool"))),
+                max_bytes=int(spool_cfg.get("max_bytes", 268435456)),
+                max_records=int(spool_cfg.get("max_records", rec.get("max_buffer_records", 100000))),
+            )
+        except Exception as exc:
+            _atomic_json(status_path, {
+                "status": "START_FAILED",
+                "pid": os.getpid(),
+                "started_at": started_at.isoformat(),
+                "stopped_at": _utcnow().isoformat(),
+                "runtime_build_id": runtime_build_id,
+                "startup_stage": "SPOOL_RECOVERY",
+                "fatal_error": type(exc).__name__,
+                "crash_durability": "DURABLE_SPOOL_FAIL_CLOSED",
+            })
+            return 1
     from market_ai_hub.integrations.yuanta.order_api_guard import OrderApiExposureGuard
     if OrderApiExposureGuard().scan()["gate"] != "PASS":
         raise RuntimeError("OrderApiExposureGuard failed")
@@ -718,7 +859,6 @@ def _run_locked(
     secret = read_profile_password("securities")
     if cred is None or not secret:
         raise RuntimeError("SPARK securities credential unavailable")
-    started_at = _utcnow()
     defaults = resolve_default_subscriptions(cfg, asof=started_at)
     if len(defaults) > 2000:
         raise ValueError("total subscription limit")
@@ -726,7 +866,7 @@ def _run_locked(
     default_subscribed = {(m, s): k for m, s, k in defaults}
     subscribed = dict(default_subscribed)
     dynamic_subscribed: set[tuple[int, str]] = set()
-    buffer = QuoteBuffer(int(rec.get("max_buffer_records", 100000)))
+    buffer = QuoteBuffer(int(rec.get("max_buffer_records", 100000)), spool=spool)
     write_error = None
     revalidation_interval = float(
         rec.get("subscription_revalidation_seconds", _DEFAULT_SUBSCRIPTION_REVALIDATION_SECONDS)
@@ -748,6 +888,7 @@ def _run_locked(
     last_latest = last_parquet = last_status = 0.0
 
     def write_startup_status(stage: str) -> None:
+        durability = buffer.durability_status()
         _atomic_json(status_path, {
             "status": "STARTING",
             "pid": os.getpid(),
@@ -755,6 +896,11 @@ def _run_locked(
             "started_at": started_at.isoformat(),
             "startup_stage": stage,
             "runtime_build_id": runtime_build_id,
+            "crash_durability": durability["mode"],
+            "spool_pending_records": durability.get("pending_records"),
+            "spool_pending_bytes": durability.get("pending_bytes"),
+            "spool_acked_seq": durability.get("acked_seq"),
+            "spool_error": durability.get("spool_error"),
             "tick_detail_measurements_runtime_enabled": bool(
                 cfg.get("tick_detail_measurements", {}).get("enabled", False)
             ),
@@ -763,6 +909,11 @@ def _run_locked(
 
     write_startup_status(startup_stage)
     try:
+        if spool is not None and buffer.snapshot()[1]:
+            startup_stage = "SPOOL_REPLAY"
+            write_startup_status(startup_stage)
+            while buffer.snapshot()[1]:
+                buffer.flush(root)
         startup_stage = "INSTANTIATE"
         write_startup_status(startup_stage)
         rt.instantiate()
@@ -805,6 +956,10 @@ def _run_locked(
             if connection["faulted"]:
                 startup_stage = "RUNNING_CONNECTION_FAULT"
                 raise ConnectionError("SPARK connection fault")
+            durability = buffer.durability_status()
+            if durability.get("spool_error"):
+                startup_stage = "RUNNING_SPOOL_FAULT"
+                raise OSError("durable quote spool append/ack failed")
             now = time.time()
             if _dynamic_requests(
                 root, cfg, rt, cred.username, subscribed, dynamic_subscribed,
@@ -839,7 +994,9 @@ def _run_locked(
                 reasons = []
                 if write_error:
                     reasons.append("PERSISTENCE_ERROR")
-                if dropped:
+                if durability.get("spool_error"):
+                    reasons.append("DURABLE_SPOOL_ERROR")
+                elif dropped:
                     reasons.append("BUFFER_OVERFLOW")
                 if age is None or age > 60:
                     reasons.append("NO_RECENT_CALLBACK_SESSION_UNCHECKED")
@@ -855,7 +1012,12 @@ def _run_locked(
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "connection_event_state": connection["state"],
                     "connection_event_code": connection["system_code"],
-                    "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
+                    "restart_policy": "MANUAL_SINGLE_OWNER",
+                    "crash_durability": durability["mode"],
+                    "spool_pending_records": durability.get("pending_records"),
+                    "spool_pending_bytes": durability.get("pending_bytes"),
+                    "spool_acked_seq": durability.get("acked_seq"),
+                    "spool_error": durability.get("spool_error"),
                     "subscription_revalidation_basis": "PERIODIC_VENUE_LOCAL_DATE",
                     "subscription_revalidation_interval_seconds": revalidation_interval,
                     "subscription_revalidation_attempted_at": revalidation_attempted_at,
@@ -897,9 +1059,10 @@ def _run_locked(
             write_error = None
         except Exception as exc:
             write_error = type(exc).__name__
+        durability = buffer.durability_status()
         _atomic_json(status_path, {
             "status": (
-                ("RUNTIME_FAILED" if startup_stage == "RUNNING_CONNECTION_FAULT" else "START_FAILED")
+                ("RUNTIME_FAILED" if startup_stage.startswith("RUNNING") else "START_FAILED")
                 if fatal_error
                 else ("STOPPED_WITH_UNFLUSHED_DATA" if write_error else "STOPPED")
             ),
@@ -911,6 +1074,11 @@ def _run_locked(
             "connection_event_state": connection["state"],
             "connection_event_code": connection["system_code"],
             "connection_faulted": connection["faulted"],
+            "crash_durability": durability["mode"],
+            "spool_pending_records": durability.get("pending_records"),
+            "spool_pending_bytes": durability.get("pending_bytes"),
+            "spool_acked_seq": durability.get("acked_seq"),
+            "spool_error": durability.get("spool_error"),
             "tick_detail_measurements_runtime_enabled": bool(
                 cfg.get("tick_detail_measurements", {}).get("enabled", False)
             ),

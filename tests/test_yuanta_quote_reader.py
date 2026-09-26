@@ -1,12 +1,14 @@
 """Offline W2 reader/replay tests. No broker/SDK/login operations."""
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 
 import pandas as pd
 import pytest
 import yaml
 
 from market_ai_hub.research.v2.prediction_audit import lineage_from_observation
+from market_ai_hub.integrations.yuanta import live_quote_recorder as R
 
 from market_ai_hub.integrations.yuanta.quote_reader import (
     QuoteReaderError,
@@ -155,6 +157,36 @@ def test_partial_file_write_failure_and_overflow_are_rejected(tmp_path):
     with pytest.raises(QuoteReaderError, match="BUFFER_OVERFLOW"):
         quote_to_factor_observation(_quote(), field_kind="trade", asof=ASOF,
                                     recorder_status={"dropped_records": 1}, config_path=cfg)
+
+
+def test_durable_parquet_requires_committed_manifest(tmp_path):
+    cfg = _config(tmp_path)
+    row = {**_quote(), "_wal_seq": 1, "_wal_record_sha256": "a" * 64}
+    p = tmp_path / "part-wal-test.parquet"
+    pd.DataFrame([row]).to_parquet(p, index=False)
+    with pytest.raises(QuoteReaderError, match="DURABLE_BATCH_MANIFEST_MISSING"):
+        replay_parquet(p, field_kind="trade", asof=ASOF, config_path=cfg)
+
+
+def test_durable_parquet_with_valid_manifest_replays(tmp_path):
+    cfg = _config(tmp_path)
+    row = {**_quote(), "_wal_seq": 1, "_wal_record_sha256": "a" * 64}
+    p = R._write_parquet(tmp_path, [row], batch_id="wal-test")
+    out = replay_parquet(Path(p), field_kind="trade", asof=ASOF, config_path=cfg)
+    assert len(out) == 1
+    assert out[0].contract_code == "JNUPM2612"
+
+
+def test_durable_parquet_manifest_hash_mismatch_rejected(tmp_path):
+    cfg = _config(tmp_path)
+    row = {**_quote(), "_wal_seq": 1, "_wal_record_sha256": "a" * 64}
+    p = Path(R._write_parquet(tmp_path, [row], batch_id="wal-test"))
+    manifest_path = p.with_name(p.stem + ".manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["parquet_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(QuoteReaderError, match="DURABLE_BATCH_MANIFEST_INVALID"):
+        replay_parquet(p, field_kind="trade", asof=ASOF, config_path=cfg)
 
 
 def test_out_of_order_parquet_receipts_rejected(tmp_path):

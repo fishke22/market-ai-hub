@@ -296,6 +296,47 @@ def read_latest(
     return out
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_durable_batch(parquet_path: Path, frame: pd.DataFrame) -> None:
+    wal_columns = {"_wal_seq", "_wal_record_sha256"}
+    present = wal_columns.intersection(frame.columns)
+    if not present:
+        return
+    if present != wal_columns:
+        raise QuoteReaderError("DURABLE_BATCH_WAL_IDENTITY_INCOMPLETE")
+    manifest_path = parquet_path.with_name(parquet_path.stem + ".manifest.json")
+    if not manifest_path.exists():
+        raise QuoteReaderError("DURABLE_BATCH_MANIFEST_MISSING")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        expected_batch = parquet_path.stem.removeprefix("part-")
+        if manifest.get("status") != "COMMITTED":
+            raise ValueError("status")
+        if manifest.get("batch_id") != expected_batch:
+            raise ValueError("batch_id")
+        if int(manifest.get("record_count", -1)) != len(frame):
+            raise ValueError("record_count")
+        if manifest.get("parquet_sha256") != _file_sha256(parquet_path):
+            raise ValueError("parquet_sha256")
+        seqs = frame["_wal_seq"].astype(int).tolist()
+        if seqs and seqs != list(range(seqs[0], seqs[-1] + 1)):
+            raise ValueError("wal_sequence")
+        hashes = frame["_wal_record_sha256"].astype(str).tolist()
+        if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in hashes):
+            raise ValueError("wal_hash")
+    except QuoteReaderError:
+        raise
+    except Exception as exc:
+        raise QuoteReaderError("DURABLE_BATCH_MANIFEST_INVALID") from exc
+
+
 def replay_parquet(
     parquet_path: Path,
     *,
@@ -307,6 +348,7 @@ def replay_parquet(
     if parquet_path.suffix.lower() != ".parquet":
         raise QuoteReaderError("PARTIAL_OR_UNSUPPORTED_FILE")
     frame = pd.read_parquet(parquet_path)
+    _validate_durable_batch(parquet_path, frame)
     rows = frame.where(pd.notna(frame), None).to_dict("records")
     out: list[FactorRepresentationObservation] = []
     last_receipt: dict[tuple[int, str, str], datetime] = {}
