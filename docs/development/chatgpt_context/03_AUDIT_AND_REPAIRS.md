@@ -2,7 +2,7 @@
 
 查核開始：2026-09-24；最終交接：2026-09-25（Asia/Taipei）。應使用本報告的修補後狀態，不再把初版稽核反例當成現況。
 
-修補 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b（最終程式/安裝/測試基準；後續純文件 commit 見 PR）；PR：https://github.com/fishke22/market-ai-hub/pull/55（OPEN，尚未合併 main）；CI：PASS：1679 passed、15 skipped、34 deselected、110 warnings，48.76s；https://github.com/fishke22/market-ai-hub/actions/runs/36025129753；對應實作 commit 40fd77a；remote：codex/quote-hub-correctness 已推送並核對實作 SHA；main 基準仍為 eb9202a。
+原始修補基準 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b；後續 W1/W2/W3/JNU/reconnect 修補累積於 PR #55，已於 2026-09-26 merge 到 main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`。Merged build=`1037d45ff8e65884`；最終 docs-only CI `36231436018` PASS；post-merge reconnect+JNU smoke `29 passed, 21 deselected`。
 
 ## 基準與查核範圍
 
@@ -89,7 +89,7 @@
 
 ## 2026-09-26 W1 bounded reconnect checkpoint
 
-Reconnect branch was reconciled with JNU base commit `23504cf`; merged commit=`4978f59`, build=`1037d45ff8e65884`. Merged OFFLINE PASS: focused `29 passed, 21 deselected`, related `150 passed, 2 deselected`, full `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`. PR #56 is MERGED into the feature base and PR #55 CI `36230804948` PASS. Tracked auto reconnect remains disabled; live adoption is not established.
+Reconnect branch was reconciled with JNU base `23504cf`; merged implementation=`4978f59`, build=`1037d45ff8e65884`. Merged OFFLINE PASS: focused `29 passed, 21 deselected`, related `150 passed, 2 deselected`, full `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`. PR #55 merged to main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`; final CI `36231436018` PASS; post-merge focused smoke `29 passed, 21 deselected`. Tracked auto reconnect remains disabled; live adoption is not established.
 
 ## 尚未完成，不能誤報已修好
 
@@ -106,4 +106,4 @@ Reconnect branch was reconciled with JNU base commit `23504cf`; merged commit=`4
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對 PR #55 最新 head/CI 與 main merge 狀態。merged offline 與 CI 都已 PASS；工作包進入 review/merge-to-main readiness。tracked auto reconnect 維持 disabled，live enable/restart/re-login 仍需另行明確授權。
+下一棒進入 W3.2 dedicated contract DAILY terminal-close feature：先核對免費/既有來源與 JNU raw capture，建立 contract-specific DAILY/PIT-safe source/ingestion/aggregation contract，驗 available_at <= cutoff、同 contract/month/roll、terminal-close semantics；禁止 continuous bars/TICK 冒充。tracked auto reconnect 維持 disabled，live enable/restart/re-login 仍需另行明確授權。
