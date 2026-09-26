@@ -41,7 +41,7 @@ V2_PREDICTION_AUDIT_SCHEMA_VERSION = "2H.3"
 PREDICTION_STATUSES = ("PENDING", "SUPERSEDED", "VOID")
 PREDICTION_SAMPLE_ORIGINS = ("FORWARD_PRECOMMITTED", "RETROSPECTIVE_REPLAY", "UNKNOWN")
 LINEAGE_AVAILABILITY = ("AVAILABLE", "NOT_AVAILABLE", "EXTERNAL_ENTITLEMENT_BLOCKED", "UNKNOWN")
-OUTCOME_KINDS = ("RETURN", "STATE", "DIRECTION", "TOUCH", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM")
+OUTCOME_KINDS = ("RETURN", "STATE", "DIRECTION", "TOUCH", "FIRST_PASSAGE", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM")
 
 FORECAST_ARTIFACT_TYPES = ("POINT", "QUANTILE", "INTERVAL", "CLASS_SCORE",
                            "EVENT_PROBABILITY", "STATE", "NOT_AVAILABLE")
@@ -76,7 +76,7 @@ _ARTIFACT_OUTCOME_KINDS = {
     "QUANTILE": {"RETURN", "TERMINAL", "CUSTOM"},
     "INTERVAL": {"RETURN", "TERMINAL", "CUSTOM"},
     "CLASS_SCORE": {"DIRECTION", "STATE", "CUSTOM"},
-    "EVENT_PROBABILITY": {"TOUCH", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM"},
+    "EVENT_PROBABILITY": {"TOUCH", "FIRST_PASSAGE", "BREAK", "ACCEPTANCE", "TERMINAL", "CUSTOM"},
     "STATE": {"STATE", "CUSTOM"},
     "NOT_AVAILABLE": set(),
 }
@@ -89,7 +89,7 @@ _DT_FIELDS = ("forecast_origin", "feature_cutoff_timestamp", "label_window_start
 def label_scope(label_type: str) -> str:
     """TOUCH / TERMINAL / DIRECTION / STATE scope token（TOUCH != TERMINAL）。"""
     t = (label_type or "").upper()
-    for token in ("TOUCH", "BREAK", "ACCEPT", "TERMINAL", "RETURN", "DIRECTION", "STATE"):
+    for token in ("FIRST_PASSAGE", "TOUCH", "BREAK", "ACCEPT", "TERMINAL", "RETURN", "DIRECTION", "STATE"):
         if token in t:
             return "ACCEPTANCE" if token == "ACCEPT" else ("TERMINAL" if token == "RETURN" else token)
     return "UNKNOWN"
@@ -866,7 +866,7 @@ class PredictionAuditDB:
 def v2_schema_versions() -> dict[str, str]:
     """Assemble the actual V2 schema versions (no hardcoding)."""
     from market_ai_hub.research.v2 import (
-        asof, calibration_evaluation, calibration_fitting, catalyst_response, evaluation_governance,
+        asof, calibration_evaluation, calibration_fitting, catalyst_response, evaluation_governance, first_passage,
         extension_exhaustion, factor_representation, forward_cycle, gap_session, labels,
         sequential_update, session_truth, state_machine, tick_detail_source,
     )
@@ -876,6 +876,7 @@ def v2_schema_versions() -> dict[str, str]:
         "factor_routing": factor_representation.V2_FACTOR_ROUTING_SCHEMA_VERSION,
         "gap_session": gap_session.V2_GAP_SESSION_SCHEMA_VERSION,
         "daily_labels": labels.V2_DAILY_LABEL_SCHEMA_VERSION,
+        "first_passage": first_passage.W5_FIRST_PASSAGE_SCHEMA_VERSION,
         "state_machine": state_machine.V2_STATE_MACHINE_SCHEMA_VERSION,
         "extension_exhaustion": extension_exhaustion.V2_EXTENSION_EXHAUSTION_SCHEMA_VERSION,
         "catalyst_response": catalyst_response.V2_CATALYST_RESPONSE_SCHEMA_VERSION,

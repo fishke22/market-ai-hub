@@ -65,7 +65,7 @@ NON_BLOCKING_PAIRING_REJECTIONS = frozenset({
 PROBABILITY_TYPE_OUTCOME_KINDS: dict[str, frozenset[str]] = {
     "TERMINAL": frozenset({"TERMINAL"}),
     "TOUCH": frozenset({"TOUCH"}),
-    "FIRST_PASSAGE": frozenset({"TOUCH"}),
+    "FIRST_PASSAGE": frozenset({"FIRST_PASSAGE"}),
     "BREAK": frozenset({"BREAK"}),
     "ACCEPTANCE": frozenset({"ACCEPTANCE"}),
     "DIRECTION": frozenset({"DIRECTION"}),
