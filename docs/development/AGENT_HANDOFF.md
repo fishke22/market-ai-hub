@@ -1,13 +1,13 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion OFFLINE PASS; implementation=`4decd79`; build=`35669ded63f487ed`; REAL_DAILY_INPUT_NOT_REVERIFIED.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion MERGED to main; PR #58 CI `36234063403` PASS; merge=`da73dd288971520e2c765f6660b7d329b89ac79e`; build=`35669ded63f487ed`; REAL_DAILY_INPUT_NOT_REVERIFIED.
 
 ## Current repair checkpoint
 
 ### 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion
 
-Implementation commit `4decd79`; source/config build=`35669ded63f487ed`. The existing C2/W3.2 materializer already enforced runtime-verified OSE timestamp basis, near-close trade evidence, exact JNU contract/month binding, PIT `available_at`, contract series semantics, and canonical Feature Store `terminal_close / w3.2-contract-daily-close-1`. This package closes the operator gap: `materialize_ose_terminal_close_from_artifacts()` reloads and revalidates the persisted raw/evidence pair and derives contract month from the JNU code; callers cannot supply a close price.
+Implementation commit `4decd79`; final feature head `262729b`; PR #58 CI run `36234063403` PASS; merged to main as `da73dd288971520e2c765f6660b7d329b89ac79e`. Post-merge tree equals the validated head and operator smoke=`6 passed`. Source/config build=`35669ded63f487ed`. The existing C2/W3.2 materializer already enforced runtime-verified OSE timestamp basis, near-close trade evidence, exact JNU contract/month binding, PIT `available_at`, contract series semantics, and canonical Feature Store `terminal_close / w3.2-contract-daily-close-1`. This package closes the operator gap: `materialize_ose_terminal_close_from_artifacts()` reloads and revalidates the persisted raw/evidence pair and derives contract month from the JNU code; callers cannot supply a close price.
 
 New offline CLI `scripts/materialize_ose_terminal_close.py` accepts only explicit raw/evidence artifact paths plus an optional expected contract code. Paths are confined to the canonical recorder root, missing/empty/outside-root paths fail closed, and stdout exposes metadata/status only (`values_exposed=false`) without the close value. The canonical Feature Store continues to resolve through `MARKET_AI_DATA_ROOT`. Tampered raw snapshots, mismatched expected contracts, invalid evidence binding, and path escape are rejected before feature materialization.
 
