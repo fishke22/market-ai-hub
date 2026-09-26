@@ -771,7 +771,8 @@ def _run_locked(
         rt.open_prod()
         startup_stage = "WAIT_CONNECTED"
         write_startup_status(startup_stage)
-        rt.wait_connected(timeout=15.0)
+        if not rt.wait_connected(timeout=15.0):
+            raise ConnectionError("SPARK connection was not established")
         startup_stage = "LOGIN_REQUEST"
         write_startup_status(startup_stage)
         rt.login(cred.username, secret)
@@ -800,6 +801,10 @@ def _run_locked(
         startup_stage = "RUNNING"
         while True:
             rt.pump(0.2)
+            connection = rt.connection_snapshot()
+            if connection["faulted"]:
+                startup_stage = "RUNNING_CONNECTION_FAULT"
+                raise ConnectionError("SPARK connection fault")
             now = time.time()
             if _dynamic_requests(
                 root, cfg, rt, cred.username, subscribed, dynamic_subscribed,
@@ -848,6 +853,8 @@ def _run_locked(
                     "health_reasons": reasons, "pending_records": pending, "dropped_records": dropped,
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
+                    "connection_event_state": connection["state"],
+                    "connection_event_code": connection["system_code"],
                     "restart_policy": "MANUAL_SINGLE_OWNER", "crash_durability": "BUFFERED_NOT_ZERO_LOSS",
                     "subscription_revalidation_basis": "PERIODIC_VENUE_LOCAL_DATE",
                     "subscription_revalidation_interval_seconds": revalidation_interval,
@@ -877,6 +884,7 @@ def _run_locked(
         exit_code = 1
     finally:
         secret = None
+        connection = rt.connection_snapshot()
         # Recorder lifetime owns the login. Agents never logout it. Process/OS exit closes the socket.
         try:
             rt.close()
@@ -891,7 +899,8 @@ def _run_locked(
             write_error = type(exc).__name__
         _atomic_json(status_path, {
             "status": (
-                "START_FAILED" if fatal_error
+                ("RUNTIME_FAILED" if startup_stage == "RUNNING_CONNECTION_FAULT" else "START_FAILED")
+                if fatal_error
                 else ("STOPPED_WITH_UNFLUSHED_DATA" if write_error else "STOPPED")
             ),
             "pid": os.getpid(), "stopped_at": _utcnow().isoformat(),
@@ -899,6 +908,9 @@ def _run_locked(
             "startup_stage": startup_stage,
             "fatal_error": fatal_error,
             "login_msg_code": login_msg_code,
+            "connection_event_state": connection["state"],
+            "connection_event_code": connection["system_code"],
+            "connection_faulted": connection["faulted"],
             "tick_detail_measurements_runtime_enabled": bool(
                 cfg.get("tick_detail_measurements", {}).get("enabled", False)
             ),

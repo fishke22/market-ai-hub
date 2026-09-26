@@ -200,4 +200,4 @@ def test_sample_size_report():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "b571449004691eac"
+    assert build_fingerprint()["build_id"] == "1ff1c2adb6bc21bf"

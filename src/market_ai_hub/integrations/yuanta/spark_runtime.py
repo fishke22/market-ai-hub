@@ -29,6 +29,26 @@ MSG_EXEC_FAILED = "0000"
 MSG_PASSWORD_FROZEN = "0102"
 MSG_PERMISSION_UNAVAILABLE = "0112"
 
+# OnResponse intMark=0 / dwIndex 官方系統狀態碼。
+SYSTEM_OTHER = 0
+SYSTEM_CONNECT = 1
+SYSTEM_DISCONNECT = 2
+SYSTEM_NETWORK_ERROR = 3
+SYSTEM_UPDATE_REQUIRED = 4
+SYSTEM_NOT_CONNECTED = 5
+SYSTEM_ANNOUNCEMENT = 6
+
+_CONNECTION_STATE_BY_CODE = {
+    SYSTEM_CONNECT: "CONNECTED",
+    SYSTEM_DISCONNECT: "DISCONNECTED",
+    SYSTEM_NETWORK_ERROR: "NETWORK_ERROR",
+    SYSTEM_UPDATE_REQUIRED: "UPDATE_REQUIRED",
+    SYSTEM_NOT_CONNECTED: "NOT_CONNECTED",
+}
+_CONNECTION_FAULT_CODES = {
+    SYSTEM_DISCONNECT, SYSTEM_NETWORK_ERROR, SYSTEM_UPDATE_REQUIRED, SYSTEM_NOT_CONNECTED,
+}
+
 PKG_ROOT = Path(__file__).resolve().parents[4] / "vendor" / "yuanta_spark" / "2.2026.0918.0" / "YuantaSparkAPI_win-x64_Python"
 
 
@@ -68,6 +88,9 @@ class SparkRuntime:
         self._delegate = None
         self._login_event = threading.Event()
         self._system_event = threading.Event()
+        self._connection_fault_event = threading.Event()
+        self._connection_state = "INITIAL"
+        self._connection_system_code: int | None = None
         self._login_outcome = LoginOutcome()
         self._callbacks = deque(maxlen=1000)
         self._system_messages = deque(maxlen=100)
@@ -129,17 +152,46 @@ class SparkRuntime:
         else:
             self._api.SetLogType(lt.COMMON)
 
+    def _ensure_connection_state(self) -> None:
+        if not hasattr(self, "_system_event"):
+            self._system_event = threading.Event()
+        if not hasattr(self, "_connection_fault_event"):
+            self._connection_fault_event = threading.Event()
+        if not hasattr(self, "_connection_state"):
+            self._connection_state = "INITIAL"
+        if not hasattr(self, "_connection_system_code"):
+            self._connection_system_code = None
+
+    def connection_snapshot(self) -> dict:
+        """PII-free last official system-event state; fault is latched until a new Open()."""
+        self._ensure_connection_state()
+        return {
+            "state": self._connection_state,
+            "system_code": self._connection_system_code,
+            "faulted": self._connection_fault_event.is_set(),
+        }
+
     def _on_response(self, intMark, dwIndex, strIndex, objHandle, objValue) -> None:
         try:
             type_name = type(objValue).__name__ if objValue is not None else "None"
             self._callbacks.append({"intMark": int(intMark), "strIndex": str(strIndex), "type": type_name})
             if int(intMark) == 0:
-                # 系統回報（連線狀態）：記 message（masked），觸發 connected event
+                # 官方 OnResponse：dwIndex=1 才是 Connect；2/3/4/5 都不可當 connected。
+                self._ensure_connection_state()
+                system_code = int(dwIndex)
+                self._connection_system_code = system_code
                 try:
                     self._system_messages.append(str(objValue)[:200])
                 except Exception:
                     self._system_messages.append("<unprintable>")
-                self._system_event.set()
+                if system_code in _CONNECTION_STATE_BY_CODE:
+                    self._connection_state = _CONNECTION_STATE_BY_CODE[system_code]
+                if system_code == SYSTEM_CONNECT:
+                    # A later Connect may update current state, but never erases a fault that
+                    # occurred after Open: subscription continuity would be unknown.
+                    self._system_event.set()
+                elif system_code in _CONNECTION_FAULT_CODES:
+                    self._connection_fault_event.set()
             if str(strIndex) == "Login":
                 status = objValue.LoginStatus
                 self._login_outcome = LoginOutcome(
@@ -159,8 +211,17 @@ class SparkRuntime:
             self._login_event.set()
 
     def wait_connected(self, timeout: float = 15.0) -> bool:
-        """等 Open 後的系統/連線回報（intMark=0）。首次連線需 ~1-12s。"""
-        return self._system_event.wait(timeout)
+        """Wait only for official Connect (intMark=0,dwIndex=1); fault statuses fail closed."""
+        self._ensure_connection_state()
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while True:
+            if self._connection_fault_event.is_set():
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if self._system_event.wait(min(0.05, remaining)):
+                return True
 
     def system_messages(self) -> list[str]:
         return list(self._system_messages)
@@ -171,6 +232,11 @@ class SparkRuntime:
 
     # --- quote-only 公開方法（無 order / 無 generic invoke）---
     def open_prod(self) -> None:
+        self._ensure_connection_state()
+        self._system_event.clear()
+        self._connection_fault_event.clear()
+        self._connection_state = "CONNECTING"
+        self._connection_system_code = None
         self._api.Open(self.enumEnvironmentMode.PROD)
 
     def pump(self, seconds: float) -> None:

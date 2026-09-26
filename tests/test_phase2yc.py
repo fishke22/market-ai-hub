@@ -1,6 +1,9 @@
 """Phase 2Y-C — SPARK interop wiring tests（不執行真實 login）。"""
 import sys
+import threading
+from collections import deque
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, "src")
 
@@ -11,6 +14,11 @@ from market_ai_hub.integrations.yuanta.spark_runtime import (
     MSG_PASSWORD_FROZEN,
     MSG_PERMISSION_UNAVAILABLE,
     MSG_SUCCESS,
+    SYSTEM_ANNOUNCEMENT,
+    SYSTEM_CONNECT,
+    SYSTEM_DISCONNECT,
+    SYSTEM_NETWORK_ERROR,
+    SparkRuntime,
 )
 from market_ai_hub.integrations.yuanta.spark_auth import should_abort
 
@@ -80,6 +88,68 @@ def test_login_bool_not_success():
 def test_onresponse_required_for_success():
     assert "OnResponse" in SRT and "wait_login" in SRT
 
+
+
+def _runtime_for_system_events():
+    rt = object.__new__(SparkRuntime)
+    rt._callbacks = deque(maxlen=10)
+    rt._system_messages = deque(maxlen=10)
+    rt._login_event = threading.Event()
+    rt._system_event = threading.Event()
+    rt._connection_fault_event = threading.Event()
+    rt._connection_state = "INITIAL"
+    rt._connection_system_code = None
+    rt.on_quote_callback = None
+    rt.on_tick_detail_callback = None
+    return rt
+
+
+def test_system_event_only_official_connect_unblocks_connection_gate():
+    rt = _runtime_for_system_events()
+    rt._on_response(0, SYSTEM_ANNOUNCEMENT, "System", None, "announcement")
+    assert rt.connection_snapshot() == {
+        "state": "INITIAL", "system_code": SYSTEM_ANNOUNCEMENT, "faulted": False,
+    }
+    assert not rt._system_event.is_set()
+    assert rt.wait_connected(timeout=0) is False
+
+    rt._on_response(0, SYSTEM_CONNECT, "System", None, "connected")
+    assert rt.wait_connected(timeout=0.1) is True
+    assert rt.connection_snapshot() == {
+        "state": "CONNECTED", "system_code": SYSTEM_CONNECT, "faulted": False,
+    }
+
+
+def test_system_disconnect_fault_is_latched_even_if_connect_arrives_later():
+    rt = _runtime_for_system_events()
+    rt._on_response(0, SYSTEM_NETWORK_ERROR, "System", None, "network")
+    assert rt.wait_connected(timeout=0.1) is False
+    assert rt.connection_snapshot() == {
+        "state": "NETWORK_ERROR", "system_code": SYSTEM_NETWORK_ERROR, "faulted": True,
+    }
+
+    rt._on_response(0, SYSTEM_CONNECT, "System", None, "connected again")
+    assert rt.connection_snapshot() == {
+        "state": "CONNECTED", "system_code": SYSTEM_CONNECT, "faulted": True,
+    }
+    assert rt.wait_connected(timeout=0.1) is False
+
+
+def test_new_open_resets_latched_connection_fault():
+    rt = _runtime_for_system_events()
+    rt._connection_fault_event.set()
+    rt._connection_state = "DISCONNECTED"
+    rt._connection_system_code = SYSTEM_DISCONNECT
+    calls = []
+    rt._api = SimpleNamespace(Open=lambda mode: calls.append(mode))
+    rt.enumEnvironmentMode = SimpleNamespace(PROD="PROD")
+
+    rt.open_prod()
+
+    assert calls == ["PROD"]
+    assert rt.connection_snapshot() == {
+        "state": "CONNECTING", "system_code": None, "faulted": False,
+    }
 
 def test_0001_success():
     assert MSG_SUCCESS == "0001"

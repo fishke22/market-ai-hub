@@ -471,6 +471,9 @@ def test_run_locked_records_safe_startup_failure_stage(tmp_path, monkeypatch):
         def dispose(self):
             return None
 
+        def connection_snapshot(self):
+            return {"state": "INITIAL", "system_code": None, "faulted": False}
+
     monkeypatch.setattr(
         "market_ai_hub.integrations.yuanta.order_api_guard.OrderApiExposureGuard",
         _Guard,
@@ -499,6 +502,107 @@ def test_run_locked_records_safe_startup_failure_stage(tmp_path, monkeypatch):
     assert "MASKED_TEST_SECRET" not in serialized
     assert "MASKED_TEST_ACCOUNT" not in serialized
 
+
+
+def _connection_test_config(tmp_path):
+    cfg = {
+        "enabled": True,
+        "recording": {
+            "max_buffer_records": 10,
+            "raw_jsonl": False,
+            "normalized_parquet": True,
+        },
+        "storage": {"status_file": "status.json", "latest_file": "latest.json"},
+        "dynamic_requests": {"enabled": False},
+        "tick_detail_measurements": {"enabled": False},
+    }
+    path = tmp_path / "recorder.yaml"
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    return path
+
+
+def _allow_offline_recorder_start(monkeypatch):
+    class _Guard:
+        def scan(self):
+            return {"gate": "PASS", "findings": []}
+
+    monkeypatch.setattr(
+        "market_ai_hub.integrations.yuanta.order_api_guard.OrderApiExposureGuard", _Guard,
+    )
+    monkeypatch.setattr(
+        R, "read_profile_credential", lambda _profile: SimpleNamespace(username="MASKED_TEST_ACCOUNT"),
+    )
+    monkeypatch.setattr(R, "read_profile_password", lambda _profile: "MASKED_TEST_SECRET")
+    monkeypatch.setattr(R, "resolve_default_subscriptions", lambda _cfg, *, asof=None: [])
+
+
+def test_run_locked_connect_failure_blocks_before_login(tmp_path, monkeypatch):
+    config_path = _connection_test_config(tmp_path)
+    _allow_offline_recorder_start(monkeypatch)
+    calls = []
+
+    class _ConnectFailRuntime:
+        def instantiate(self): calls.append("instantiate")
+        def open_prod(self): calls.append("open")
+        def wait_connected(self, timeout=15.0):
+            calls.append("wait_connected")
+            return False
+        def login(self, *_args):
+            pytest.fail("login must not run without official Connect")
+        def connection_snapshot(self):
+            return {"state": "NOT_CONNECTED", "system_code": 5, "faulted": True}
+        def close(self): calls.append("close")
+        def dispose(self): calls.append("dispose")
+
+    monkeypatch.setattr(R, "SparkRuntime", _ConnectFailRuntime)
+    rc = R._run_locked(config_path, tmp_path)
+    assert rc == 1
+    assert calls == ["instantiate", "open", "wait_connected", "close", "dispose"]
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "START_FAILED"
+    assert status["startup_stage"] == "WAIT_CONNECTED"
+    assert status["fatal_error"] == "ConnectionError"
+    assert status["connection_event_state"] == "NOT_CONNECTED"
+    assert status["connection_event_code"] == 5
+    assert status["connection_faulted"] is True
+
+
+def test_run_locked_runtime_connection_fault_exits_fail_closed(tmp_path, monkeypatch):
+    config_path = _connection_test_config(tmp_path)
+    _allow_offline_recorder_start(monkeypatch)
+    calls = []
+
+    class _FaultRuntime:
+        def __init__(self):
+            self.on_quote_callback = None
+        def instantiate(self): calls.append("instantiate")
+        def open_prod(self): calls.append("open")
+        def wait_connected(self, timeout=15.0): return True
+        def login(self, *_args):
+            calls.append("login")
+            return True
+        def wait_login(self, timeout=25.0):
+            return SimpleNamespace(received=True, msg_code="0001")
+        def pump(self, _seconds): calls.append("pump")
+        def connection_snapshot(self):
+            return {"state": "DISCONNECTED", "system_code": 2, "faulted": True}
+        def close(self): calls.append("close")
+        def dispose(self): calls.append("dispose")
+
+    monkeypatch.setattr(R, "SparkRuntime", _FaultRuntime)
+    monkeypatch.setattr(R, "_subscribe", lambda *_args, **_kwargs: None)
+    rc = R._run_locked(config_path, tmp_path)
+    assert rc == 1
+    assert calls == ["instantiate", "open", "login", "pump", "close", "dispose"]
+    status = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
+    assert status["status"] == "RUNTIME_FAILED"
+    assert status["startup_stage"] == "RUNNING_CONNECTION_FAULT"
+    assert status["fatal_error"] == "ConnectionError"
+    assert status["login_msg_code"] == "0001"
+    assert status["connection_event_state"] == "DISCONNECTED"
+    assert status["connection_event_code"] == 2
+    assert status["connection_faulted"] is True
+    assert status["pending_records"] == 0
 
 def test_measurement_does_not_retry_same_contract_in_one_process(tmp_path, monkeypatch):
     rt = _FakeRuntime()
