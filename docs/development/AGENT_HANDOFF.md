@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 SPARK connection-event fail-closed hardening OFFLINE PASS; runtime adoption remains pending because the existing safe-default recorder is still on the prior build.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 durable crash spool/WAL OFFLINE PASS; runtime adoption remains pending because the existing safe-default recorder is still on the prior build.
 
 ## Current repair checkpoint
+
+### 2026-09-26 W1 durable crash spool/WAL
+
+Implementation commit `e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`; source/config build=`b7c1f3d08a383d65`. Tracked recorder config now enables a bounded durable spool (`100000` records / `256 MiB`). Each accepted callback is first serialized to a checksummed per-record WAL file, flushed and fsynced, then atomically published; append failure does not advance `latest` and latches a spool error. Restart validates ack checksum, record checksum, contiguous sequence, partial/final conflicts and quota before credentials/runtime construction. Corruption blocks at `SPOOL_RECOVERY` before WinCred or broker access.
+
+Flush uses deterministic WAL batch IDs and embeds `_wal_seq` + `_wal_record_sha256` in Parquet. A COMMITTED manifest binds record count/input hash/parquet hash; W2 replay rejects durable Parquet without a valid committed manifest. If a crash leaves Parquet before manifest/ack, restart rewrites the same deterministic path from WAL and then commits the manifest, preventing a second batch file. Ack is an atomic checksummed oldest-prefix watermark; valid-looking tampering fails closed. Windows sharing violations on atomic replace use a bounded five-attempt retry, never an unbounded loop.
+
+Validation: durable/reader focused=`21 passed, 40 deselected`; related Yuanta/W1/W2/C2=`138 passed, 2 deselected`; final isolated offline=`1912 passed, 1 skipped, 35 deselected, 110 warnings in 115.04s`, exit 0; compile PASS; `git diff --check` PASS (line-ending warnings only); changed-file secret scan=0. Ruff is not installed in the repo environment, so no new dependency was installed merely for linting. No broker login/logout/restart/subscription/request/order/account action occurred.
+
+Read-only owner truth after this source/config change remains `BLOCKED_RUNTIME_BUILD_STALE`: invocation chain `[31808,32120]`, no independent duplicate owner, heartbeat fresh, runtime build=`afd52f88a351541a`, disk build=`b7c1f3d08a383d65`, runtime/tracked measurement gates=false, broker_action_performed=false. Therefore **DURABLE_SPOOL OFFLINE PASS != LIVE DURABLE ADOPTION**; the currently running old owner still has its historical `BUFFERED_NOT_ZERO_LOSS` behavior until a separately authorized single-owner handover.
 
 ### 2026-09-26 W1 SPARK connection-event fail-closed hardening
 
@@ -13,7 +23,7 @@ Recorder startup now stops before `Login` when official Connect is not observed.
 
 Validation: focused connection counterexamples=`5 passed`; related Yuanta/W1/C2=`119 passed, 2 deselected`; isolated full offline=`1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`, exit 0; `git diff --check` PASS; changed-file secret scan=0. Three frozen build assertions were updated only after observing the new fingerprint. No broker login/logout/restart/subscription/request/order/account action occurred.
 
-Read-only owner preflight remains fail-closed: invocation chain `[31808,32120]`, no independent duplicate owner, heartbeat fresh, runtime build=`afd52f88a351541a`, disk build=`1ff1c2adb6bc21bf`, runtime/tracked measurement gates=false, classification=`BLOCKED_RUNTIME_BUILD_STALE`, broker_action_performed=false. Do not start a second owner or claim the new connection-state behavior is adopted live. Crash durability also remains `BUFFERED_NOT_ZERO_LOSS` without a durable WAL/spool.
+At the connection-event checkpoint, read-only owner preflight was fail-closed: invocation chain `[31808,32120]`, no independent duplicate owner, heartbeat fresh, runtime build=`afd52f88a351541a`, disk build=`1ff1c2adb6bc21bf`, runtime/tracked measurement gates=false, classification=`BLOCKED_RUNTIME_BUILD_STALE`, broker_action_performed=false. At that checkpoint crash durability was still `BUFFERED_NOT_ZERO_LOSS`; current durability truth is the durable-spool section above.
 
 ### 2026-09-26 W1 runtime contract revalidation hardening
 
@@ -23,7 +33,7 @@ The bundled `YSendOrder.py` vendor sample calls `SubscribeWatchlistAll` / `UnSub
 
 Regression evidence: W1/W2/C2 focused/broader `96 passed, 2 deselected`; final isolated offline profile `1888 passed, 1 skipped, 35 deselected, 110 warnings in 107.43s`, exit 0. The first full run had only three expected stale build-freeze assertions; they were updated to the new verified source/config build `b571449004691eac`, then the same full profile passed. `git diff --check` PASS; changed-file secret scan 0. Full-repo secret scan still reports the same six known interactive-password prompt text hits. No broker login/logout/restart/subscription/request/order/account action occurred.
 
-Read-only owner preflight after the source/config change is deliberately `BLOCKED_RUNTIME_BUILD_STALE`: existing invocation chain `[31808,32120]`, no independent duplicate owner, heartbeat fresh, status `DEGRADED`, runtime build `afd52f88a351541a`, disk build `b571449004691eac`, runtime/tracked measurement gates=false, reason `RUNTIME_BUILD_STALE`, broker_action_performed=false. Do not start a second owner or claim runtime adoption. Auto reconnect is still not implemented/verified, and crash durability remains `BUFFERED_NOT_ZERO_LOSS` because there is no durable WAL/spool; these are separate W1 work packages.
+At the runtime-revalidation checkpoint, owner preflight was `BLOCKED_RUNTIME_BUILD_STALE`: invocation chain `[31808,32120]`, no independent duplicate owner, heartbeat fresh, status `DEGRADED`, runtime build `afd52f88a351541a`, disk build `b571449004691eac`, runtime/tracked measurement gates=false, reason `RUNTIME_BUILD_STALE`, broker_action_performed=false. At that checkpoint auto reconnect and durable WAL were both absent; current durability truth is the durable-spool section above, while auto reconnect remains unimplemented.
 
 2026-09-25 C2 controlled-measurement-path initial implementation is `ed3e63360faca93f6a5a6b0af89fc1ecb51702bf`; correlation hardening is `9496eb9afa65e647b5fceca86610247ff24e258e`; review follow-ups are `30d32754ff284a6b32370b236ed1fc40283304e9`, `0203e9becf0f0894c3d9f33cfdc2aece448db921`, `873e6bd9697efe1bc2c67d1767c708b23af2df10`; maintenance-control source is `4cca09117ffda0fb2ead12de737ffcaf8b92ad9c`; request-script repair is `1452a45cf0c4de631d213eaa8648c3eae3b90211`; startup-observability source is `b9cfcb0e302e1520027d2c69adf363d15baf00c4`; C2.3-era source/config build at that checkpoint was `afd52f88a351541a`. Tracked `tick_detail_measurements.enabled=false` remains the safe default. Maintenance-only enable is a runtime start flag, graceful shutdown is a control-inbox action, and startup now records safe stage/error metadata so a failed owner start cannot be mistaken for a healthy recorder.
 
@@ -210,7 +220,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-W1 durable crash spool/WAL, offline-only: specify append/ack/replay, bounded capacity, idempotency, partial-write recovery, and corruption fail-closed behavior. Automatic reconnect remains a separate later lifecycle package.
+W1 automatic reconnect lifecycle contract, offline-only: first verify the installed/public SDK lifecycle surface and define a bounded reconnect/re-login/resubscribe state machine with single-owner, subscription-truth and durability invariants. Do not invent reconnect semantics that the SDK evidence does not support; live adoption remains a separate authorized handover.
 
 ## Truthfulness rules
 

@@ -90,7 +90,7 @@
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
-2. session/contract runtime revalidation 已於 2026-09-26 改為每 300 秒按 venue-local date 重新解析；SPARK official Connect/Disconnect/network/not-connected event 也已加入 fail-closed detection。**仍未完成的是自動 reconnect/re-login/resubscribe、授權拒絕後完整生命週期、durable spool/WAL。** status 仍保守維持 `NOT_CONTINUOUSLY_VERIFIED`、`MANUAL_SINGLE_OWNER`、`BUFFERED_NOT_ZERO_LOSS`；不能把 connection detection 說成 auto reconnect。
+2. session/contract runtime revalidation、SPARK connection-fault detection 與 bounded durable spool/WAL 都已在 2026-09-26 完成 disk/offline correctness。新 WAL 為 fsync-before-accept、checksummed contiguous replay、atomic ack watermark、deterministic Parquet batch + COMMITTED manifest，corruption 在 credentials/runtime 前 fail closed。**仍未完成的是 live runtime adoption、自動 reconnect/re-login/resubscribe與授權拒絕後完整生命週期。** 現有 live owner 仍跑舊 build，所以不能把 offline durable spool 說成目前 live 已零丟失，也不能把 connection detection 說成 auto reconnect。
 3. recorder→V2-A.2→V2-H→Feature Store→packet→model-input boundary 已完成離線契約；但 broker TICK 仍不相容現有 1d models，沒有 validated bar aggregation，所以 DATA READY / broker-driven inference 仍不成立。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。
 4. W3.1 governance 與 W3.2 precommit/settlement engine 已補足；**但 dedicated contract DAILY/PIT-safe input 尚未有真實來源，故 precommitted forward predictions/outcomes 尚未自然累積成證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
 5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。下一資料工作包是 dedicated contract DAILY terminal-close feature；不可把 2026-09-01 截止的 continuous bars 或 TICK 直接升格。ENGINE PASS ≠ DATA READY ≠ CALIBRATED ≠ EDGE。
@@ -102,4 +102,4 @@
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W1 connection detection 與 contract revalidation 已 offline PASS，但現有 owner 尚未 adoption current disk build。下一個不需 broker 維護窗口的 W1 工作包是 durable crash spool/WAL（先定義 append/ack/replay/容量與 corruption fail-closed，再做純離線反例）；auto reconnect 需先有明確生命週期契約與之後的受控 live adoption，不憑猜測實作。W4 calibration fitting 只能在真正 forward outcome 足夠成熟後啟動。長期 Price/Probability Map 設計見 02_ROADMAP.md。
+下一棒先核對最新 HEAD/dirty/PR 與實際 runtime。W1 connection detection、contract revalidation、durable crash spool/WAL 已 offline PASS，但現有 owner 尚未 adoption current disk build。下一個不需 broker 維護窗口的 W1 工作包是 automatic reconnect lifecycle contract：先核對 installed/public SDK lifecycle surface，再以 bounded state machine 定義 reconnect/re-login/resubscribe、single-owner、subscription truth 與 durability invariants；證據不足就 fail closed，不憑猜測實作。live adoption 仍需之後的受控 single-owner handover。W4 calibration fitting 只能在真正 forward outcome 足夠成熟後啟動。長期 Price/Probability Map 設計見 02_ROADMAP.md。

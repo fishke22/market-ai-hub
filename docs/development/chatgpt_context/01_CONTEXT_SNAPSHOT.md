@@ -12,17 +12,17 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 ### 2026-09-26 最新 W1 接手結果
 
-實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。最新 W1 connection-event fail-closed implementation commit=`223ddd88e3a308a21c95176992001041d1eefeb0`，目前 source/config build=`1ff1c2adb6bc21bf`；前一個 contract-roll/revalidation implementation commit=`d6d443a1d18989e4826c81ed0fcff835f5295386`。
+實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。最新 W1 durable crash spool/WAL implementation commit=`e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`，目前 source/config build=`b7c1f3d08a383d65`；前一個 connection-event fail-closed implementation commit=`223ddd88e3a308a21c95176992001041d1eefeb0`。
 
-最新核心修正：SPARK `OnResponse` 只有 `intMark=0,dwIndex=1` 可視為 Connect；2/3/4/5 分別鎖存斷線/網路異常/API 更新需求/尚未連線 fault。startup 沒有 official Connect 就在 Login 前 fail closed；RUNNING 後出現 fault 則退出成 `RUNTIME_FAILED`、保存安全的 event code/state 並執行既有 pending-buffer flush。later Connect 不會在同一 Open 內清除 fault；只有新的 explicit Open 重置。**沒有實作或宣稱 auto reconnect/re-login/resubscribe。**
+最新核心修正：tracked config 啟用 bounded durable spool（100000 records / 256 MiB）。callback 只有在 checksummed WAL record 寫入、flush+fsync 並 atomic publish 後才算 accepted；append failure 不更新 latest 並鎖存 spool error。restart 在 credentials/runtime 之前驗 ack checksum、record checksum、連續序號、partial/final conflict 與 quota，corruption 直接 `SPOOL_RECOVERY` fail closed。Parquet 使用 deterministic WAL batch id、`_wal_seq`/record hash 與 COMMITTED manifest；W2 replay 缺/壞 manifest 即拒讀，publish-before-ack crash 由 WAL 覆寫同一路徑後再 commit，不產第二批。**這是 offline disk correctness，現有 live owner 尚未 adoption。**
 
-前一包 revalidation 修正仍有效：default subscriptions 每 300 秒以 venue-local date 重新解析月份/expiry；failure 下一 interval retry。default routing 與 dynamic ownership 分離，部分 provider 操作失敗維持 truthful union，且 add-before-remove 不得暫時突破 2000 unique subscription cap。
+前兩包仍有效：SPARK connection-event gate 只接受 official Connect，2/3/4/5 fault fail closed；contract revalidation 每 300 秒以 venue-local date 重新解析月份/expiry，failure 下一 interval retry。auto reconnect/re-login/resubscribe 仍未實作或宣稱。
 
 API signature 查核：bundled vendor `YSendOrder.py` 的 WatchlistAll sample 省略第三參數；本機 `2.2026.0918.0` DLL reflection 顯示第三個 `Lng` 是 optional、default=`NORMAL`，因此 recorder 保留既有 explicit `enumLangType.UTF8`。subscribe/unsubscribe 共用 0.2 秒 throttle。這個查核只載入本機 assembly，沒有 instantiate/login/broker call。
 
-最新驗證：connection focused=`5 passed`；related Yuanta/W1/C2=`119 passed, 2 deselected`；final isolated offline=`1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`，exit 0；diff check PASS；changed-file secret scan=0。build-freeze assertions 只在觀測 fingerprint=`1ff1c2adb6bc21bf` 後更新，沒有刪 gate。
+最新驗證：durable/reader focused=`21 passed, 40 deselected`；related Yuanta/W1/W2/C2=`138 passed, 2 deselected`；final isolated offline=`1912 passed, 1 skipped, 35 deselected, 110 warnings in 115.04s`，exit 0；compile PASS；diff check PASS（只有 line-ending warnings）；changed-file secret scan=0。build-freeze assertions 只在觀測 fingerprint=`b7c1f3d08a383d65` 後更新，沒有刪 gate。
 
-目前 recorder **尚未 adoption 新 build**。read-only preflight=`BLOCKED_RUNTIME_BUILD_STALE`：同一 invocation chain `[31808,32120]`、無 independent duplicate、heartbeat fresh、status=`DEGRADED`、runtime build=`afd52f88a351541a`、disk build=`1ff1c2adb6bc21bf`、runtime/tracked measurement gate=false、broker_action_performed=false。不要因 disk/runtime 不一致就啟第二 owner或直接重啟。auto reconnect 尚未實作/驗證；crash durability 仍 `BUFFERED_NOT_ZERO_LOSS`，無 durable WAL/spool。
+目前 recorder **尚未 adoption 新 build**。read-only preflight=`BLOCKED_RUNTIME_BUILD_STALE`：同一 invocation chain `[31808,32120]`、無 independent duplicate、heartbeat fresh、status=`DEGRADED`、runtime build=`afd52f88a351541a`、disk build=`b7c1f3d08a383d65`、runtime/tracked measurement gate=false、broker_action_performed=false。不要因 disk/runtime 不一致就啟第二 owner或直接重啟。disk/source 已有 durable spool，但 live owner 仍是舊 build，因此 live crash durability 仍是舊行為；auto reconnect 也仍未實作/驗證。
 
 可信度邊界不變：`ENGINE PASS != DATA READY != CALIBRATED != PREDICTIVE EVIDENCE != TRADING EDGE`；actual C2.3 typed runtime verification、eligible real DAILY close、W3.2 actual forward evidence仍未成立。
 
@@ -105,7 +105,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder 在 `afd52f88a351541a` 時曾完成 runtime adoption；2026-09-26 最新 W1 source/config 已更新到 `1ff1c2adb6bc21bf`，現有 single owner 仍跑舊 build，因此新 build 的 runtime adoption 目前是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder 在 `afd52f88a351541a` 時曾完成 runtime adoption；2026-09-26 最新 W1 source/config 已更新到 `b7c1f3d08a383d65`，現有 single owner 仍跑舊 build，因此 durable-spool/live connection changes 的 runtime adoption 目前是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -173,4 +173,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 single safe-default owner 仍 RUNNING，但 runtime build=`afd52f88a351541a`、disk build=`1ff1c2adb6bc21bf`，所以 owner preflight 應為 `BLOCKED_RUNTIME_BUILD_STALE`；不要再開第二 owner，parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。下一個不需 broker 維護窗口的 W1 工作包是 durable crash spool/WAL：先定義 append/ack/replay、容量上限、重複/部分寫入/corruption 的 fail-closed 語義並只做離線反例。auto reconnect 不憑猜測實作；runtime adoption 或 C2.3 maintenance 仍須之後依 single-owner lifecycle 受控 handover到 current build `1ff1c2adb6bc21bf`。C3/C4 仍等待真實 C1/C2 輸入。
+先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 single safe-default owner 仍 RUNNING，但 runtime build=`afd52f88a351541a`、disk build=`b7c1f3d08a383d65`，所以 owner preflight 應為 `BLOCKED_RUNTIME_BUILD_STALE`；不要再開第二 owner，parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。durable crash spool/WAL 已 offline PASS；下一個不需 broker 維護窗口的 W1 工作包是 automatic reconnect lifecycle contract：先用 installed/public SDK evidence 定義 bounded reconnect/re-login/resubscribe state machine、single-owner/subscription-truth/durability invariants，不支援的語義就 fail closed，不憑猜測。live adoption 或 C2.3 maintenance 仍須之後受控 handover到 current build `b7c1f3d08a383d65`。C3/C4 仍等待真實 C1/C2 輸入。

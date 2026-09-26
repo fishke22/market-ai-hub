@@ -1,15 +1,25 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W1 CONNECTION_EVENT_FAIL_CLOSED OFFLINE_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
+- Current phase: **W1 DURABLE_SPOOL OFFLINE_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**1ff1c2adb6bc21bf**（2026-09-26 W1 connection-event fail-closed source/config fingerprint；現有 recorder runtime 仍是舊 build `afd52f88a351541a`，所以不代表 runtime adoption）
+- build_id：**b7c1f3d08a383d65**（2026-09-26 W1 durable-spool source/config fingerprint；現有 recorder runtime 仍是舊 build `afd52f88a351541a`，所以不代表 runtime adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix and 2026-09-25 controlled evidence remain historical capability evidence. After the latest 2026-09-26 W1 source change, read-only owner preflight shows one existing invocation chain `[31808,32120]`, no independent duplicate, fresh heartbeat, status `DEGRADED`, runtime build `afd52f88a351541a` versus disk build `1ff1c2adb6bc21bf`, both measurement gates=false, and `BLOCKED_RUNTIME_BUILD_STALE`. **Do not start a second owner; C2.3 typed runtime re-verification and runtime adoption are both still pending.**
+- Live quote capability：2026-09-24 local quote matrix and 2026-09-25 controlled evidence remain historical capability evidence. After the latest 2026-09-26 W1 durable-spool source/config change, read-only owner preflight shows one existing invocation chain `[31808,32120]`, no independent duplicate, fresh heartbeat, status `DEGRADED`, runtime build `afd52f88a351541a` versus disk build `b7c1f3d08a383d65`, both measurement gates=false, and `BLOCKED_RUNTIME_BUILD_STALE`. **Do not start a second owner; durable-spool live adoption, C2.3 typed runtime re-verification and runtime adoption are still pending.**
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 W1 durable crash spool/WAL
+
+- Implementation commit: `e6bfb35b9b5700bbbb34f845fd059e1870aa2be1`; build `b7c1f3d08a383d65`.
+- Tracked config enables bounded fsync-before-accept WAL (`100000` records / `268435456` bytes). Restart validates checksums, contiguous sequence, partial/final recovery, quota and checksummed ack before credentials/runtime construction.
+- Deterministic WAL batch IDs + `_wal_seq`/record hash + COMMITTED manifest make Parquet replay idempotent across publish-before-ack crashes. W2 reader rejects durable batches with missing/invalid manifests.
+- Ack is an atomic oldest-prefix watermark with checksum; corruption/tampering fails closed. Windows atomic replace has a bounded five-attempt sharing-violation retry.
+- Validation: focused `21 passed, 40 deselected`; related `138 passed, 2 deselected`; full isolated offline `1912 passed, 1 skipped, 35 deselected, 110 warnings in 115.04s`, exit 0; diff check PASS; changed-file secret scan 0.
+- Boundary: this is disk/offline correctness only. Existing owner runtime remains `afd52f88a351541a`, so live recorder durability is not yet upgraded.
+- Exact next offline W1 package: verify and specify automatic reconnect/re-login/resubscribe lifecycle as a bounded single-owner state machine; do not guess unsupported SDK behavior.
 
 ## 2026-09-26 W1 SPARK connection-event fail-closed
 
@@ -18,8 +28,8 @@
 - Startup connection failure now blocks before Login. A RUNNING fault exits fail-closed as `RUNTIME_FAILED`, records safe connection event metadata, then performs the existing pending-buffer flush attempt and closes/disposes the API.
 - Fault remains latched if a later Connect arrives within the same Open because subscription continuity is unknown; a new explicit Open resets state. No automatic reconnect/login/resubscribe loop is implemented or claimed.
 - Validation: focused `5 passed`; related `119 passed, 2 deselected`; full isolated offline `1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`, exit 0; diff check PASS; changed-file secret scan 0.
-- Boundaries: no broker action; current live owner is still prior build `afd52f88a351541a`, so the new behavior is not runtime-adopted. Durable crash spool/WAL remains absent.
-- Exact next offline W1 package: durable crash spool/WAL semantics and implementation with bounded replay/corruption counterexamples; automatic reconnect remains separate.
+- At this connection-event checkpoint there was no broker action and the live owner was still prior build `afd52f88a351541a`; durable spool was not yet present at that checkpoint. Current durability truth is the newer W1 durable-spool section above.
+- Durable crash spool/WAL is now offline PASS in the section above; automatic reconnect remains a separate unadopted lifecycle package.
 
 ## 2026-09-26 W1 runtime subscription revalidation
 
