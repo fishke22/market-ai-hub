@@ -12,7 +12,7 @@
 
 CherryStudio prompt 已要求：使用者問預測/看多看空/怎麼操作時，先讀 get_analysis_packet 的正式 gate，接著必須呼叫 analyze_osaka_nikkei 或 analyze_taiwan_stock 取得 `research_decision_support`；不得只因 WAIT/UNPROVEN 就整段拒答。系統仍禁止代替使用者下單、個人化口數、人工編造精確進場/停損/停利價。
 
-驗證：focused=`37 passed`；actual Osaka public smoke PASS；build-freeze=`3 passed`；full offline=`1966 passed, 1 skipped, 35 deselected, 110 warnings in 210.45s`，exit 0。此 package 尚待 GitHub publication 與 merged-build live-owner verification。
+驗證：focused=`37 passed`；actual Osaka public smoke PASS；build-freeze=`3 passed`；full offline=`1966 passed, 1 skipped, 35 deselected, 110 warnings in 210.45s`，exit 0。PR #65 CI=`36254359610` PASS，merged main=`f8c7a686af05c1c053d04b9f598a79182e4dada9`。Post-merge focused=`37 passed`；CherryStudio-style stdio MCP 實測 health build=`e8dc080886d0b5a2` 並回傳 research stance。persistent quote recorder 仍是 `72c6f533e5ae2341`、heartbeat fresh、single-owner、measurement gates=false；未經本輪明確重啟授權，因此未做 broker owner handover。
 
 ### 2026-09-26 最新 W3.2-EP1 / MCP / analysis closeout
 
