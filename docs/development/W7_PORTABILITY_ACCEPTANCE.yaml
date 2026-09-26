@@ -1,5 +1,5 @@
 schema: W7_PORTABILITY_ACCEPTANCE_V1
-updated_at: "2026-09-25"
+updated_at: "2026-09-26"
 product_build_id: afd52f88a351541a
 scope_note: "Current-machine relocation evidence is not new-Windows certification."
 cells:
@@ -37,8 +37,9 @@ cells:
     status: UNVERIFIED_EXTERNAL_GATE
     reason: "Proprietary OCX/COM registration has not been validated on a new machine."
   private_research_data_consistent_restore:
-    status: IN_PROGRESS_SEPARATE_WORKSTREAM
-    reason: "Concurrent research snapshot work exists; do not claim complete until published and reviewed."
+    status: PASS
+    evidence: W7.8
+    reason: "Current-machine DuckDB/SQLite/Parquet snapshot->verify->restore drill passed; live/** and backups/** are excluded."
   c2_3_live_runtime_reverification:
     status: WAITING_TIME_WINDOW
     reason: "Requires a valid OSE maintenance window and exactly one controlled same-owner measurement."

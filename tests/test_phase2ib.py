@@ -61,7 +61,8 @@ def test_w7_portability_matrix_keeps_external_gates_unverified():
         "yuanta_com_registration_new_machine",
     ):
         assert cells[name]["status"] == "UNVERIFIED_EXTERNAL_GATE"
-    assert cells["private_research_data_consistent_restore"]["status"] == "IN_PROGRESS_SEPARATE_WORKSTREAM"
+    assert cells["private_research_data_consistent_restore"]["status"] == "PASS"
+    assert cells["private_research_data_consistent_restore"]["evidence"] == "W7.8"
     assert cells["c2_3_live_runtime_reverification"]["status"] == "WAITING_TIME_WINDOW"
     assert all(cell["status"] != "COMPLETE" for cell in cells.values())
 
