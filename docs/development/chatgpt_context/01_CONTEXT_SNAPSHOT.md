@@ -4,6 +4,15 @@
 
 ## 1. 先讀這段
 
+### 2026-09-26 最新 W3.2 persisted-artifact 結果
+
+Implementation commit=`4decd79`，source/config build=`4196bab7c8064acb`。W3.2 既有 verified-tick materializer 已具備 OSE near-close timestamp cross-check、C2.3 typed evidence binding、JNU contract/month、PIT `available_at`、source snapshot、`CONTRACT` series 與 `DAILY` frequency gate；本棒新增 persisted raw/evidence pair 的 operator API 與 offline CLI。CLI 不接受人工 close 值，只能從 canonical artifact pair 重建；路徑限制在 recorder root，tamper/expected-contract mismatch/path escape fail closed，stdout 不輸出 close。
+
+驗證：focused=`50 passed`；related=`103 passed`；full isolated offline=`1923 passed, 7 skipped, 35 deselected, 110 warnings in 80.34s`，exit 0；最後 CLI/operator focused=`6 passed`；diff check PASS；secret scan=0。沒有 broker action。
+
+WebCodex 對本機 private runtime artifact 目錄的 read-only probe 被安全層阻擋，且未繞過。因此目前只能標 REAL_DAILY_INPUT_NOT_REVERIFIED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / CALIBRATION_FITTING_NOT_STARTED。若已存在有效 raw/evidence pair，可離線 materialize；若不存在，需另行授權 C2.3 maintenance measurement，不能用 continuous bars/TICK 冒充。
+
+
 本專案已超過第一階段。公開 main 已有 Phase 2、多輪安全與資料語義修正、Price/Probability Map 基礎，以及 V2-A 至 V2-I 2I.1。不要把「第二階段施工」解讀成 V2-I 尚未存在，也不要重做它們。
 
 實際施工 repo 是 `D:\MARKET_AI_HUB`；本次 Codex 的 `C:\Users\fishk\Documents\ChatGPT\MARKET_AI_HUB` 原先只是空 Git 倉庫，現在只存本交接包，不能混為同一 repo。
@@ -182,4 +191,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-PR #55 已 merge 到 main，不再重做 W1。下一個不需 broker 授權的工作包是 W3.2 dedicated contract DAILY terminal-close feature：建立真實來源的 contract-specific DAILY/PIT-safe close ingestion/aggregation contract，保留 source snapshot、contract/month/roll、available_at <= cutoff；continuous bars/TICK 不得 silent resample 或升格。tracked auto reconnect 保持 disabled；live enable/restart/re-login 仍需另行明確授權。
+W3.2 persisted-artifact ingestion/operator 已 OFFLINE PASS。下一步取決於真實 evidence：若 recorder root 已有合法 raw/evidence pair，直接用 offline CLI materialize 到 canonical Feature Store，再走既有 precommit；若沒有，產生新 pair 需要另行明確授權 C2.3 maintenance measurement。private artifact availability 本棒未能重新驗證；禁止用 continuous bars/TICK 冒充 DAILY terminal close。

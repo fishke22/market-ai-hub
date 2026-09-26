@@ -91,12 +91,18 @@
 
 Reconnect branch was reconciled with JNU base `23504cf`; merged implementation=`4978f59`, build=`1037d45ff8e65884`. Merged OFFLINE PASS: focused `29 passed, 21 deselected`, related `150 passed, 2 deselected`, full `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`. PR #55 merged to main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`; final CI `36231436018` PASS; post-merge focused smoke `29 passed, 21 deselected`. Tracked auto reconnect remains disabled; live adoption is not established.
 
+## 2026-09-26 W3.2 persisted-artifact terminal-close checkpoint
+
+Commit `4decd79`, build `4196bab7c8064acb`。新增 offline artifact-pair operator：persisted raw + typed runtime evidence 會先經 canonical snapshot/evidence ID/binding revalidation，再由既有 terminal-close materializer 產生 `terminal_close / w3.2-contract-daily-close-1`；人工 close 值沒有輸入口。CLI 限制 artifact 必須位於 canonical recorder root，metadata-only stdout 不暴露 close。
+
+Validation：focused `50 passed`；related `103 passed`；full offline `1923 passed, 7 skipped, 35 deselected, 110 warnings in 80.34s`；final operator `6 passed`；diff/secret PASS。沒有 broker action。因 WebCodex 安全層阻擋 private runtime artifact availability probe 且未繞過，REAL_DAILY_INPUT_NOT_REVERIFIED；不可由此宣稱 DATA READY 或新增 forward evidence。
+
 ## 尚未完成，不能誤報已修好
 
 1. **執行中的舊 recorder 尚未由本輪停止或重啟。** 新保護是 disk source / offline verified，不是 live deployment。不要讓新 agent 同時登入。先確認舊 PID、最後持久化批次与無重複 owner，再安排可回復交接；無法證明舊 RAM 全寫出時不能承諾無縫零丟失。
 2. session/contract revalidation、SPARK connection-fault detection、durable spool/WAL、JNU microstructure capture 與 bounded full-runtime reconnect 已完成 merged offline correctness。Reconnect 不假設 hidden API，且 tracked default=false。**仍未完成的是 live runtime adoption / restart-relogin authorization / C2.3 runtime re-verification。** `NO_RUNNING_OWNER` 不是啟動授權。
 3. recorder→V2-A.2→V2-H→Feature Store→packet→model-input boundary 已完成離線契約；但 broker TICK 仍不相容現有 1d models，沒有 validated bar aggregation，所以 DATA READY / broker-driven inference 仍不成立。舊錄製資料無 per-field provenance，只能 legacy receipt-only 降級；新的欄位 received_at 仍只表示「此 callback 觀測到欄位」時間，不保證是成交發生時間。
-4. W3.1 governance 與 W3.2 precommit/settlement engine 已補足；**但 dedicated contract DAILY/PIT-safe input 尚未有真實來源，故 precommitted forward predictions/outcomes 尚未自然累積成證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
+4. W3.1 governance、W3.2 precommit/settlement engine 與 persisted-artifact DAILY materialization operator 已補足；**但本棒未能重新驗證本機是否已有合格 raw/evidence pair，因此 REAL_DAILY_INPUT 仍是 NOT_REVERIFIED，precommitted forward predictions/outcomes 也沒有新增真實證據**。2I.1 描述性 metrics 不可當 production calibration；維持 fitting NOT STARTED。
 5. 真實 OOS / forward / 校準與淨經濟優勢仍無本次新證據。下一資料工作包是 dedicated contract DAILY terminal-close feature；不可把 2026-09-01 截止的 continuous bars 或 TICK 直接升格。ENGINE PASS ≠ DATA READY ≠ CALIBRATED ≠ EDGE。
 6. 新 Windows、重建 venv、WinCred/COM/合法 SDK/模型權重重新配置與恢復演練仍需 W7；不能整包複製就保證即用。
 
@@ -106,4 +112,4 @@ Reconnect branch was reconciled with JNU base `23504cf`; merged implementation=`
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒進入 W3.2 dedicated contract DAILY terminal-close feature：先核對免費/既有來源與 JNU raw capture，建立 contract-specific DAILY/PIT-safe source/ingestion/aggregation contract，驗 available_at <= cutoff、同 contract/month/roll、terminal-close semantics；禁止 continuous bars/TICK 冒充。tracked auto reconnect 維持 disabled，live enable/restart/re-login 仍需另行明確授權。
+下一棒先處理 W3.2 真實 evidence availability：若已存在合法 persisted raw/evidence pair，使用 offline materializer 寫入 canonical Feature Store 並再由既有 precommit gate 驗證；若不存在，新的 C2.3 measurement 需要另行明確授權。不要繞過 private-data 安全層，也不要以 continuous bars/TICK 代替。tracked auto reconnect 維持 disabled。
