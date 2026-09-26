@@ -6,9 +6,9 @@
 
 ### 2026-09-26 最新 W3.2 persisted-artifact 結果
 
-Implementation commit=`4decd79`，source/config build=`4196bab7c8064acb`。W3.2 既有 verified-tick materializer 已具備 OSE near-close timestamp cross-check、C2.3 typed evidence binding、JNU contract/month、PIT `available_at`、source snapshot、`CONTRACT` series 與 `DAILY` frequency gate；本棒新增 persisted raw/evidence pair 的 operator API 與 offline CLI。CLI 不接受人工 close 值，只能從 canonical artifact pair 重建；路徑限制在 recorder root，tamper/expected-contract mismatch/path escape fail closed，stdout 不輸出 close。
+Implementation commit=`4decd79`，source/config build=`35669ded63f487ed`。W3.2 既有 verified-tick materializer 已具備 OSE near-close timestamp cross-check、C2.3 typed evidence binding、JNU contract/month、PIT `available_at`、source snapshot、`CONTRACT` series 與 `DAILY` frequency gate；本棒新增 persisted raw/evidence pair 的 operator API 與 offline CLI。CLI 不接受人工 close 值，只能從 canonical artifact pair 重建；路徑限制在 recorder root，tamper/expected-contract mismatch/path escape fail closed，stdout 不輸出 close。
 
-驗證：focused=`50 passed`；related=`103 passed`；full isolated offline=`1923 passed, 7 skipped, 35 deselected, 110 warnings in 80.34s`，exit 0；最後 CLI/operator focused=`6 passed`；diff check PASS；secret scan=0。沒有 broker action。
+驗證：focused=`50 passed`；related=`103 passed`；full isolated offline=`1924 passed, 7 skipped, 35 deselected, 110 warnings in 81.50s`，exit 0；最後 CLI/operator focused=`6 passed`；diff check PASS；secret scan=0。沒有 broker action。
 
 WebCodex 對本機 private runtime artifact 目錄的 read-only probe 被安全層阻擋，且未繞過。因此目前只能標 REAL_DAILY_INPUT_NOT_REVERIFIED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / CALIBRATION_FITTING_NOT_STARTED。若已存在有效 raw/evidence pair，可離線 materialize；若不存在，需另行授權 C2.3 maintenance measurement，不能用 continuous bars/TICK 冒充。
 

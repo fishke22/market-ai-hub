@@ -2,7 +2,7 @@
 
 - Current phase: **W3.2 ARTIFACT_INGESTION_OFFLINE_PASS / REAL_DAILY_INPUT_NOT_REVERIFIED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / RUNTIME_ADOPTION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**4196bab7c8064acb**（W3.2 persisted-artifact terminal-close operator source/config fingerprint；OFFLINE PASS，不代表 real DAILY input 或 live adoption）
+- build_id：**35669ded63f487ed**（W3.2 persisted-artifact terminal-close operator source/config fingerprint；OFFLINE PASS，不代表 real DAILY input 或 live adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -13,10 +13,10 @@
 
 ## 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion
 
-- Implementation commit: `4decd79`; build `4196bab7c8064acb`.
+- Implementation commit: `4decd79`; build `35669ded63f487ed`.
 - Existing verified-tick materializer remains the only source of `terminal_close / w3.2-contract-daily-close-1`; it requires C2.3 typed evidence, OSE near-close timestamp cross-check, exact JNU contract/month, PIT `available_at`, source snapshots, `series_semantics=CONTRACT`, and `source_frequency=DAILY`.
 - Added artifact-pair API + offline CLI. No caller-supplied close value is accepted. Canonical IDs/bindings are revalidated; expected-contract mismatch and recorder-root path escape fail closed. CLI output is metadata-only and omits the close value.
-- Validation: focused `50 passed`; related `103 passed`; full isolated offline `1923 passed, 7 skipped, 35 deselected, 110 warnings in 80.34s`, exit 0; final operator-only `6 passed`; diff check PASS; changed/untracked secret scan 0.
+- Validation: focused `50 passed`; related `103 passed`; full isolated offline `1924 passed, 7 skipped, 35 deselected, 110 warnings in 81.50s`, exit 0; final operator-only `6 passed`; diff check PASS; changed/untracked secret scan 0.
 - No broker action occurred. Private runtime-artifact availability was not reverified because WebCodex blocked that read-only probe; therefore REAL_DAILY_INPUT=NOT_REVERIFIED and no new forward sample/evidence is claimed.
 - Next action is evidence-dependent: use an already-existing valid persisted raw/evidence pair offline if available; otherwise a new pair requires separately authorized C2.3 maintenance measurement. Continuous bars/TICK remain ineligible substitutes.
 

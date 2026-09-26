@@ -93,9 +93,9 @@ Reconnect branch was reconciled with JNU base `23504cf`; merged implementation=`
 
 ## 2026-09-26 W3.2 persisted-artifact terminal-close checkpoint
 
-Commit `4decd79`, build `4196bab7c8064acb`。新增 offline artifact-pair operator：persisted raw + typed runtime evidence 會先經 canonical snapshot/evidence ID/binding revalidation，再由既有 terminal-close materializer 產生 `terminal_close / w3.2-contract-daily-close-1`；人工 close 值沒有輸入口。CLI 限制 artifact 必須位於 canonical recorder root，metadata-only stdout 不暴露 close。
+Commit `4decd79`, build `35669ded63f487ed`。新增 offline artifact-pair operator：persisted raw + typed runtime evidence 會先經 canonical snapshot/evidence ID/binding revalidation，再由既有 terminal-close materializer 產生 `terminal_close / w3.2-contract-daily-close-1`；人工 close 值沒有輸入口。CLI 限制 artifact 必須位於 canonical recorder root，metadata-only stdout 不暴露 close。
 
-Validation：focused `50 passed`；related `103 passed`；full offline `1923 passed, 7 skipped, 35 deselected, 110 warnings in 80.34s`；final operator `6 passed`；diff/secret PASS。沒有 broker action。因 WebCodex 安全層阻擋 private runtime artifact availability probe 且未繞過，REAL_DAILY_INPUT_NOT_REVERIFIED；不可由此宣稱 DATA READY 或新增 forward evidence。
+Validation：focused `50 passed`；related `103 passed`；full offline `1924 passed, 7 skipped, 35 deselected, 110 warnings in 81.50s`；final operator `6 passed`；diff/secret PASS。沒有 broker action。因 WebCodex 安全層阻擋 private runtime artifact availability probe 且未繞過，REAL_DAILY_INPUT_NOT_REVERIFIED；不可由此宣稱 DATA READY 或新增 forward evidence。
 
 ## 尚未完成，不能誤報已修好
 
