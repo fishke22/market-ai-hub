@@ -8,6 +8,7 @@ $PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
 $RecorderRoot = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root; print(recorder_root())"
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve recorder root" }
 $StatePath = Join-Path $RecorderRoot "automation_watchdog.json"
+$C23StatePath = Join-Path $RecorderRoot "automation\c23_terminal_close.json"
 
 function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
     $payload = [ordered]@{
@@ -25,6 +26,19 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
     $tmp = $StatePath + ".tmp"
     $payload | ConvertTo-Json -Depth 4 | Set-Content -Path $tmp -Encoding UTF8
     Move-Item -Force -LiteralPath $tmp -Destination $StatePath
+}
+
+if (Test-Path $C23StatePath) {
+    try {
+        $c23 = Get-Content $C23StatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($c23.status -eq "IN_PROGRESS" -and $c23.updated_at) {
+            $age = ((Get-Date).ToUniversalTime() - [datetimeoffset]::Parse($c23.updated_at).UtcDateTime).TotalMinutes
+            if ($age -ge 0 -and $age -lt 15) {
+                Write-WatchdogState "IDLE" "NONE" "C23_MAINTENANCE_IN_PROGRESS" "CONTROLLED_HANDOVER"
+                exit 0
+            }
+        }
+    } catch {}
 }
 
 $day = (Get-Date).DayOfWeek

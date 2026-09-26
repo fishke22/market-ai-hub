@@ -4,13 +4,21 @@
 
 ## 1. 先讀這段
 
+### 2026-09-26 最新 C2.3 自動化 / W3.2 operational cycle 結果
+
+Implementation commit=`b0a26f3`，source/config build 仍為 `35669ded63f487ed`。RDC 已解開先前 WebCodex 無法讀 private runtime 的不確定性：目前沒有 running owner；只有舊 raw `w33_tick_cbce3cba39291cd1f14e.json`，沒有 typed verification 目錄，因此不能離線補造 C2.3 evidence。
+
+本棒新增 fail-closed close-window orchestrator、5 分鐘 timezone-aware task registration、JNU watchdog maintenance yield、以及 broker-free W3.2 exact-JNU settle/precommit operator。只有 OSE session date 且 15:45–17:00 JST 才能進 maintenance；exact JNU 由既有 FunctionList resolver 決定；每交易日最多三次自動嘗試；成功必須先取得 persisted C2.3 typed evidence，才 materialize DAILY close，再 settle 舊 forward prediction / precommit 下一筆。stdout/state 都不公開價格。
+
+驗證：focused=`96 passed, 1 deselected`；broader=`198 passed, 2 deselected`；CI-equivalent full=`1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`，exit 0；compile、PowerShell dry-run/non-session、diff check、secret scan 全 PASS。今天非 OSE session，所以沒有送 measurement；ACTUAL_FORWARD_EVIDENCE 仍 NONE_YET。task 尚未註冊，persistent safe-default owner 尚未由 RDC 建立，需在 merge 後完成。
+
 ### 2026-09-26 最新 W3.2 persisted-artifact 結果
 
 Implementation commit=`4decd79`，final feature head=`262729b`，PR #58 CI=`36234063403` PASS，merged main=`da73dd288971520e2c765f6660b7d329b89ac79e`；post-merge tree 一致、operator smoke=`6 passed`；source/config build=`35669ded63f487ed`。W3.2 既有 verified-tick materializer 已具備 OSE near-close timestamp cross-check、C2.3 typed evidence binding、JNU contract/month、PIT `available_at`、source snapshot、`CONTRACT` series 與 `DAILY` frequency gate；本棒新增 persisted raw/evidence pair 的 operator API 與 offline CLI。CLI 不接受人工 close 值，只能從 canonical artifact pair 重建；路徑限制在 recorder root，tamper/expected-contract mismatch/path escape fail closed，stdout 不輸出 close。
 
 驗證：focused=`50 passed`；related=`103 passed`；full isolated offline=`1924 passed, 7 skipped, 35 deselected, 110 warnings in 81.50s`，exit 0；最後 CLI/operator focused=`6 passed`；diff check PASS；secret scan=0。沒有 broker action。
 
-WebCodex 對本機 private runtime artifact 目錄的 read-only probe 被安全層阻擋，且未繞過。因此目前只能標 REAL_DAILY_INPUT_NOT_REVERIFIED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / CALIBRATION_FITTING_NOT_STARTED。若已存在有效 raw/evidence pair，可離線 materialize；若不存在，需另行授權 C2.3 maintenance measurement，不能用 continuous bars/TICK 冒充。
+先前 WebCodex 無法讀 private runtime artifact；本輪已依使用者指示改用 RDC 唯讀查核並確認：只有 historical raw、沒有 typed verification evidence。使用者已明確授權繼續施工；但今天不是 OSE session date，故仍不能合法產生新的 C2.3 typed evidence。ACTUAL_FORWARD_EVIDENCE=NONE_YET / CALIBRATION_FITTING_NOT_STARTED，continuous bars/TICK 仍不得冒充 DAILY。
 
 
 本專案已超過第一階段。公開 main 已有 Phase 2、多輪安全與資料語義修正、Price/Probability Map 基礎，以及 V2-A 至 V2-I 2I.1。不要把「第二階段施工」解讀成 V2-I 尚未存在，也不要重做它們。

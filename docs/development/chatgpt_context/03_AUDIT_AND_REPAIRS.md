@@ -4,6 +4,12 @@
 
 原始修補基準 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b；後續 W1/W2/W3/JNU/reconnect 修補累積於 PR #55，已於 2026-09-26 merge 到 main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`。Merged build=`1037d45ff8e65884`；最終 docs-only CI `36231436018` PASS；post-merge reconnect+JNU smoke `29 passed, 21 deselected`。
 
+## 2026-09-26 C2.3 automation correctness closure
+
+Implementation `b0a26f3` closes the remaining operational gap between typed C2.3 evidence and natural W3.2 forward-sample accumulation. RDC confirmed there is currently no usable typed verification artifact; the one historical raw artifact cannot be upgraded after the fact. The new orchestrator is controlled-window-only, single-owner, exact-JNU, metadata-only, capped at three attempts per trading date, and restores the safe-default quote owner after maintenance. The new W3.2 operator is broker-free and settles/precommits only the existing homogeneous OSAKA_MICRO/JNU forward scope from canonical Feature Store data. Queue-path output was changed from `Write-Host` to capturable stdout so orchestration cannot silently lose the request identity.
+
+Validation: focused `96 passed, 1 deselected`; broader `198 passed, 2 deselected`; CI-equivalent full `1939 passed, 1 skipped, 34 deselected, 110 warnings in 113.70s`; diff check PASS; changed/untracked secret scan 0; build unchanged `35669ded63f487ed`. No measurement was sent because 2026-09-26 is not an OSE session date. Runtime task registration and persistent-owner adoption remain post-merge gates.
+
 ## 基準與查核範圍
 
 最初查核基準 d649059（PR #53），當時新 recorder 未提交。本輪施工期間，另一棒將原功能以 PR #54 合併為 eb9202a157ce8831fdf6442a0f9faa5b84387d92。本輪修補以其為父基準，保留既有功能，沒有 reset/clean/stash。實際 repo 為 D:\MARKET_AI_HUB，交接包工作區不是該產品 repo。
