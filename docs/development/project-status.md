@@ -1,15 +1,25 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W1 RUNTIME CONTRACT REVALIDATION OFFLINE_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
+- Current phase: **W1 CONNECTION_EVENT_FAIL_CLOSED OFFLINE_PASS / RUNTIME_ADOPTION_PENDING / C2.3 RUNTIME_REVERIFICATION_PENDING**
 - Gate: **W3.2 PRECOMMITTED_FORWARD_CYCLE_ENGINE_PASS / ACTUAL_FORWARD_EVIDENCE=NONE_YET**；V2-I 2I.1 evaluation foundation remains PASS
-- build_id：**b571449004691eac**（2026-09-26 W1 runtime revalidation source/config fingerprint；現有 recorder runtime 仍是舊 build `afd52f88a351541a`，所以不代表 runtime adoption）
+- build_id：**1ff1c2adb6bc21bf**（2026-09-26 W1 connection-event fail-closed source/config fingerprint；現有 recorder runtime 仍是舊 build `afd52f88a351541a`，所以不代表 runtime adoption）
 - Schemas：PPM **3A.2.3**；V2 as-of/session/factor **2A.2**；gap/session **2B.1**；daily label **2C.2**；state machine **2D.4**；extension/exhaustion **2E.3**；catalyst response **2F.3**；sequential update **2G.2**；prediction audit **2H.3**；evaluation governance **W3.1**；forward cycle **W3.2**；calibration evaluation **2I.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：2026-09-24 local quote matrix and 2026-09-25 controlled evidence remain historical capability evidence. After the 2026-09-26 W1 source/config change, read-only owner preflight shows one existing invocation chain `[31808,32120]`, no independent duplicate, fresh heartbeat, status `DEGRADED`, runtime build `afd52f88a351541a` versus disk build `b571449004691eac`, both measurement gates=false, and `BLOCKED_RUNTIME_BUILD_STALE`. **Do not start a second owner; C2.3 typed runtime re-verification and runtime adoption are both still pending.**
+- Live quote capability：2026-09-24 local quote matrix and 2026-09-25 controlled evidence remain historical capability evidence. After the latest 2026-09-26 W1 source change, read-only owner preflight shows one existing invocation chain `[31808,32120]`, no independent duplicate, fresh heartbeat, status `DEGRADED`, runtime build `afd52f88a351541a` versus disk build `1ff1c2adb6bc21bf`, both measurement gates=false, and `BLOCKED_RUNTIME_BUILD_STALE`. **Do not start a second owner; C2.3 typed runtime re-verification and runtime adoption are both still pending.**
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 W1 SPARK connection-event fail-closed
+
+- Implementation commit: `223ddd88e3a308a21c95176992001041d1eefeb0`; build `1ff1c2adb6bc21bf`.
+- Official system-event semantics are explicit: only `intMark=0,dwIndex=1` is Connect. Codes 2/3/4/5 latch DISCONNECTED/NETWORK_ERROR/UPDATE_REQUIRED/NOT_CONNECTED fault state; announcement/other events do not unblock startup.
+- Startup connection failure now blocks before Login. A RUNNING fault exits fail-closed as `RUNTIME_FAILED`, records safe connection event metadata, then performs the existing pending-buffer flush attempt and closes/disposes the API.
+- Fault remains latched if a later Connect arrives within the same Open because subscription continuity is unknown; a new explicit Open resets state. No automatic reconnect/login/resubscribe loop is implemented or claimed.
+- Validation: focused `5 passed`; related `119 passed, 2 deselected`; full isolated offline `1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`, exit 0; diff check PASS; changed-file secret scan 0.
+- Boundaries: no broker action; current live owner is still prior build `afd52f88a351541a`, so the new behavior is not runtime-adopted. Durable crash spool/WAL remains absent.
+- Exact next offline W1 package: durable crash spool/WAL semantics and implementation with bounded replay/corruption counterexamples; automatic reconnect remains separate.
 
 ## 2026-09-26 W1 runtime subscription revalidation
 

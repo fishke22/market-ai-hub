@@ -12,15 +12,17 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 ### 2026-09-26 最新 W1 接手結果
 
-實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。上一棒留下的 `live_quote_recorder.py` / `test_quote_hub_hardening.py` dirty W1 contract-roll package 已完成 review、最小修補與離線驗收，implementation commit=`d6d443a1d18989e4826c81ed0fcff835f5295386`，目前 source/config build=`b571449004691eac`。
+實際 repo=`D:\MARKET_AI_HUB`，branch=`codex/quote-hub-correctness`。最新 W1 connection-event fail-closed implementation commit=`223ddd88e3a308a21c95176992001041d1eefeb0`，目前 source/config build=`1ff1c2adb6bc21bf`；前一個 contract-roll/revalidation implementation commit=`d6d443a1d18989e4826c81ed0fcff835f5295386`。
 
-核心修正：default subscriptions 每 300 秒重新解析，以各 market venue-local date 判斷月份/expiry，不再把 UTC rollover 當 exchange/session rollover；revalidation failure 會保持 DEGRADED 並於下一 interval retry。default routing 與 dynamic ownership 分離，default roll/removal 不會誤刪 dynamic intent；部分 subscribe/unsubscribe 失敗保持已完成操作的 truthful union。add-before-remove 若會暫時突破 2000 unique subscription cap，會在 provider call 前 fail closed。5000-event buffer soak 驗證 bounded queue 與 exact drop counter。
+最新核心修正：SPARK `OnResponse` 只有 `intMark=0,dwIndex=1` 可視為 Connect；2/3/4/5 分別鎖存斷線/網路異常/API 更新需求/尚未連線 fault。startup 沒有 official Connect 就在 Login 前 fail closed；RUNNING 後出現 fault 則退出成 `RUNTIME_FAILED`、保存安全的 event code/state 並執行既有 pending-buffer flush。later Connect 不會在同一 Open 內清除 fault；只有新的 explicit Open 重置。**沒有實作或宣稱 auto reconnect/re-login/resubscribe。**
+
+前一包 revalidation 修正仍有效：default subscriptions 每 300 秒以 venue-local date 重新解析月份/expiry；failure 下一 interval retry。default routing 與 dynamic ownership 分離，部分 provider 操作失敗維持 truthful union，且 add-before-remove 不得暫時突破 2000 unique subscription cap。
 
 API signature 查核：bundled vendor `YSendOrder.py` 的 WatchlistAll sample 省略第三參數；本機 `2.2026.0918.0` DLL reflection 顯示第三個 `Lng` 是 optional、default=`NORMAL`，因此 recorder 保留既有 explicit `enumLangType.UTF8`。subscribe/unsubscribe 共用 0.2 秒 throttle。這個查核只載入本機 assembly，沒有 instantiate/login/broker call。
 
-驗證：W1/W2/C2 broader=`96 passed, 2 deselected`；final isolated offline=`1888 passed, 1 skipped, 35 deselected, 110 warnings in 107.43s`，exit 0；diff check PASS；changed-file secret scan=0。第一次 full offline 的 3 failures 全是舊 `afd52f88a351541a` build-freeze assertions，觀測新 fingerprint 後更新為 `b571449004691eac`，沒有刪 gate。
+最新驗證：connection focused=`5 passed`；related Yuanta/W1/C2=`119 passed, 2 deselected`；final isolated offline=`1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`，exit 0；diff check PASS；changed-file secret scan=0。build-freeze assertions 只在觀測 fingerprint=`1ff1c2adb6bc21bf` 後更新，沒有刪 gate。
 
-目前 recorder **尚未 adoption 新 build**。read-only preflight=`BLOCKED_RUNTIME_BUILD_STALE`：同一 invocation chain `[31808,32120]`、無 independent duplicate、heartbeat fresh、status=`DEGRADED`、runtime build=`afd52f88a351541a`、disk build=`b571449004691eac`、runtime/tracked measurement gate=false、broker_action_performed=false。不要因 disk/runtime 不一致就啟第二 owner或直接重啟。auto reconnect 尚未實作/驗證；crash durability 仍 `BUFFERED_NOT_ZERO_LOSS`，無 durable WAL/spool。
+目前 recorder **尚未 adoption 新 build**。read-only preflight=`BLOCKED_RUNTIME_BUILD_STALE`：同一 invocation chain `[31808,32120]`、無 independent duplicate、heartbeat fresh、status=`DEGRADED`、runtime build=`afd52f88a351541a`、disk build=`1ff1c2adb6bc21bf`、runtime/tracked measurement gate=false、broker_action_performed=false。不要因 disk/runtime 不一致就啟第二 owner或直接重啟。auto reconnect 尚未實作/驗證；crash durability 仍 `BUFFERED_NOT_ZERO_LOSS`，無 durable WAL/spool。
 
 可信度邊界不變：`ENGINE PASS != DATA READY != CALIBRATED != PREDICTIVE EVIDENCE != TRADING EDGE`；actual C2.3 typed runtime verification、eligible real DAILY close、W3.2 actual forward evidence仍未成立。
 
@@ -103,7 +105,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder 在 `afd52f88a351541a` 時曾完成 runtime adoption；2026-09-26 W1 source/config 已更新到 `b571449004691eac`，現有 single owner 仍跑舊 build，因此新 build 的 runtime adoption 目前是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder 在 `afd52f88a351541a` 時曾完成 runtime adoption；2026-09-26 最新 W1 source/config 已更新到 `1ff1c2adb6bc21bf`，現有 single owner 仍跑舊 build，因此新 build 的 runtime adoption 目前是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -171,4 +173,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 single safe-default owner 仍 RUNNING，但 runtime build=`afd52f88a351541a`、disk build=`b571449004691eac`，所以 owner preflight 應為 `BLOCKED_RUNTIME_BUILD_STALE`；不要再開第二 owner，parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。下一次需要 runtime adoption 或 C2.3 maintenance 時，必須先依 single-owner lifecycle 做受控 handover，啟動 disk current build `b571449004691eac` 並重新驗 fresh W1/W2 provenance；只有 C2 maintenance 且落在有效 OSE 15:45–17:00 JST 視窗時，才可再驗 FunctionList exact JNU 並只送一筆 measurement。typed evidence 成立才 materialize DAILY close；否則 fail closed。C3/C4 仍等待真實 C1/C2 輸入。
+先核對最新 HEAD/remote/worktree/build/PR #55 CI，並先跑 `scripts/check_yuanta_recorder_owner.ps1`。W2/W3.1/W3.2/W3.3 engines 不要重做。最新 truth 是 single safe-default owner 仍 RUNNING，但 runtime build=`afd52f88a351541a`、disk build=`1ff1c2adb6bc21bf`，所以 owner preflight 應為 `BLOCKED_RUNTIME_BUILD_STALE`；不要再開第二 owner，parent+child matching Python PID 是同一 invocation，不要用 raw process count 判 duplicate。下一個不需 broker 維護窗口的 W1 工作包是 durable crash spool/WAL：先定義 append/ack/replay、容量上限、重複/部分寫入/corruption 的 fail-closed 語義並只做離線反例。auto reconnect 不憑猜測實作；runtime adoption 或 C2.3 maintenance 仍須之後依 single-owner lifecycle 受控 handover到 current build `1ff1c2adb6bc21bf`。C3/C4 仍等待真實 C1/C2 輸入。

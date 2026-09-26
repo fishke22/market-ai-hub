@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 runtime subscription revalidation hardening OFFLINE PASS; runtime adoption remains pending because the existing safe-default recorder is still on the prior build.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 SPARK connection-event fail-closed hardening OFFLINE PASS; runtime adoption remains pending because the existing safe-default recorder is still on the prior build.
 
 ## Current repair checkpoint
+
+### 2026-09-26 W1 SPARK connection-event fail-closed hardening
+
+Implementation commit `223ddd88e3a308a21c95176992001041d1eefeb0`; source/config build=`1ff1c2adb6bc21bf`. Official SPARK `OnResponse` system events are now interpreted by `dwIndex`: only `1=Connect` satisfies the startup connection gate; `2=Disconnect`, `3=network anomaly`, `4=API update required`, and `5=not connected` latch a connection fault. Other/announcement events no longer masquerade as a successful connection.
+
+Recorder startup now stops before `Login` when official Connect is not observed. While RUNNING, any latched connection fault causes fail-closed exit, pending-buffer flush attempt, and final `RUNTIME_FAILED` status with the PII-free last connection event code/state. A later Connect event within the same Open does not erase the fault because subscription continuity is unknown. A new explicit `Open` resets the latch. **This is connection-fault detection and safe termination, not automatic reconnect/re-login/resubscribe.** Official public lifecycle documentation does not establish a safe automatic reconnect sequence, so no retry loop was invented.
+
+Validation: focused connection counterexamples=`5 passed`; related Yuanta/W1/C2=`119 passed, 2 deselected`; isolated full offline=`1893 passed, 1 skipped, 35 deselected, 110 warnings in 118.83s`, exit 0; `git diff --check` PASS; changed-file secret scan=0. Three frozen build assertions were updated only after observing the new fingerprint. No broker login/logout/restart/subscription/request/order/account action occurred.
+
+Read-only owner preflight remains fail-closed: invocation chain `[31808,32120]`, no independent duplicate owner, heartbeat fresh, runtime build=`afd52f88a351541a`, disk build=`1ff1c2adb6bc21bf`, runtime/tracked measurement gates=false, classification=`BLOCKED_RUNTIME_BUILD_STALE`, broker_action_performed=false. Do not start a second owner or claim the new connection-state behavior is adopted live. Crash durability also remains `BUFFERED_NOT_ZERO_LOSS` without a durable WAL/spool.
 
 ### 2026-09-26 W1 runtime contract revalidation hardening
 
@@ -197,6 +207,10 @@ Legacy canonical API symbol = BASE symbol (e.g. TMFJ6) for BOTH T and T+1.
   `xxxPM` symbols stay as EasyWin UI/alias metadata only; never the AddMktReg canonical symbol.
 ```
 Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easwin_resolver.py`).
+
+## Exact next work package
+
+W1 durable crash spool/WAL, offline-only: specify append/ack/replay, bounded capacity, idempotency, partial-write recovery, and corruption fail-closed behavior. Automatic reconnect remains a separate later lifecycle package.
 
 ## Truthfulness rules
 
