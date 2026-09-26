@@ -1,7 +1,7 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 reconnect + JNU merge OFFLINE PASS; PR #56 latest-head CI and live adoption remain pending.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W1 reconnect + JNU merged OFFLINE PASS; PR #55 CI run `36230804948` PASS; live adoption remains pending.
 
 ## Current repair checkpoint
 
@@ -231,7 +231,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-Wait for PR #56 latest-head CI/review. Do not enable tracked auto reconnect or start/restart a live owner without explicit authorization; `NO_RUNNING_OWNER` is not start authorization.
+PR #56 is MERGED into the feature base and PR #55 head `4978f59` passed CI run `36230804948`. Next work is review/merge-to-main readiness only; do not enable tracked auto reconnect or start/restart a live owner without explicit authorization.
 
 ## Truthfulness rules
 

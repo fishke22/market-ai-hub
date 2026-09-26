@@ -89,7 +89,7 @@
 
 ## 2026-09-26 W1 bounded reconnect checkpoint
 
-Reconnect branch `codex/w1-reconnect-lifecycle` has been reconciled with JNU base commit `23504cf`; merged build=`1037d45ff8e65884`. Merged OFFLINE PASS: focused `29 passed, 21 deselected`, related `150 passed, 2 deselected`, full `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`. PR #56 OPEN; latest-head CI pending. Tracked auto reconnect remains disabled; live adoption is not established.
+Reconnect branch was reconciled with JNU base commit `23504cf`; merged commit=`4978f59`, build=`1037d45ff8e65884`. Merged OFFLINE PASS: focused `29 passed, 21 deselected`, related `150 passed, 2 deselected`, full `1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`. PR #56 is MERGED into the feature base and PR #55 CI `36230804948` PASS. Tracked auto reconnect remains disabled; live adoption is not established.
 
 ## 尚未完成，不能誤報已修好
 
@@ -106,4 +106,4 @@ Reconnect branch `codex/w1-reconnect-lifecycle` has been reconciled with JNU bas
 
 選配研究依賴已在 pyproject 的 research extra 宣告（neuralforecast 3.2.2、mlflow 3.16.1，取自本機既有版本）。需要這些研究功能時，在已重建 venv 使用 `python -m pip install -e ".[research]"`；核心安裝不強制載入它們。啟用前仍需驗證依賴/硬體/授權，不因安裝 extra 就自動訓練。
 
-下一棒先核對 PR #56 最新 head/CI 與 PR #55 base 狀態。merged offline 已 PASS；若 CI 綠燈，工作包進入 review/publish-ready。tracked auto reconnect 維持 disabled，live enable/restart/re-login 仍需另行明確授權。
+下一棒先核對 PR #55 最新 head/CI 與 main merge 狀態。merged offline 與 CI 都已 PASS；工作包進入 review/merge-to-main readiness。tracked auto reconnect 維持 disabled，live enable/restart/re-login 仍需另行明確授權。

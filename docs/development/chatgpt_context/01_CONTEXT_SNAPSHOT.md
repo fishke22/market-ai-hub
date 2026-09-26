@@ -14,14 +14,14 @@ GitHub：https://github.com/fishke22/market-ai-hub
 
 #### reconnect-only stacked checkpoint
 
-Reconnect implementation commit=`feeefe3`; merged with JNU base commit=`23504cf` on branch=`codex/w1-reconnect-lifecycle`; merged source/config build=`1037d45ff8e65884`. Stacked PR #56 OPEN; latest-head CI pending.
+Reconnect implementation commit=`feeefe3`; merged with JNU base commit=`23504cf`; merged commit=`4978f59`; merged source/config build=`1037d45ff8e65884`. PR #56 is MERGED into the feature base; PR #55 CI run `36230804948` PASS.
 
 Merged recorder keeps JNU microstructure capture and bounded reconnect together. Reconnect remains full-runtime replacement only: durable pending flush -> local retire -> fresh Open -> official Connect -> fresh WinCred password -> Login OnResponse -> complete quote re-subscribe, then JNU microstructure subscriptions are restored. No hidden `Reconnect()` API is assumed. Tracked `auto_reconnect.enabled=false`.
 
 Merged validation: focused reconnect+JNU=`29 passed, 21 deselected`; related=`150 passed, 2 deselected`; full offline=`1918 passed, 7 skipped, 35 deselected, 110 warnings in 84.89s`, exit 0. Read-only main-worktree preflight observed `NO_RUNNING_OWNER`/`STOPPED` with no broker action; that is not start authorization.
 
 
-實際 repo=`D:\MARKET_AI_HUB`；base branch 最新 owned commit=`23504cf`（JNU capture），stacked reconnect branch 已完成衝突整合。merged build=`1037d45ff8e65884`；PR #56 CI 尚待最新 head 驗收。
+實際 repo=`D:\MARKET_AI_HUB`；feature branch 已 fast-forward 到 merged commit=`4978f59`，merged build=`1037d45ff8e65884`。PR #56 已併入 feature base；PR #55 CI `36230804948` PASS。
 
 最新核心修正：durable spool/WAL、connection fail-closed、venue-local contract revalidation、JNU microstructure capture 與 bounded reconnect 已在 merged offline profile 共存。auto reconnect 實作存在但 tracked default=false；live restart/re-login 尚未 adoption。
 
@@ -114,7 +114,7 @@ W1/W2/W3.1/W3.2/W3.3 已存在的工程不重做。C1 程式/測試 commit 為 `
   → 任意相容平台的 LLM 用白話解釋
 ```
 
-上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。W1/W2 recorder 在 `afd52f88a351541a` 時曾完成 runtime adoption；2026-09-26 最新 W1 source/config 已更新到 `b7c1f3d08a383d65`，現有 single owner 仍跑舊 build，因此 durable-spool/live connection changes 的 runtime adoption 目前是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
+上圖是既有元件與目標資料流；**不是宣稱每段均已接通**。W2 離線鏈已接到 read-only model-input boundary；W3.1 已完成 prediction/outcome maturity 與 evaluation-as-of/scope governance。現有 broker `TICK` 對現有 `1d` 模型仍明確回 `INCOMPATIBLE_FREQUENCY`，所以沒有把 tick 假造成日線，也沒有宣稱 broker DATA READY。2026-09-26 最新 merged source/config build=`1037d45ff8e65884`，但最新 read-only preflight 為 `NO_RUNNING_OWNER`；因此 live runtime adoption 仍是 PENDING。C2.3 typed runtime re-verification、真實 forward 樣本與 calibration fitting 也仍未成立。
 
 核心產品是研究 MCP 系統，不依賴 Cherry Studio 專屬能力。ChatGPT/OpenCode/其他 agent 是工程或解讀客戶端；不同平台用同一份具時間、來源、版本、限制的結構化輸出。
 
@@ -182,4 +182,4 @@ ChatGPT 專案資料來源是上傳快照，不會因 GitHub push 自動變成�
 
 ## 8. 下一棒
 
-先核對 PR #56 最新 head/CI 與 base PR #55 狀態。merged reconnect+JNU offline 已 PASS，下一步不是再改架構，而是通過 CI 後做 review；tracked auto reconnect 保持 disabled。任何 live enable/restart/re-login 仍需另行明確授權，`NO_RUNNING_OWNER` 不等於可自行啟動。
+先核對 PR #55 最新 head/CI 與 main merge 狀態。merged reconnect+JNU offline 已 PASS，PR #55 CI `36230804948` 也 PASS；下一步是 review/merge-to-main readiness，不再重做架構。tracked auto reconnect 保持 disabled。任何 live enable/restart/re-login 仍需另行明確授權，`NO_RUNNING_OWNER` 不等於可自行啟動。
