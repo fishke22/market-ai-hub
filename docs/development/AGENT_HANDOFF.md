@@ -1,9 +1,20 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 PR #55 MERGED to main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`; merged build=`1037d45ff8e65884`; post-merge reconnect+JNU smoke PASS; live adoption remains pending.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion OFFLINE PASS; implementation=`4decd79`; build=`35669ded63f487ed`; REAL_DAILY_INPUT_NOT_REVERIFIED.
 
 ## Current repair checkpoint
+
+### 2026-09-26 W3.2 persisted-artifact DAILY terminal-close ingestion
+
+Implementation commit `4decd79`; source/config build=`35669ded63f487ed`. The existing C2/W3.2 materializer already enforced runtime-verified OSE timestamp basis, near-close trade evidence, exact JNU contract/month binding, PIT `available_at`, contract series semantics, and canonical Feature Store `terminal_close / w3.2-contract-daily-close-1`. This package closes the operator gap: `materialize_ose_terminal_close_from_artifacts()` reloads and revalidates the persisted raw/evidence pair and derives contract month from the JNU code; callers cannot supply a close price.
+
+New offline CLI `scripts/materialize_ose_terminal_close.py` accepts only explicit raw/evidence artifact paths plus an optional expected contract code. Paths are confined to the canonical recorder root, missing/empty/outside-root paths fail closed, and stdout exposes metadata/status only (`values_exposed=false`) without the close value. The canonical Feature Store continues to resolve through `MARKET_AI_DATA_ROOT`. Tampered raw snapshots, mismatched expected contracts, invalid evidence binding, and path escape are rejected before feature materialization.
+
+Validation: operator/materializer/forward-cycle focused=`50 passed`; related W2/C2/W3.2/JNU regression=`103 passed`; isolated full offline=`1924 passed, 7 skipped, 35 deselected, 110 warnings in 81.50s`, exit 0; final operator-only after the empty-path gate=`6 passed`; compile PASS; `git diff --check` PASS; changed/untracked secret scan=0. No broker action occurred.
+
+Truth boundary: a read-only probe of the machine's private runtime artifact directories was blocked by the WebCodex safety layer and was not bypassed. Therefore REAL_DAILY_INPUT=NOT_REVERIFIED, ACTUAL_FORWARD_EVIDENCE=NONE_YET, calibration fitting remains not started, and this engineering pass is not DATA READY.
+
 
 ### 2026-09-26 W1 bounded quote reconnect lifecycle
 
@@ -231,7 +242,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-PR #56 merged into the feature base and PR #55 merged to main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`. Final docs-only PR #55 head `98ec76c` passed CI run `36231436018`; post-merge tree equals the validated head and post-merge reconnect+JNU smoke=`29 passed, 21 deselected`. Exact next non-live package: W3.2 dedicated-contract DAILY terminal-close feature source/ingestion/aggregation with PIT/source/contract/month/roll/available_at semantics; continuous bars and TICK must not be silently promoted. Live enablement/restart remains separately authorized.
+W3.2 artifact ingestion/operator is OFFLINE PASS. Exact next action is evidence-dependent: materialize an already-existing valid persisted raw/evidence pair offline if one is available; otherwise no further real DAILY materialization is truthful until a separately authorized C2.3 maintenance measurement produces such a pair. Do not substitute continuous bars/TICK, and do not infer authorization to start/re-login the broker.
 
 ## Truthfulness rules
 

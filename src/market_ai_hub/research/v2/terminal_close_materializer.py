@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from math import isfinite
+from pathlib import Path
 import re
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -249,4 +250,31 @@ def materialize_ose_terminal_close(
     return TerminalCloseMaterializationResult(
         **{**candidate.model_dump(), "status": STATUS_MATERIALIZED,
            "lineage_id": str(stored["lineage_id"])}
+    )
+
+def materialize_ose_terminal_close_from_artifacts(
+    raw_artifact: str | Path,
+    evidence_artifact: str | Path,
+    *,
+    expected_contract_code: str = "",
+    store: FeatureStore | None = None,
+) -> TerminalCloseMaterializationResult:
+    """Reload a persisted measurement pair and materialize one verified DAILY close.
+
+    No price/close value is accepted from the caller.  The close, contract identity,
+    timestamps, and source snapshot IDs all come from the canonical raw/evidence pair.
+    """
+    batch, evidence = TV.load_runtime_measurement(raw_artifact, evidence_artifact)
+    expected = str(expected_contract_code or "").strip().upper()
+    if expected and str(batch.stock_code or "").strip().upper() != expected:
+        return _blocked(
+            "EXPECTED_CONTRACT_CODE_MISMATCH",
+            batch=batch,
+            contract_month=_month_from_jnu(batch.stock_code),
+        )
+    return materialize_ose_terminal_close(
+        batch,
+        contract_month=_month_from_jnu(batch.stock_code),
+        verification_evidence=evidence,
+        store=store,
     )
