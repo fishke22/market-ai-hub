@@ -59,7 +59,7 @@
 
 ## analyze_osaka_nikkei
 
-- 用途：大阪日經 PROXY 分析（^N225 index + 跨市場；非 OSE micro 即時）。
+- 用途：大阪日經 PROXY 分析（^N225 index + 跨市場；非 OSE micro 即時）。Public view 會另外提供 `research_decision_support`：research stance、evidence scope、模型分歧摘要與 conditional research action framework；它不是 validated direction、機率或下單指令。
 - 參數：無
 
 ## analyze_taiwan_stock
@@ -69,7 +69,7 @@
 
 ## get_analysis_packet
 
-- 用途：正式分析封包（backend 先完成大部分工作）。
+- 用途：正式分析封包（backend 先完成大部分工作）。`display_policy`/`research_decision_support` 明確區分 formal validated direction 與允許主腦輸出的 research stance / conditional action framework；NO ORDER 與 probability gate 仍保留。
 - 參數：無
 
 ## get_data_coverage

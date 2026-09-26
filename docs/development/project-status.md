@@ -1,15 +1,23 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **W3.2-EP1 RAW_EVENT_PROBABILITY_PRODUCER_LOCAL_PASS / W5.1 FIRST_PASSAGE_MERGED / W4.1 CALIBRATION_ENGINE_MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
-- Gate: **LOCAL ENGINEERING INCLUDING W3.2-EP1 PASS; producer will start only from future eligible exact-contract DAILY closes. Evidence gates remain closed until real samples accumulate. W4 CALIBRATED still requires governed CALIBRATION + VALIDATION + separate one-use FINAL_OOS acceptance.**
-- build_id：**72c6f533e5ae2341**（W3.2-EP1 + MCP/security closeout source/config fingerprint；LOCAL_PASS，post-merge live-owner handover pending）
+- Current phase: **RESEARCH_DECISION_SUPPORT_LOCAL_PASS / W3.2-EP1 MERGED / W5.1 FIRST_PASSAGE_MERGED / W4.1 CALIBRATION_ENGINE_MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Gate: **Research stance/conditional research action is now allowed and machine-generated separately from formal validated direction/probability/edge. NO ORDER, personalized size, exact entry/stop/target, and CALIBRATED claims remain gated. Real W3/W4 evidence gates remain closed until eligible samples accumulate.**
+- build_id：**e8dc080886d0b5a2**（research decision-support source/config fingerprint；LOCAL_PASS，publication/post-merge live-owner verification pending）
 - Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.4**；evaluation governance **W3.1**；forward cycle **W3.2**；raw event producer **W3.2-EP1**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：the pre-existing persistent safe-default owner remains single-owner/safe-default; source changes make runtime build stale versus disk build **72c6f533e5ae2341** until the post-merge controlled handover. Measurement gates remain false; no second owner is permitted.
+- Live quote capability：before this new source package, PR #64 runtime was single-owner and adopted on build **72c6f533e5ae2341**. This branch changes source build to **e8dc080886d0b5a2**; post-merge owner verification/handover is required before claiming runtime=disk for the new package. Measurement gates remain false; no second owner is permitted.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-26 research decision-support correction
+
+- Root cause of the CherryStudio refusal: public packet/prompt collapsed `formal validated direction` and `research advice` into one prohibition. `strategy_research_state=WAIT` is still a research gate, but it no longer suppresses a separate qualitative stance.
+- Added public `research_decision_support`: `research_stance`, strength, evidence scope, price-ensemble tilt, raw-classifier qualitative tilt, model disagreement, and conditional action framework. Raw classifier scores remain hidden; probability remains unavailable unless calibrated.
+- Osaka research stance is PROXY_ONLY and compares model evidence only within ^N225 scope; it never subtracts stale Micro settlement from proxy forecasts. Actual smoke: formal direction unavailable, research stance=`SLIGHT_BULLISH_LEAN`, strength=`WEAK_UNVALIDATED`, current action=`WAIT_FOR_FRESH_DIRECT_CONFIRMATION`.
+- Position policy is now `RESEARCH_DECISION_SUPPORT / NO_ORDER`: scenario priority, hypothesis invalidation, wait/refresh, exposure and PnL sensitivity are allowed; placing orders, personalized size, and exact entry/stop/take-profit remain prohibited by system contract.
+- Validation: focused=`37 passed`; actual Osaka public smoke PASS; build-freeze=`3 passed`; full offline=`1966 passed, 1 skipped, 35 deselected, 110 warnings`, exit 0.
 
 ## 2026-09-26 W3.2-EP1 raw event-probability + MCP/analysis closeout
 

@@ -4,6 +4,16 @@
 
 ## 1. 先讀這段
 
+### 2026-09-26 最新 research decision-support 修正
+
+新的 source/config build=`e8dc080886d0b5a2`。這一棒修正的是「主腦有資料卻只會拒答」的語義缺口，不是放寬校準/edge gate。formal validated direction、public probability、trading edge 仍照原 gate；另外新增獨立的 `research_decision_support`，允許主腦輸出 research stance（偏多/偏空/中性/混合）與 conditional research action。
+
+大阪 public analysis 只在 ^N225 PROXY scope 內合成 stance，不拿 stale Micro settlement 與 proxy forecast 硬算報酬。實際 smoke：`direction_status=NO_VALIDATED_MODEL_CONSENSUS`、`direction_value=null`，但 research stance=`SLIGHT_BULLISH_LEAN`、strength=`WEAK_UNVALIDATED`、evidence_scope=`PROXY_ONLY`；目前行動是等待 fresh Direct confirmation，同向則優先偏多研究情境，反向則撤銷/重算。raw classifier 數值不再直接暴露，仍不能稱機率。
+
+CherryStudio prompt 已要求：使用者問預測/看多看空/怎麼操作時，先讀 get_analysis_packet 的正式 gate，接著必須呼叫 analyze_osaka_nikkei 或 analyze_taiwan_stock 取得 `research_decision_support`；不得只因 WAIT/UNPROVEN 就整段拒答。系統仍禁止代替使用者下單、個人化口數、人工編造精確進場/停損/停利價。
+
+驗證：focused=`37 passed`；actual Osaka public smoke PASS；build-freeze=`3 passed`；full offline=`1966 passed, 1 skipped, 35 deselected, 110 warnings in 210.45s`，exit 0。此 package 尚待 GitHub publication 與 merged-build live-owner verification。
+
 ### 2026-09-26 最新 W3.2-EP1 / MCP / analysis closeout
 
 目前 source/config build=`72c6f533e5ae2341`。W3.2-EP1 raw EVENT_PROBABILITY producer 已完成：每個未來合格 C2.3 exact-contract DAILY close 會同時 precommit 原 POINT baseline 與 `TERMINAL_CLOSE_GT_SOURCE_CLOSE_1D` raw event probability。event threshold 在 forecast origin 凍結到 2H.4 immutable artifact；raw probability 使用 Beta(1,1)，只計入 forecast-origin 前已 available 且屬同一 exact contract code/month 的 settled outcomes，換月不混 prior。第一筆無歷史時是 UNCALIBRATED prior=0.5，永遠不能直接當公開已校準機率。

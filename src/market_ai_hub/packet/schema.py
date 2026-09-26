@@ -66,6 +66,7 @@ class AnalysisPacket(BaseModel):
 
     historical_edge_summary: dict[str, Any] = Field(default_factory=dict)
     strategy_research_state: str = "WAIT"
+    research_decision_support: dict[str, Any] = Field(default_factory=dict)
 
     top_positive_drivers: list[str] = Field(default_factory=list)
     top_negative_drivers: list[str] = Field(default_factory=list)

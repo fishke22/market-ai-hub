@@ -574,14 +574,30 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
 
     # 2Q-F.4：display policy（answer layer 不需重建 safety logic）
     packet.display_policy = {
-        "may_present_direction": False,          # 0 eligible votes → 無 formal direction
+        "may_present_direction": False,          # formal validated direction remains gated
+        "may_present_research_stance": True,     # qualitative research lean is separate
+        "may_present_conditional_research_action": True,
         "may_present_probabilities": False,      # uncalibrated scores ≠ probability
         "may_present_support_resistance": False,  # NOT_AVAILABLE；不由 P10/P90 生成
         "may_present_as_direct_forecast": False,  # ^N225 只是 PROXY
-        "may_present_trading_advice": False,      # NO_ECONOMIC_EDGE
+        "may_present_trading_advice": False,      # no personalized/order instruction
+    }
+    packet.research_decision_support = {
+        "status": "ENABLED_RESEARCH_ONLY",
+        "research_stance_allowed": True,
+        "conditional_action_framework_allowed": True,
+        "formal_validated_direction_still_gated": True,
+        "public_probability_still_gated": True,
+        "execution_order_allowed": False,
+        "personalized_order_size_allowed": False,
+        "must_preserve_direct_proxy_scope": True,
+        "instruction": (
+            "Do not stop at WAIT: synthesize a qualitative research stance from same-scope model evidence "
+            "and provide conditional research actions, while keeping execution/orders and probability claims gated."
+        ),
     }
 
-    # 2Q-F.5：position-aware research guard（RISK_ANALYSIS_ONLY）
+    # position-aware research decision support: useful synthesis is allowed; orders remain prohibited.
     from market_ai_hub.services.public_view import position_guidance_policy
 
     packet.position_guidance_policy = position_guidance_policy()

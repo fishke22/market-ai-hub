@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 W3.2-EP1 raw event-probability producer + MCP/Feature-Store/security closeout LOCAL_PASS; product build `72c6f533e5ae2341`; real forward/event-probability evidence still NONE_YET pending the next valid OSE sessions.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 research decision-support layer LOCAL_PASS on product build `e8dc080886d0b5a2`; W3.2-EP1/MCP/security is already merged in PR #64; real forward/event-probability evidence still NONE_YET pending valid OSE sessions.
 
 ## Current repair checkpoint
+
+### 2026-09-26 research decision-support correction
+
+The user-facing defect was semantic, not a request to weaken evidence gates. The prior public packet hard-coded `may_present_direction=false`, `may_present_trading_advice=false`, `strategy_research_state=WAIT`, while the Cherry prompt over-interpreted those guards as a ban on useful prediction/advice. New build `e8dc080886d0b5a2` preserves formal validated-direction/probability/edge gates but adds a separate `research_decision_support` contract.
+
+`analyze_osaka_nikkei` public output now derives a same-scope qualitative research stance from the existing price ensemble plus unvalidated classifier tilt without exposing raw class-score numerics. Osaka never compares stale Direct Micro settlement with ^N225 proxy to manufacture a return. Actual smoke on the current proxy evidence yields `SLIGHT_BULLISH_LEAN / WEAK_UNVALIDATED / PROXY_ONLY`, while formal `direction_status` remains `NO_VALIDATED_MODEL_CONSENSUS`, public probability remains unavailable, and `not_trading_edge=true`.
+
+The conditional action framework is research-only: wait for fresh Direct confirmation; if fresh Direct confirms the research lean, prioritize that research scenario; if it conflicts, cancel/reassess the lean; stale/missing data means refresh/wait. It never authorizes an order, personalized size, or invented exact entry/stop/target. CherryStudio prompt now requires `analyze_*` whenever the user asks prediction/direction/how-to-operate, so the agent cannot stop after gate inspection.
+
+Validation: focused decision-support tests=`37 passed`; actual Osaka public smoke PASS; final build-freeze=`3 passed`; full offline regression=`1966 passed, 1 skipped, 35 deselected, 110 warnings in 210.45s`, exit 0. Publication and post-merge runtime adoption are the remaining steps for this package.
 
 ### 2026-09-26 W3.2-EP1 raw EVENT_PROBABILITY + Cherry/MCP closeout
 
@@ -274,7 +284,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-Local engineering through W5.1 is `MERGED_POSTMERGE_VERIFIED` and the safe-default live owner is adopted on build `d92e85fec3660b93`. Exact next work is evidence-dependent: allow the registered C2.3 close-window task to create the first new typed DAILY terminal-close evidence during a valid OSE maintenance window, then let W3.2 naturally settle/precommit forward samples. W4 fitting must wait for scope-homogeneous real `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples and independent CALIBRATION/VALIDATION/FINAL_OOS windows. Remaining W7 clean-new-Windows/full-install/WinCred/certificate/new-machine-COM cells are external gates and must not be inferred from this machine.
+After this research-decision-support package is published and the single live owner is confirmed on the merged build, exact next work is evidence-dependent: let the registered C2.3 close-window task create the first new typed DAILY terminal-close evidence during a valid OSE maintenance window, then let W3.2 POINT + W3.2-EP1 naturally settle/precommit forward samples. W4 fitting must wait for scope-homogeneous real `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples and independent CALIBRATION/VALIDATION/FINAL_OOS windows. Remaining W7 clean-new-Windows/full-install/WinCred/certificate/new-machine-COM cells are deferred external gates, not current analysis blockers.
 
 ## Truthfulness rules
 
