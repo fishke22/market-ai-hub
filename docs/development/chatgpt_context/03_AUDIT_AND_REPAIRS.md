@@ -1,8 +1,18 @@
 # MARKET_AI_HUB 查核與實修報告
 
-查核開始：2026-09-24；最新交接：2026-09-26（Asia/Taipei）。應使用本報告的修補後狀態，不再把初版稽核反例當成現況。
+查核開始：2026-09-24；最新交接：2026-09-27（Asia/Taipei）。應使用本報告的修補後狀態，不再把初版稽核反例當成現況。
 
 原始修補基準 commit：40fd77aeb35532e1b4dde42128f214b1c4683b1b；後續 W1/W2/W3/JNU/reconnect 修補累積於 PR #55，已於 2026-09-26 merge 到 main as `a9ab3e55185860c1cc80923d8e9970f37e385d1c`。Merged build=`1037d45ff8e65884`；最終 docs-only CI `36231436018` PASS；post-merge reconnect+JNU smoke `29 passed, 21 deselected`。
+
+## 2026-09-27 JNU direct / human-output correctness closure
+
+Observed defects: the JNU user path still exposed internal vocabulary/status codes and relied on `^N225` proxy price models despite the requested instrument being Osaka Nikkei 225 Micro. The local JPX settlement cache also stopped at 2026-09-18, while JPX's public OSE daily-report archive contained newer exact-contract Micro settlements. `JNU` aliases were known in broker resolver code but not consistently normalized at the MCP/user-intent boundary.
+
+Repairs: added canonical JNU alias normalization and a dedicated `analyze_jnu` public tool; public response is a small Traditional-Chinese presentation object, while audit retains machine fields. Verified JPX monthly JSON indexes and OSE ZIPs, added parser/materializer for the Auction Market `Nikkei 225 Micro Futures` exact-contract settlement only, fixed nested-directory ZIP handling observed on 2026-08-03, and made `pypdf` an explicit dependency. `analyze_jnu` performs cached best-effort public JPX freshness refresh without broker credentials.
+
+Current actual data: `JNU2610` 50 exact-contract settlement observations from 2026-07-13 through 2026-09-25, latest 66,140. Direct Chronos/TimesFM forecasts are now generated from this Micro series; ^N225 is auxiliary only. Same-input reproducibility PASS. Historical OOS diagnostic is not favorable: 10 origins / 32 history, both models UNVALIDATED, MASE ~2.20/~2.22, direction accuracy 0.20, neither beats last-price naive or drift. Public response therefore explicitly downgrades confidence rather than marketing the Direct model as an edge.
+
+Calibration was deliberately not fabricated. These 50 price rows are not W3.2-EP1 forward probability samples. W4 eligible settled event-probability sample count remains 0; its 50/50/50 governed partitions and independent acceptance remain required. Validation: focused `50 passed, 1 deselected`; build freeze `3 passed`; full offline `1974 passed, 1 skipped, 35 deselected, 110 warnings`; real JPX/stdio/reproducibility smoke PASS; diff check PASS; secret scan 0. Build=`858029747b588ac6`, feature commit=`bffa97d`.
 
 ## 2026-09-26 research decision-support correctness closure
 

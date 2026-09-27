@@ -580,10 +580,49 @@ def run_ts_validation(symbol: str = "^N225", period: str = "1y", n_folds: int = 
 
 
 @mcp.tool()
-def analyze_osaka_nikkei(horizon: str = "1d", requested_dates: str = "", view: str = "public") -> dict:
-    """^N225 PROXY ANALYSIS ONLY（非 OSE Micro direct）。
+def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "public") -> dict:
+    """大阪日經225微型期貨（JNU）直接分析。
 
-    預設 view="public"：只回 public-safe 欄位（semantic_scope=PROXY_ONLY；raw model tree 需 view="audit"）。
+    JNU / JNU2610 / JNU2612 都是大阪日經225微型期貨。
+    public 模式只回一般使用者看得懂的中文摘要；audit 才回技術欄位。
+    價格模型優先使用 JPX/OSE 官方 Micro 實際限月清算價，不用 ^N225 冒充 Micro。
+    """
+    from market_ai_hub.services.jnu_direct import (
+        analyze_jnu_direct,
+        jnu_user_summary,
+        refresh_jnu_direct_data,
+    )
+
+    try:
+        refresh = refresh_jnu_direct_data()
+    except Exception as exc:
+        refresh = {"status": "REFRESH_FAILED", "error": type(exc).__name__}
+    direct = analyze_jnu_direct(
+        horizon=horizon,
+        contract_month=contract_month,
+        validate_history=True,
+    )
+    if view == "audit":
+        direct["data_refresh"] = refresh
+        return direct
+
+    try:
+        forward = get_forward_test_status()
+        calibration = {
+            "public_calibrated": bool(forward.get("w32_event_probability_public_calibrated", False)),
+            "settled_samples": int(forward.get("w32_event_probability_settled", 0) or 0),
+        }
+    except Exception:
+        calibration = {"public_calibrated": False, "settled_samples": 0}
+    return jnu_user_summary(direct, calibration_status=calibration)
+
+
+@mcp.tool()
+def analyze_osaka_nikkei(horizon: str = "1d", requested_dates: str = "", view: str = "public") -> dict:
+    """日經225現貨指數輔助分析；不是大阪微型日經本身的價格預測。
+
+    分析 JNU / 大阪日經225微型期貨時，請優先使用 analyze_jnu。
+    本工具只補充現貨指數與跨市場背景。
     """
     from market_ai_hub.services.analysis import analyze_osaka_nikkei as run
     from market_ai_hub.services.public_view import sanitize_analysis_output
@@ -607,14 +646,16 @@ def get_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MICR
     """正式分析封包（backend 先完成大部分工作）。
 
     market: osaka | taiwan（=taiwan_stock）| taiwan_index。
-    target 例：OSE_NIKKEI225_MICRO_FUTURES / 3706.TW / TAIEX。
+    target 可直接填 JNU、JNU2610、JNU2612、大阪日經微型或 canonical target。
     horizon: 1d/2d/5d/10d。detail_level: compact | normal | audit。
-    ^N225 只能是 PROXY/REFERENCE，不得當 execution target。
+    日經225現貨指數只作輔助資料，不得當大阪微型期貨本身。
     taiwan_index 的 TAIEX 為 forecast/reference（非可成交）；execution 需明確 TX/MTX/TMF。
     """
     from market_ai_hub.packet.builder import build_analysis_packet
+    from market_ai_hub.targets.contract import normalize_instrument_alias
 
-    return build_analysis_packet(market=market, target=target, horizon=horizon,
+    normalized_target = normalize_instrument_alias(target)
+    return build_analysis_packet(market=market, target=normalized_target, horizon=horizon,
                                  detail_level=detail_level, save_analysis=save_analysis)
 
 

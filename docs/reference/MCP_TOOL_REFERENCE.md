@@ -1,6 +1,6 @@
 # MCP Tool Reference
 
-由 runtime introspection 產生（21 tools）。
+由 runtime introspection 產生（目前含 JNU 直接分析工具）。
 
 ## health_check
 
@@ -57,9 +57,16 @@
 - 用途：時間序列模型 rolling-origin OOS 驗證（V1.1 pipeline）。
 - 參數：無
 
+## analyze_jnu
+
+- 用途：大阪日經225微型期貨（JNU）直接分析。JNU/JNUxxxx/中文別名皆指向同一商品。
+- public 模式直接回白話中文摘要；價格模型使用 JPX/OSE 官方 Micro 實際限月清算價歷史。
+- ^N225 不作為主價格模型；若需要，只由 analyze_osaka_nikkei 補充市場背景。
+- 尚未完成前向校準時，只說機率仍在累積驗證，不公開 raw score 當機率。
+
 ## analyze_osaka_nikkei
 
-- 用途：大阪日經 PROXY 分析（^N225 index + 跨市場；非 OSE micro 即時）。Public view 會另外提供 `research_decision_support`：research stance、evidence scope、模型分歧摘要與 conditional research action framework；它不是 validated direction、機率或下單指令。
+- 用途：日經225現貨指數與跨市場輔助分析。分析 JNU 時不能取代 analyze_jnu 的微型期貨直接價格模型。
 - 參數：無
 
 ## analyze_taiwan_stock

@@ -40,6 +40,8 @@ W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊�
 
 ### W2：把已錄製行情接入資料契約
 
+**2026-09-27 補充：JNU Direct research path 已接上 JPX/OSE 公開 exact-contract settlement。`JNU2610` 目前 50 筆官方資料，public `analyze_jnu` 直接預測下一交易日清算價；^N225 降為輔助背景。這是 PRICE research data path，不是 W3 forward/event evidence。近期歷史 OOS 未擊敗 naive，所以只能低信心使用。**
+
 沿用 `runtime_paths`、V2-A.2 session/factor routing、2H.2 audit DB，不建立平行資料真相。
 
 輸入：通過 W1 的來源批次和免費/已合法取得的歷史來源。新增 typed reader/adapter，將 quote events → FactorRepresentationObservation → immutable snapshot → feature store。記錄 event time、received_at、available_at、timestamp precision、venue session、trading date、contract month、roll、currency、tick/multiplier、source snapshot IDs。
@@ -50,7 +52,7 @@ W0 與 W1 的核心根因修補已在程式完成，詳見 03；不用再照舊�
 
 ### W3：真實預測、到期結算與前向樣本
 
-**2026-09-26 狀態：W3.1 governance + W3.2 POINT cycle + W3.2-EP1 raw EVENT_PROBABILITY producer + C2.3 automation PASS；ACTUAL_FORWARD_EVIDENCE / ACTUAL_EVENT_PROBABILITY_EVIDENCE 仍 NONE_YET。** 2H.4 保留 sample origin + sealed label window，並新增 forecast-origin 已知的 immutable event threshold。EP1 只用同一 exact contract code/month 且 forecast-origin 前已 available 的 settled outcomes 建 Beta(1,1) raw prior；換月不混樣本。2026-09-26 非 OSE session，第一筆真實樣本仍須等下一個合格 DAILY close。
+**2026-09-27 狀態：W3.1 governance + W3.2 POINT cycle + W3.2-EP1 raw EVENT_PROBABILITY producer + C2.3 automation PASS；ACTUAL_FORWARD_EVIDENCE / ACTUAL_EVENT_PROBABILITY_EVIDENCE 仍 NONE_YET。** 新增的 50 筆 JNU2610 官方 settlement 歷史只改善 Direct PRICE research path，不計入 forward evidence。2H.4 保留 sample origin + sealed label window 與 immutable event threshold；EP1 只用同一 exact contract code/month 且 forecast-origin 前已 available 的 settled outcomes 建 Beta(1,1) raw prior，換月不混樣本。第一筆真實 settled EP1 仍須等交易日自然循環。
 
 建立最小的可運作研究循環，先一個直接商品、一個 horizon、一個簡單 baseline，再依同一契約擴展到各市場族群。不能把每個 callback 當獨立預測樣本。
 
@@ -62,7 +64,7 @@ forecast origin 前封存 prediction、model/version、完整參數、feature cu
 
 ### W4：校準與外樣本治理
 
-**2026-09-26 狀態：W4.1 governed calibration fitting engine MERGED_POSTMERGE_VERIFIED；W3.2-EP1 raw EVENT_PROBABILITY producer 已 LOCAL_PASS 並等待未來交易日自然累積，real fitting 尚未開始。tracked protocol 最低需要 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS，同時仍須 class/span/bootstrap/non-degradation 等 gate；150 筆不是自動 CALIBRATED。**
+**2026-09-27 狀態：W4.1 governed calibration fitting engine MERGED_POSTMERGE_VERIFIED；real fitting 仍未開始，因 eligible settled W3.2-EP1 EVENT_PROBABILITY samples=0。JNU 的 50 筆 historical settlement PRICE rows 不可拿來替代。tracked protocol 仍最低 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS，並須通過 class/span/bootstrap/non-degradation 等 gate；150 筆不是自動 CALIBRATED。**
 
 先在看結果前凍結 protocol：chronological train → calibration → validation → untouched final OOS；rolling/expanding folds，以標籤重疊長度 purge/gap，不能用 random split 或僅按行數假定時間獨立。模型選擇、特徵處理、ensemble 權重與校準 fit 都不可看 final OOS。
 

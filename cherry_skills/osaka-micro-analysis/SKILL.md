@@ -1,15 +1,14 @@
 # Osaka Micro Analysis（大阪微型日經分析）
 
-真正交易標的：**OSE Nikkei 225 Micro Futures**（`OSE_NIKKEI225_MICRO_FUTURES`）。
+真正分析標的：**大阪日經225微型期貨（JNU）**。JNU / JNUxxxx / 大阪微日經都是同一商品。
 
 ## 觸發
 使用者要分析大阪日經、微型日經、日經期貨時。
 
 ## 工作流程
-1. 優先呼叫 `get_analysis_packet(market="osaka", target="OSE_NIKKEI225_MICRO_FUTURES", horizon="1d", detail_level="compact")`。
-2. 只有當 packet 顯示「資料不足」或需要 audit，才呼叫個別 MCP tool
-   （`get_data_coverage` / `get_event_calendar` / `get_target_instrument_state`）。
-3. 不得自行抓取數十個 raw MCP result；數值資料一律由 backend 提供。
+1. 優先呼叫 `analyze_jnu(horizon="1d")`，使用大阪微型期貨自己的官方限月資料與直接價格模型。
+2. 需要大盤／跨市場背景時才呼叫 `analyze_osaka_nikkei`；它只是日經225現貨輔助資料。
+3. 需要正式資料狀態或 audit 時再呼叫 `get_analysis_packet` / coverage / event tools；不得把內部狀態碼原樣貼給一般使用者。
 
 ## Fast path + Tool budget（§17/§18/§19/§26）
 - **QUICK_FORECAST**（預設）：target MCP budget = 1（`get_analysis_packet` compact）；maximum normal calls = 2。
@@ -30,10 +29,9 @@
 - 不得虛構 Micro OHLC。
 
 ## 輸出白話結論（使用者導向）
-- 目前偏多／偏空／盤整
-- 主要區間（model_range）
-- 重要支撐／壓力（support_levels／resistance_levels）
-- 失效條件（invalidation_levels）
-- 何種情況可考慮「研究型進場」、何種情況應 WAIT
-- 何時需要重新分析（reanalysis_conditions）
-- **不得製造假 probability**；ensemble 未 forward-validated 要標 `RESEARCH_ENSEMBLE / UNVALIDATED_FORWARD`。
+- 商品、實際限月、最新官方價格與日期。
+- 直接價格模型的下一交易日預測、偏多／偏空／中性與參考範圍。
+- 日經225現貨只在需要時作輔助背景，不能冒充微型期貨。
+- 說明確認條件、反向條件、失效條件；沒有可靠支撐壓力就省略。
+- 一般回答不得顯示內部變數、英文狀態碼、true/false/null。
+- 未完成校準就只說「機率尚在累積驗證」，不得製造假機率。

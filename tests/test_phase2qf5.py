@@ -79,10 +79,10 @@ def test_quantile_no_support_alias():
 def test_micro_never_named_mini():
     from market_ai_hub.services.public_view import canonical_instrument_name
 
-    assert canonical_instrument_name("OSE_NIKKEI225_MICRO_FUTURES") == "OSE Nikkei 225 Micro Futures"
-    assert canonical_instrument_name("OSE_NIKKEI225_MINI_FUTURES") == "OSE Nikkei 225 mini Futures"
-    assert "Mini" not in canonical_instrument_name("OSE_NIKKEI225_MICRO_FUTURES")
-    assert "Micro" not in canonical_instrument_name("OSE_NIKKEI225_MINI_FUTURES")
+    assert canonical_instrument_name("OSE_NIKKEI225_MICRO_FUTURES") == "大阪日經225微型期貨（JNU）"
+    assert canonical_instrument_name("OSE_NIKKEI225_MINI_FUTURES") == "大阪日經225小型期貨"
+    assert "小型" not in canonical_instrument_name("OSE_NIKKEI225_MICRO_FUTURES")
+    assert "微型" not in canonical_instrument_name("OSE_NIKKEI225_MINI_FUTURES")
 
 
 # ── §7：XTKS never OSE ──
