@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-28 TimesFM-3 personal research activation
+
+- State: TIMESFM3_RESEARCH_ENABLED / PERSONAL_NONCOMMERCIAL_NONPRODUCTION_ONLY / SERVING_BLOCKED / LOCAL_FILES_ONLY / PINNED_REVISION_VERIFIED / FUTURE_COVARIATES_BLOCKED. Source/config build=ed430c7fabbdd64b.
+- Official/local identity is google/timesfm-3.0-pytorch, revision 43046b85ec22d584a13f8098c2ed39c889e129c2, package timesfm==3.0.2; weights remain timesfm-non-commercial-license-v1.0, code license Apache-2.0.
+- Interactive predict_timesfm requires exact acknowledgement PERSONAL_NONCOMMERCIAL_NONPRODUCTION_RESEARCH. Missing/wrong acknowledgement blocks before data fetch; acknowledgement is revalidated on every research-singleton access, including after initialization. The production/serving singleton is unchanged and still blocked; TimesFM is not automatically added to the default ensemble or production service.
+- Research access fails closed on registry schema, package version, weight license, usage flags, pinned snapshot, revision and build fingerprint. local_files_only=true; no auto-download. Past-only covariates are allowed; future covariates remain forbidden.
+- Actual CUDA verification: exact revision match PASS, univariate inference PASS, past-only-covariate inference PASS, optional-model suite=5 passed. Actual research MCP smoke on ^TWII returned the license warning and research-usage metadata. Focused gate regression=46 passed / 44 warnings; cross-layer=107 passed / 2 deselected / 44 warnings; full offline excluding only recorder owner-mutex=2198 passed / 1 skipped / 24 deselected / 152 warnings, exit 0.
+- This does not establish forecast skill, calibration or edge: PREDICTIVE_GAIN=false, CALIBRATED=false, TRADING_EDGE=false. No production deployment, fine-tune, broker/account/order action, recorder/runtime handover or sealed-evidence replay.
+
 [Accuracy v2](accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) supersedes vNext model priorities. P0/P1/P2/P3-A/P3-B/P4/P5/P7 engineering is now **IMPLEMENTED**. P6 is conditional and remains blocked until its prerequisites exist; it is not required for engineering completion. P2 remains **NO_IMPROVEMENT / BASELINE_RETAINED**. The system currently passes the end-to-end readiness path for analysis and governed prediction, but there are still 0 settled P5 canonical origins, so predictive gain/calibration/trading-edge promotion remains unavailable.
 
 ## Current override — 2026-09-27 Accuracy v2 product closeout

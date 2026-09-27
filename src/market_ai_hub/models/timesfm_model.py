@@ -101,6 +101,7 @@ class TimesFM3Adapter:
             device=self.device,
             cache_dir=str(MODEL_CACHE),
             revision=revision,
+            local_files_only=self.purpose == "RESEARCH",
         )
         self._revision_evidence = verify_loaded_revision("timesfm-3.0", self._model)
         log.info("timesfm3 loaded on %s revision=%s purpose=%s", self.device, revision, self.purpose)

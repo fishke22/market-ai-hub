@@ -18,6 +18,10 @@ class ModelRevisionMismatch(RuntimeError):
     """Registry revision and observed runtime revision disagree."""
 
 
+TIMESFM3_PERSONAL_RESEARCH_ACK = "PERSONAL_NONCOMMERCIAL_NONPRODUCTION_RESEARCH"
+TIMESFM3_RESEARCH_USAGE_SCHEMA = "TIMESFM3_RESEARCH_USAGE_V1"
+
+
 def load_model_registry() -> dict[str, Any]:
     path = project_root() / "config" / "model_registry.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -149,3 +153,83 @@ def model_capability_inventory(name: str, *, cache_dir: Path | None = None) -> d
         "usage": model_use_gate(name, "RESEARCH"),
         "serving": model_use_gate(name, "SERVING"),
     }
+
+
+def timesfm3_research_access_gate(
+    acknowledgement: str | None,
+    *,
+    cache_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Fail-closed local research gate for TimesFM-3 pretrained weights.
+
+    This is deliberately stricter than the generic RESEARCH purpose gate:
+    personal/non-commercial/non-production use must be acknowledged explicitly,
+    the exact installed package and pinned local snapshot must exist, and no
+    automatic download is allowed.
+    """
+    registry = load_model_registry()
+    entry = model_entry("timesfm-3.0")
+    revision = expected_model_revision("timesfm-3.0")
+    model_id = str(entry.get("model_id") or "")
+    expected_package = str(entry.get("package_version") or "").strip()
+    actual_package = package_version("timesfm")
+    cache = cache_dir or (project_root() / "models" / "cache" / "timesfm-3.0")
+    fp = __import__(
+        "market_ai_hub.services.build_info",
+        fromlist=["build_fingerprint"],
+    ).build_fingerprint()
+
+    failures: list[str] = []
+    if registry.get("schema_version") != 2:
+        failures.append("MODEL_REGISTRY_SCHEMA_MISMATCH")
+    if str(acknowledgement or "").strip() != TIMESFM3_PERSONAL_RESEARCH_ACK:
+        failures.append("PERSONAL_RESEARCH_ACK_REQUIRED")
+    if model_use_gate("timesfm-3.0", "RESEARCH")["allowed"] is not True:
+        failures.append("RESEARCH_PURPOSE_NOT_ALLOWED")
+    if entry.get("commercial_use") is not False or entry.get("production_use") is not False:
+        failures.append("NONCOMMERCIAL_NONPRODUCTION_CONTRACT_MISMATCH")
+    if entry.get("personal_noncommercial_research") is not True:
+        failures.append("PERSONAL_RESEARCH_CONTRACT_MISMATCH")
+    if entry.get("weight_license") != "timesfm-non-commercial-license-v1.0":
+        failures.append("WEIGHT_LICENSE_MISMATCH")
+    if not expected_package or actual_package != expected_package:
+        failures.append("PACKAGE_VERSION_MISMATCH")
+    if not model_id or not exact_snapshot_present(model_id, cache, revision):
+        failures.append("PINNED_SNAPSHOT_MISSING")
+    if not str(fp.get("build_id") or "").strip():
+        failures.append("BUILD_FINGERPRINT_MISSING")
+
+    return {
+        "schema_version": TIMESFM3_RESEARCH_USAGE_SCHEMA,
+        "model": "timesfm-3.0",
+        "model_id": model_id,
+        "revision": revision,
+        "package_version_expected": expected_package,
+        "package_version_observed": actual_package,
+        "weight_license": entry.get("weight_license"),
+        "code_license": entry.get("code_license"),
+        "usage_mode": "PERSONAL_NONCOMMERCIAL_NONPRODUCTION_RESEARCH",
+        "allowed": not failures,
+        "reason": "ALLOWED" if not failures else failures[0],
+        "failures": failures,
+        "local_files_only": True,
+        "automatic_download_allowed": False,
+        "commercial_use_allowed": False,
+        "production_use_allowed": False,
+        "future_covariates_allowed": False,
+        "past_only_covariates_allowed": True,
+        "build_id": fp.get("build_id"),
+    }
+
+
+def require_timesfm3_research_access(
+    acknowledgement: str | None,
+    *,
+    cache_dir: Path | None = None,
+) -> dict[str, Any]:
+    decision = timesfm3_research_access_gate(acknowledgement, cache_dir=cache_dir)
+    if not decision["allowed"]:
+        raise ModelUsageBlocked(
+            f"timesfm-3.0 research access blocked: {decision['reason']}"
+        )
+    return decision

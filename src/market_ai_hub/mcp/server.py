@@ -294,17 +294,39 @@ def predict_chronos(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
 
 
 @mcp.tool()
-def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> dict:
-    """TimesFM-3.0 多步預測（weights 非商業授權）。含 build fingerprint。"""
+def predict_timesfm(
+    symbol: str,
+    period: str = "6mo",
+    horizon: str = "1d",
+    research_usage_ack: str = "",
+) -> dict:
+    """TimesFM-3.0 personal research prediction; non-commercial/non-production only."""
     from market_ai_hub.models.timesfm_model import timesfm_forecast
     from market_ai_hub.providers.yfinance_provider import YFinanceProvider
     from market_ai_hub.services.build_info import build_fingerprint
     from market_ai_hub.services.forecast_cache import forecast_cache_key, get_cached, set_cached
     from market_ai_hub.services.horizon import HorizonUnsupportedError, parse_horizon
-    from market_ai_hub.services.model_runtime import get_timesfm
+    from market_ai_hub.services.model_governance import (
+        TIMESFM3_PERSONAL_RESEARCH_ACK,
+        timesfm3_research_access_gate,
+    )
+    from market_ai_hub.services.model_runtime import get_timesfm_research
     from market_ai_hub.services.perf_trace import trace
 
     with trace("predict_timesfm") as t:
+        access = timesfm3_research_access_gate(research_usage_ack)
+        if not access["allowed"]:
+            return {
+                "status": "RESEARCH_ONLY_BLOCKED",
+                "reason": access["reason"],
+                "usage_mode": access["usage_mode"],
+                "required_ack": TIMESFM3_PERSONAL_RESEARCH_ACK,
+                "weight_license": access["weight_license"],
+                "commercial_use_allowed": False,
+                "production_use_allowed": False,
+                "automatic_download_allowed": False,
+                "build": build_fingerprint(),
+            }
         spec = parse_horizon(horizon, "1d")
         if not spec.supported:
             return {
@@ -317,7 +339,7 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
         df = YFinanceProvider().fetch(symbol, period=period)
         closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
         fp = build_fingerprint()
-        key = forecast_cache_key("timesfm-3.0", symbol, horizon, closes, fp["build_id"])
+        key = forecast_cache_key("timesfm-3.0-research", symbol, horizon, closes, fp["build_id"])
         cached = get_cached(key)
         if cached is not None:
             cached["cache_hit"] = True
@@ -326,7 +348,13 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
             return cached
         try:
             t0 = __import__("time").perf_counter()
-            fo = timesfm_forecast(get_timesfm(), symbol, closes, horizon, spec.effective_horizon_steps)
+            fo = timesfm_forecast(
+                get_timesfm_research(research_usage_ack),
+                symbol,
+                closes,
+                horizon,
+                spec.effective_horizon_steps,
+            )
             if isinstance(t, dict):
                 t["model_inference_ms"] = round((__import__("time").perf_counter() - t0) * 1000, 2)
                 t["cache_hit"] = False
@@ -335,6 +363,7 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
 
             d = sanitize_forecast_dump(d)
             d["build"] = fp
+            d["research_usage"] = access
             d["cache_hit"] = False
             set_cached(key, d)
             return d

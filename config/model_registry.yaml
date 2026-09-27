@@ -35,9 +35,12 @@ models:
     repo: https://huggingface.co/google/timesfm-3.0-pytorch
     model_id: google/timesfm-3.0-pytorch
     revision: 43046b85ec22d584a13f8098c2ed39c889e129c2
+    package_version: 3.0.2
     code_license: Apache-2.0
     weight_license: timesfm-non-commercial-license-v1.0
     commercial_use: false
+    production_use: false
+    personal_noncommercial_research: true
     training_start: unknown
     training_cutoff: unknown
     supported_horizons: ["1d", "2d", "5d", "10d"]

@@ -2,6 +2,14 @@
 
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析，但沒有把 development interval 或 quantile challenger 冒充預測增益／校準機率。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
+## 2026-09-28 TimesFM-3 personal research activation
+
+- 使用者已明示用途為 personal / non-commercial / non-production research。官方/本機身份固定為 google/timesfm-3.0-pytorch、revision=43046b85ec22d584a13f8098c2ed39c889e129c2、timesfm==3.0.2；weight license=timesfm-non-commercial-license-v1.0，code license=Apache-2.0。TimesFM-3 不升格為 production/default-serving 必需模型。
+- predict_timesfm 改為顯式 research gate：必須傳 PERSONAL_NONCOMMERCIAL_NONPRODUCTION_RESEARCH；缺少/錯誤 ack 在抓行情與載模型前即 RESEARCH_ONLY_BLOCKED。research singleton 即使已初始化，每次 access 仍重新驗證 ack。原 get_timesfm() 仍是 SERVING 並被阻擋；另設 get_timesfm_research()，兩者 singleton 分離。
+- Gate 對 model-registry schema、research purpose、commercial/production flags、weight license、package exact version、pinned snapshot、revision、build fingerprint fail-closed。研究載入固定 local_files_only=true，不自動下載。future covariates=false；past-only covariates=true。
+- Actual local verification：CUDA exact revision match PASS；univariate inference PASS；past-only covariate inference PASS；optional model suite=5 passed。實際 research predict_timesfm("^TWII", horizon="1d") PASS，輸出保留 TIMESFM3_NON_COMMERCIAL_ONLY 及 research usage metadata。Focused gate regression=46 passed / 44 warnings；cross-layer=107 passed / 2 deselected / 44 warnings；full offline（只排除既有 recorder owner-mutex）=2198 passed / 1 skipped / 24 deselected / 152 warnings，exit 0。
+- 這只是 runtime/engineering enablement，不是新模型優勢證據；PREDICTIVE_GAIN=false、CALIBRATED=false、TRADING_EDGE=false。沒有 production service/default ensemble promotion、fine-tune、recorder/runtime/broker/account/order 動作或 JNU sealed evidence replay。source/config build=ed430c7fabbdd64b。
+
 ## 0.TW Taiwan-stock P0 correctness audit（2026-09-28）
 
 - 這是 correctness / semantic / architecture 修復，不是新的模型挑選或精度證據。source/config build=`c0f52deac6ba33d8`。JNU P2/HPQ1/P5 證據邊界完全不變。
