@@ -326,6 +326,17 @@ def analyze_jnu_direct(
     series, meta = load_direct_micro_settlements(contract_month)
     if meta.get("status") != "OK":
         return {"status": meta.get("status"), "data": meta, "direct_model_available": False}
+    try:
+        from market_ai_hub.research.accuracy_v2_p4_engine import analyze_no_new_forward_outcome
+        robust_analysis = analyze_no_new_forward_outcome(
+            current_series=series,
+            current_meta=meta,
+        )
+    except Exception as exc:
+        robust_analysis = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+        }
     if len(series) < MIN_DIRECT_SAMPLES:
         return {
             "status": "INSUFFICIENT_DIRECT_HISTORY",
@@ -355,10 +366,44 @@ def analyze_jnu_direct(
         except Exception as exc:
             errors.append(f"{name}:{type(exc).__name__}")
     if not models:
+        if robust_analysis.get("status") == "OK":
+            reference = float(meta["latest_settlement"])
+            interval = robust_analysis.get("empirical_interval") or {}
+            return {
+                "status": "OK",
+                "direct_model_available": False,
+                "scope": DIRECT_MODEL_SCOPE,
+                "target": "OSE_NIKKEI225_MICRO_FUTURES",
+                "product_name": "大阪日經225微型期貨（JNU）",
+                "contract_month": meta["contract_month"],
+                "quote_code": meta["quote_code"],
+                "forecast_price_type": "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
+                "horizon": horizon,
+                "target_dates": target_dates,
+                "data": meta,
+                "models": [],
+                "ensemble": {
+                    "p10": interval.get("lower_price"),
+                    "p50": reference,
+                    "p90": interval.get("upper_price"),
+                    "expected_return": 0.0,
+                    "method": "zero_return_naive_with_development_interval",
+                },
+                "research_stance": "NEUTRAL",
+                "research_stance_strength": "BASELINE_ONLY_NO_PREDICTIVE_GAIN",
+                "historical_validation": {"status": "NOT_RUN"},
+                "historical_prequential": {"status": "NOT_RUN"},
+                "robust_analysis": robust_analysis,
+                "calibrated_probability_available": False,
+                "not_trading_edge": True,
+                "errors": errors,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
         return {
             "status": "DIRECT_MODELS_UNAVAILABLE",
             "direct_model_available": False,
             "data": meta,
+            "robust_analysis": robust_analysis,
             "errors": errors,
         }
 
@@ -419,6 +464,7 @@ def analyze_jnu_direct(
         "research_stance_strength": stance_strength,
         "historical_validation": historical_validation,
         "historical_prequential": historical_prequential,
+        "robust_analysis": robust_analysis,
         "calibrated_probability_available": False,
         "not_trading_edge": True,
         "errors": errors,
@@ -561,6 +607,42 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
     if calibration_status and calibration_status.get("public_calibrated"):
         probability_note = "已有通過獨立驗證的校準機率，可使用系統正式機率輸出。"
 
+    robust = result.get("robust_analysis") or {}
+    robust_interval = robust.get("empirical_interval") or {}
+    robust_vol = robust.get("volatility") or {}
+    quantile = robust.get("lightgbm_quantile_challenger") or {}
+    q_prices = quantile.get("price_quantiles") or {}
+    robust_summary = {
+        "基準價格": (
+            f"{float((robust.get('point_reference') or {}).get('price')):,.0f} 點"
+            if (robust.get("point_reference") or {}).get("price") is not None
+            else "目前無法提供"
+        ),
+        "EWMA日報酬波動": (
+            f"{float(robust_vol.get('ewma_return_volatility')) * 100:.2f}%"
+            if robust_vol.get("ewma_return_volatility") is not None else "目前無法提供"
+        ),
+        "波動狀態": {
+            "LOW_VOLATILITY": "相對低波動",
+            "HIGH_VOLATILITY": "相對高波動",
+        }.get(str(robust_vol.get("regime")), "未知"),
+        "開發期經驗區間": (
+            f"{float(robust_interval.get('lower_price')):,.0f} ～ "
+            f"{float(robust_interval.get('upper_price')):,.0f} 點"
+            if robust_interval.get("lower_price") is not None and robust_interval.get("upper_price") is not None
+            else "目前無法提供"
+        ),
+        "固定LightGBM分位挑戰模型": (
+            f"{float(q_prices.get('q10')):,.0f} / {float(q_prices.get('q50')):,.0f} / {float(q_prices.get('q90')):,.0f} 點"
+            if all(q_prices.get(k) is not None for k in ("q10", "q50", "q90"))
+            else "未通過可用性檢查或資料不足"
+        ),
+        "證據限制": (
+            "這些波動與區間只使用開發期規則與目前已知資料；"
+            "沒有新的真實前向結果時，不升級為預測增益、校準機率或交易優勢。"
+        ),
+    }
+
     return {
         "商品": "大阪日經225微型期貨（JNU）",
         "目前合約": data["contract_month"],
@@ -579,6 +661,7 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
             )
             else "研究用、尚未完成前向驗證",
         },
+        "無新前向資料時的穩健分析": robust_summary,
         "歷史驗證": validation_note,
         "模型比較可信度": comparison_note,
         "資料說明": (

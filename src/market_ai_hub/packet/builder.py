@@ -737,10 +737,25 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         packet.data_coverage_summary = _t("feature_coverage_compact", lambda: _coverage_summary_compact(family))
     else:
         packet.data_coverage_summary = _t("feature_coverage", lambda: _coverage_summary(family))
-    packet.research_gates = {"TRADING_EDGE_GATE": "UNPROVEN",
-                             "FORWARD_VALIDATION": "NOT_YET"}
-    packet.reanalysis_conditions = ["FORECAST_STALE_AFTER_EVENT", "major data revision",
-                                    "new official release after cutoff"]
+    try:
+        from market_ai_hub.research.future_data_acquisition import future_data_readiness
+        future_readiness = future_data_readiness()
+    except Exception as exc:
+        future_readiness = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    packet.research_gates = {
+        "TRADING_EDGE_GATE": "UNPROVEN",
+        "FORWARD_VALIDATION": "NOT_YET",
+        "NO_NEW_FORWARD_OUTCOME_ANALYSIS": "BASELINE_INTERVAL_VOLATILITY_ALLOWED",
+        "STRONG_DIRECTION_WITHOUT_PREDICTIVE_GAIN": "BLOCKED",
+        "FUTURE_DATA_ACQUISITION": future_readiness,
+    }
+    packet.reanalysis_conditions = [
+        "FORECAST_STALE_AFTER_EVENT",
+        "major data revision",
+        "new official release after cutoff",
+        "new exact-contract source snapshot received",
+        "new forward outcome becomes available",
+    ]
 
     # 7. archive auto-hook
     if save_analysis:

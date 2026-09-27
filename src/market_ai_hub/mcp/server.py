@@ -676,8 +676,16 @@ def get_data_coverage() -> dict:
         "NFP": {"status": SOURCE_VERIFIED, "source": "BLS API v2 (official source)"},
     }
     recs = LiveCoverageAuditor().audit_osaka(overrides)
-    return {"factors": [r.model_dump() for r in recs],
-            "summary": LiveCoverageAuditor().summary([r for r in recs])}
+    try:
+        from market_ai_hub.research.future_data_acquisition import future_data_readiness
+        future = future_data_readiness()
+    except Exception as exc:
+        future = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    return {
+        "factors": [r.model_dump() for r in recs],
+        "summary": LiveCoverageAuditor().summary([r for r in recs]),
+        "future_data_acquisition": future,
+    }
 
 
 @mcp.tool()

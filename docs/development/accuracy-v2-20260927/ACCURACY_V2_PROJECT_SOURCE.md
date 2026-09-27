@@ -1,6 +1,6 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
-版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得一個 REAL receipt-time-causal P1 DATA_READY packet，但尚未累積足夠獨立 forward origins，因此沒有 covariate 市場增益證據。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析，但沒有把 development interval 或 quantile challenger 冒充預測增益／校準機率。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 0. P0/P1 實作快照（2026-09-27）
 
@@ -53,8 +53,22 @@
 - JPX 公開 settlement provider 同步只讀取得 2026-09-25 Nikkei 225 Micro Futures；`202610` settlement 的實際 receipt=`2026-09-27T09:45:58.094649Z`。以固定 decision origin=`2026-09-27T09:46:00Z`、exact target=`JNU2610` 建 `NEXT_OSE_SESSION_SETTLEMENT` contract；TMF202610 P1 packet 為 `ENGINEERING PASS / DATA_READY`，feature available=`2026-09-27T09:41:01.678337Z`、source hash=`6129f45e37d7d784c8cca375`、cache identity=`9705080693fb9146c0d6ca0f`。這只證明 REAL/PIT data plumbing，不代表 PREDICTIVE_GAIN、CALIBRATED、TRADING_EDGE 或 clean historical OOS。
 - P1 stale gate 修正：合法 daily previous-session `CLOSED_MARKET_REFERENCE` 不再被字串判定誤殺；真正 stale 仍由 `available_at` age、point-in-time、roll/contract/series/gate 等檢查拒絕。
 - 驗收：P3-B focused=`38 passed`；integration（含factor routing/horizon/reproducibility/build freeze）=`86 passed`；full offline（只排除既有 recorder owner-mutex case）=`2054 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。真實 materialization idempotency PASS。
-- 下一入口：先累積多個獨立 forward receipt-time origins；樣本量達預先固定門檻前不跑 Chronos covariate outcome。屆時先 commit/push ablation protocol，再比較同origin univariate vs past-only covariate；不在同一批結果上反覆調 feature/window/threshold。
+- P3-B 後不再空等 forward outcome。P4 已施工 no-new-forward robust analysis；真正 predictive promotion 仍等待獨立 forward receipt-time origins。Chronos univariate vs past-only covariate ablation 仍須在樣本量達預先固定門檻後，先 commit/push 專用 protocol，再比較同-origin，不能拿 P4 development 結果替代。
 
+## 0.4 P4 無新前向 outcome 的穩健分析＋開源隔離合併（2026-09-27）
+
+- **先凍結、後結果**：P4 protocol/OSS/future-data manifest 先於任何新 quantile/conformal outcome 提交並 push，prereg commit=`fb9e60a9885161986782d1a54dc79632b507e422`。當時 build=`ecac7c645590f16e`；engine 完成後 source/config build=`2e93ec6940904780`。P4 protocol hash=`646389ec5497c8935480848ee946a59fccebacf9ed330c9b4cbb19b20324f758`。
+- P4 不推翻 P2：point champion 固定 `ZERO_RETURN_NAIVE / LAST_AVAILABLE_SETTLEMENT`；exposed quarantine 仍禁止 fit/selection/claim；final-forward 仍未開；post-development public history只能作 origin-causal feature context，不能用 post-development labels 重選模型。future fill、跨限月拼接、label-as-feature 繼續禁止。
+- 無新 outcome 時仍可工作：EWMA daily-return volatility 固定 λ=0.94（描述風險，不選模）；波動 state 只用 development median 分 LOW/HIGH，不切換模型；strong direction 需要 predictive gain，否則 abstain；exact-contract 缺失或資料品質失敗則拒答。
+- Conformal：zero-return baseline 一步報酬絕對殘差、development-only、minimum 20、buffer最多60；固定 50/75/90% coverage。chronological label-maturity prequential 結果（83 development origins、63 eligible）：static coverage 50/75/90=`0.50794/0.80952/0.92063`；90% interval mean return width≈`0.08197`。adaptive conformal 目標90%、γ=0.01、只在 outcome available 後更新，development coverage=`0.92063`、final alpha=`0.112`。這些是**區間診斷**，不是條件勝率或 W4 機率校準。[R4]
+- LightGBM quantile challenger 固定 q10/q50/q90、3個 current fits、無 tuning、development-only fit，不能取代 point champion。另做固定-setting chronological OOF proper-score 診斷：5 folds／50 same-origin OOF／15 fits，p10-p90 empirical coverage=`0.68`、mean width return≈`0.04789`、crossing rate=`0`；pinball q10/q50/q90=`0.00428664/0.00879193/0.00514520`。因此它保留 `CHALLENGER_UNVALIDATED`，不因 current quantiles 看起來較窄就升級。[R9]
+- 當前 JNU2610（只作本包功能驗證）latest official settlement=`66140`，current EWMA return vol≈`1.327%`、state=`LOW_VOLATILITY`；development-fit 90% empirical interval≈`63439–68841`。固定 quantile challenger current q10/q50/q90≈`65023/65788/67440`。主點位仍是 66140 的零報酬 baseline；strong_direction=false、calibrated_probability=false、not_trading_edge=true。engine 首次整包約713ms、3個 current quantile fits約36ms；同process且上游series/meta已存在時有content-addressed cache，不需重fit。
+- `analyze_jnu_direct` 已合併 fallback：若 Chronos/TimesFM 全不可用但 exact-contract history合格，仍回 `OK` 的 baseline＋development interval＋volatility context，而不是整段 `DIRECT_MODELS_UNAVAILABLE`。模型 ensemble 仍保留 audit/research資訊，但沒有證據時不取代 P2 baseline。
+- Future-data acquisition 已預施工：`future_data_acquisition.yaml` 明列 JPX settlement、JPX/OSE Daily Report、TAIFEX TMF official settlement 三條 active public collector；OSE Micro/TMF/CME authorized quote 只綁既有 single-owner recorder capability，不登入、不restart；CME public website settlement 明列 DISABLED，因本次實際收到禁止 automated scraping 的403，不能繞過。`collect_accuracy_v2_public_sources.py` dry-run與實跑都證明 broker=false、credentials=false、recorder_touched=false；實跑 JPX settlement/archive OK、TAIFEX 107 rows全 idempotent/0 blocked。
+- 開源合併按原規畫採**隔離 adapter，不整套塞進主env**。Qlib官方 tag v0.9.7/commit=`da920b7`/MIT 已固定於 manifest；實際 v0.9.7 `pyproject.toml` 支援Python 3.8–3.12且 `mlflow` 未設 `<3.13` 上限，故舊文件的 mlflow<3.13 衝突敘述已過期；但Qlib仍alpha且依賴面廣，所以 core venv install=false、live=false。已把 83 個 P2 development origins 匯出為 content-hashed parquet+manifest，quarantine/final=0，`qlib_imported=false`、`qlib_executed=false`。NautilusTrader只先固定 P7 offline-parity boundary：stable 1.231.0/commit=`27a8e54`/LGPL-3.0；v2.0.0rc5 不選，live=false。所有 adapter artifact 寫 `data/lab/`，現已 gitignore。
+- MCP/packet 已合併 future-data readiness 與 no-forward gates：`get_data_coverage` 顯示 active/blocked/prebuilt來源；AnalysisPacket research gates 明示 `NO_NEW_FORWARD_OUTCOME_ANALYSIS=BASELINE_INTERVAL_VOLATILITY_ALLOWED`、`STRONG_DIRECTION_WITHOUT_PREDICTIVE_GAIN=BLOCKED`，並加入新 exact-contract snapshot／forward outcome 到達的 reanalysis conditions。
+- 驗收：P4 protocol/build-freeze=`10 passed`；P4 engine/JNU=`21 passed`；P3/P4/MCP/packet integration=`94 passed, 1 deselected, 11 warnings`；full offline（只排除既有 recorder owner-mutex case）=`2067 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。Qlib dataset export、public collector實跑均 exit 0。
+- P5 入口：即使尚無 outcome，也可先施工 immutable prediction-before-outcome ledger、collector cadence、coverage/abstention/drift downgrade；但所有效果升級仍必須等新 forward outcomes 並按預先固定 gate 驗證。P4 的 conformal/quantile development 成績不能當 P5 forward 證據。
 ## 1. 結論：保留底座，修改模型策略，不整套推倒
 
 沒有在所有金融商品、時段與市場狀態都最高準確率的固定模型。此專案應建成「持續找到並保留當前有證據的最佳模型」的系統，而不是宣稱某個模型名就是最強。我的選擇是：**高品質可得時間資料＋分任務的小型專家模型＋既有 Chronos-2 外生變數實驗＋受限制的組合＋獨立前向驗證＋能拒絕過度判斷的發布層**。
@@ -226,7 +240,8 @@ Qlib仍保留獨立research adapter候選；Hub研究extra MLflow3.16.1與先前
 - **R9** [LightGBM參數](https://lightgbm.readthedocs.io/en/stable/Parameters.html)：regression/quantile與正則化選項，對應安裝版4.7.0使用。
 - **R10** [Nested CV官方說明](https://scikit-learn.org/stable/auto_examples/model_selection/plot_nested_cross_validation_iris.html)、[TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html)：選模偏差與時間切分；金融label overlap仍須額外治理。
 - **R11** [Bailey等，Probability of Backtest Overfitting](https://www.davidhbailey.com/dhbpapers/backtest-prob.pdf)：保留搜尋次數與防止選最好回測；不能把PBO當前向通過證明。
-- **R12** [Qlib dependencies](https://raw.githubusercontent.com/microsoft/qlib/main/pyproject.toml)、[LEAN CLI prerequisite](https://www.quantconnect.com/docs/v2/lean-cli/key-concepts/getting-started)、[Nautilus官方](https://github.com/nautechsystems/nautilus_trader)：前包已核對的隔離與免費界線，真正安裝前重查固定版本。
+- **R12** [Qlib v0.9.7 release](https://github.com/microsoft/qlib/releases/tag/v0.9.7)、[v0.9.7 pyproject](https://raw.githubusercontent.com/microsoft/qlib/v0.9.7/pyproject.toml)：本包固定 v0.9.7=`da920b7`、MIT、Python 3.8–3.12；此 tag 的 `mlflow` 依賴未設 `<3.13` 上限。仍用隔離 subprocess/file contract，不把Qlib框架變成PIT/audit主腦。
+- **R13** [NautilusTrader releases](https://github.com/nautechsystems/nautilus_trader/releases)：P7預留 stable 1.231.0=`27a8e54`、LGPL-3.0；目前2.0為release-candidate線，不以pre-release直接接live capital。LEAN仍保留為P7另一候選，P7只擇一做offline parity。
 
 ## 10. ChatGPT施工與跨對話規範
 
