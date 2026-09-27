@@ -1,6 +1,6 @@
 # MARKET_AI_HUB 跨對話上下文快照
 
-快照日期：2026-09-26（Asia/Taipei）。用途：上傳 ChatGPT 專案資料來源。此檔是查核資料，不是新的執行授權。後續應替換此快照，避免多份「最新」並存。
+快照日期：2026-09-27（Asia/Taipei）。用途：上傳 ChatGPT 專案資料來源。此檔是查核資料，不是新的執行授權。後續應替換此快照，避免多份「最新」並存。
 
 ## 1. 先讀這段
 
@@ -14,7 +14,7 @@ Direct 模型已改用 JNU 本身資料，不再用 ^N225 冒充價格預測；^
 
 重要：這 50 筆是歷史 PRICE observations，不是 W3.2-EP1 的前向 EVENT_PROBABILITY。真實 settled event sample 仍為 0，因此 W4 不能誠實 fit/public CALIBRATED probability；仍需依序 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS 並通過 acceptance gates。沒有回填或把 retrospective 資料冒充 forward evidence。
 
-驗證：focused=`50 passed, 1 deselected`；build-freeze=`3 passed`；full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings in 194.58s`；JPX live parser、CherryStudio-style stdio `analyze_jnu`、reproducibility、diff check、secret scan 全 PASS。`pypdf>=6,<7` 已成為正式依賴。Persistent quote recorder 尚未 handover，仍跑 `72c6f533e5ae2341`；未經明確授權不重啟 broker owner。
+驗證：focused=`50 passed, 1 deselected`；build-freeze=`3 passed`；full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings in 194.58s`；JPX live parser、CherryStudio-style stdio `analyze_jnu`、reproducibility、diff check、secret scan 全 PASS。`pypdf>=6,<7` 已成為正式依賴。PR #67 CI=`36283073790` PASS，merged main=`4d23cf7d549330d5ecc644bbef33819d1d3fd792`；post-merge stdio smoke build=`858029747b588ac6` PASS。Persistent quote recorder read-only 狀態為 single-owner / heartbeat fresh / gates=false，但 runtime=`e8dc080886d0b5a2`、disk=`858029747b588ac6`；未經明確授權不重啟 broker owner。
 
 ### 2026-09-26 最新 research decision-support 修正
 
