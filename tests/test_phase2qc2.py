@@ -38,7 +38,32 @@ def _build(market, target, monkeypatch, micro=None, stock=None, index=None):
     if micro is not None:
         monkeypatch.setattr(b, "_load_latest_micro_settlement", lambda: micro)
     if stock is not None:
-        monkeypatch.setattr(b, "_taiwan_stock_reference", lambda symbol: stock)
+        monkeypatch.setattr(
+            b,
+            "_taiwan_stock_analysis",
+            lambda symbol, horizon: {
+                "status": "OK",
+                "target_family": "TAIWAN_STOCK",
+                "symbol": symbol,
+                "horizon": horizon,
+                "data_integrity": {
+                    "status": "PASS",
+                    "corporate_action_integrity": "CORPORATE_ACTION_NORMALIZED",
+                },
+                "reference_price": stock["price"],
+                "reference_price_type": stock["price_type"],
+                "reference_price_timestamp": "2026-09-18T05:30:00+00:00",
+                "reference_price_source": stock["source"],
+                "reference_data_grade": stock["data_grade"],
+                "validation_claims": {
+                    "PREDICTIVE_GAIN": False,
+                    "CALIBRATED": False,
+                    "TRADING_EDGE": False,
+                },
+                "models": {},
+                "price_forecast_ensemble": {},
+            },
+        )
     if index is not None:
         monkeypatch.setattr(b, "_index_proxy_reference", lambda: index)
     return b.build_analysis_packet(market=market, target=target, detail_level="compact", save_analysis=False)

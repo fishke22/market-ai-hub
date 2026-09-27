@@ -322,6 +322,7 @@ def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
         }
 
     df = bundle.frame
+    latest_row = df.sort_values("timestamp_utc").iloc[-1]
     data_identity = bundle.metadata
     provider_name = str(data_identity.get("raw_price_source") or "taiwan_stock")
     model_data_grade = str(
@@ -360,6 +361,11 @@ def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
         "feature_version": data_identity["feature_version"],
         "price_basis": "RAW_CURRENT_BASIS",
         "model_data_grade": model_data_grade,
+        "reference_price": float(data_identity["raw_latest_close"]),
+        "reference_price_type": "CLOSE",
+        "reference_price_timestamp": str(latest_row["timestamp_utc"]),
+        "reference_price_source": provider_name,
+        "reference_data_grade": model_data_grade,
         "corporate_action_events": data_identity["events"],
         "requested_history": {
             "start": data_identity["requested_start_date"],

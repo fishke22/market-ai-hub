@@ -212,6 +212,33 @@ def test_any_required_reference_channel_failure_blocks_model_data():
         )
 
 
+def test_analyze_taiwan_stock_exposes_raw_current_basis_reference(monkeypatch):
+    import market_ai_hub.services.analysis as analysis
+
+    bundle = load_taiwan_stock_model_data(
+        "3706.TW",
+        "2025-01-01",
+        "2026-09-27",
+        finmind=_FakeFinMind(raw_fails=False),
+        twse=_FakeTWSE(),
+    )
+    monkeypatch.setattr(analysis, "load_taiwan_stock_model_data", lambda *a, **k: bundle)
+    monkeypatch.setattr(analysis, "get_chronos", lambda: object())
+    monkeypatch.setattr(analysis, "get_timesfm", lambda: object())
+    monkeypatch.setattr(analysis, "chronos_forecast", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off")))
+    monkeypatch.setattr(analysis, "timesfm_forecast", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off")))
+    monkeypatch.setattr(analysis, "baseline_forecast", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off")))
+
+    out = analysis.analyze_taiwan_stock("3706.TW", "1d")
+
+    assert out["status"] == "OK"
+    assert out["reference_price"] == bundle.metadata["raw_latest_close"]
+    assert out["reference_price_type"] == "CLOSE"
+    assert out["reference_price_source"] == "finmind:TaiwanStockPrice"
+    assert out["reference_data_grade"] == "RESEARCH_PROXY"
+    assert out["price_basis"] == "RAW_CURRENT_BASIS"
+
+
 def test_analyze_taiwan_stock_stops_before_models_when_integrity_blocks(monkeypatch):
     import market_ai_hub.services.analysis as analysis
 

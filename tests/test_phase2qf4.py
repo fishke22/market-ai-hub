@@ -102,7 +102,29 @@ def test_2330_golden_payload(monkeypatch):
     import market_ai_hub.packet.builder as b
 
     monkeypatch.setattr(b, "_load_latest_micro_settlement", lambda: {"price": 999999, "contract": "202703", "date": "2026-09-18", "price_type": "SETTLEMENT"})
-    monkeypatch.setattr(b, "_taiwan_stock_reference", lambda s: {"price": 123.45, "price_type": "REFERENCE", "source": "twse", "data_grade": "OFFICIAL_DAILY"})
+    monkeypatch.setattr(
+        b,
+        "_taiwan_stock_analysis",
+        lambda symbol, horizon: {
+            "status": "OK",
+            "target_family": "TAIWAN_STOCK",
+            "symbol": symbol,
+            "horizon": horizon,
+            "data_integrity": {"status": "PASS"},
+            "reference_price": 123.45,
+            "reference_price_type": "CLOSE",
+            "reference_price_timestamp": "2026-09-18T05:30:00+00:00",
+            "reference_price_source": "twse:STOCK_DAY",
+            "reference_data_grade": "OFFICIAL_DAILY",
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            },
+            "models": {},
+            "price_forecast_ensemble": {},
+        },
+    )
     p = b.build_analysis_packet(market="taiwan", target="2330.TW", detail_level="compact", save_analysis=False)
     assert p["execution_target"] == "2330.TW"
     assert p["reference_price"] == 123.45

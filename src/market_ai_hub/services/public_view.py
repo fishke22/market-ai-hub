@@ -364,3 +364,80 @@ def sanitize_analysis_output(d: dict, *, market: str = "osaka", audit: bool = Fa
         out["not_micro_direct"] = True
         out["direct_execution_target"] = "OSE_NIKKEI225_MICRO_FUTURES"
     return out
+
+
+def packet_target_model_analysis(payload: dict, *, market: str) -> dict:
+    """Compact public-safe analyzer result for embedding in AnalysisPacket.
+
+    This deliberately whitelists target identity, governed data semantics and
+    sanitized model outputs. Raw class scores, raw direction fields, corporate
+    action ledgers and internal model errors are not copied into the packet.
+    Engineering availability is not promoted to predictive gain/calibration/edge.
+    """
+    safe = sanitize_analysis_output(payload, market=market, audit=False)
+    out: dict[str, Any] = {
+        "status": safe.get("status", "UNAVAILABLE"),
+        "target_family": "TAIWAN_STOCK" if market == "taiwan" else str(market).upper(),
+        "symbol": safe.get("symbol"),
+        "horizon": safe.get("horizon"),
+        "data_integrity": dict(safe.get("data_integrity") or {}),
+        "dataset_semantics": safe.get("dataset_semantics"),
+        "adjustment_semantics": safe.get("adjustment_semantics"),
+        "source_semantics": safe.get("source_semantics"),
+        "feature_version": safe.get("feature_version"),
+        "price_basis": safe.get("price_basis"),
+        "data_grade": safe.get("data_grade") or safe.get("model_data_grade"),
+        "reference_price": safe.get("reference_price"),
+        "reference_price_type": safe.get("reference_price_type"),
+        "reference_price_timestamp": safe.get("reference_price_timestamp"),
+        "reference_price_source": safe.get("reference_price_source"),
+        "reference_data_grade": safe.get("reference_data_grade"),
+        "forecast_origin": safe.get("forecast_origin"),
+        "last_observed_trading_date": safe.get("last_observed_trading_date"),
+        "forecast_target_dates": list(safe.get("forecast_target_dates") or []),
+        "target_calendar": safe.get("target_calendar"),
+        "calendar_verified": safe.get("calendar_verified"),
+        "calendar_grade": safe.get("calendar_grade"),
+        "used_base_models": list(safe.get("used_base_models") or []),
+        "used_ensemble": bool(safe.get("used_ensemble", False)),
+        "research_decision_support": dict(safe.get("research_decision_support") or {}),
+        "direction_contract": {
+            "status": safe.get("direction_status", "NO_VALIDATED_DIRECTION"),
+            "value": safe.get("direction_value"),
+            "eligible_direction_vote_count": int(safe.get("eligible_direction_vote_count") or 0),
+            "validated_direction_agreement": safe.get("validated_direction_agreement", "N/A"),
+        },
+        "validation_claims": {
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+            "result_role": "RESEARCH_ANALYZER_OUTPUT",
+        },
+        "warnings": list(safe.get("warnings") or [])[:5],
+    }
+
+    models: dict[str, Any] = {}
+    for name in ("chronos", "timesfm", "xgb", "lgbm", "ensemble"):
+        item = safe.get(name)
+        if not isinstance(item, dict):
+            continue
+        if "status" in item:
+            models[name] = {"status": str(item.get("status") or "UNAVAILABLE")}
+        else:
+            models[name] = dict(item)
+    out["models"] = models
+
+    price = safe.get("price_forecast_ensemble")
+    if isinstance(price, dict):
+        allowed = {
+            "status", "components", "component_weights", "point_forecast",
+            "expected_return", "terminal_forecast", "forecast_path", "forecast_dates",
+            "quantile_type", "quantile_valid", "target_calendar", "calendar_grade",
+        }
+        price_summary = {k: v for k, v in price.items() if k in allowed}
+        if "quantiles" in price:
+            price_summary["predictive_quantile_range"] = price.get("quantiles")
+        out["price_forecast_ensemble"] = price_summary
+    else:
+        out["price_forecast_ensemble"] = {}
+    return out
