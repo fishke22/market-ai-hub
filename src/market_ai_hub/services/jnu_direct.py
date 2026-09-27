@@ -376,6 +376,21 @@ def analyze_jnu_direct(
         if validate_history
         else {"status": "NOT_RUN"}
     )
+    if validate_history:
+        try:
+            from market_ai_hub.research.historical_prequential import (
+                compact_evidence_summary,
+                load_sealed_evidence,
+            )
+
+            historical_prequential = compact_evidence_summary(load_sealed_evidence())
+        except Exception as exc:
+            historical_prequential = {
+                "status": "UNAVAILABLE",
+                "reason": type(exc).__name__,
+            }
+    else:
+        historical_prequential = {"status": "NOT_RUN"}
     validation_overall = historical_validation.get("overall")
     if validation_overall == "HISTORICAL_VALIDATED":
         stance_strength = "HISTORICAL_VALIDATED_ONLY"
@@ -400,6 +415,7 @@ def analyze_jnu_direct(
         "research_stance": stance,
         "research_stance_strength": stance_strength,
         "historical_validation": historical_validation,
+        "historical_prequential": historical_prequential,
         "calibrated_probability_available": False,
         "not_trading_edge": True,
         "errors": errors,
@@ -431,13 +447,43 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         "INSUFFICIENT_EVIDENCE": "證據不足",
     }.get(result.get("research_stance"), "證據不足")
     historical = result.get("historical_validation") or {}
+    prequential = result.get("historical_prequential") or {}
+    preq_ensemble = prequential.get("ensemble") or {}
+    preq_final = (preq_ensemble.get("partitions") or {}).get("HISTORICAL_FINAL_HOLDOUT") or {}
+    preq_all = preq_ensemble.get("all") or {}
     paired_rows = [
         row.get("paired_vs_last_price_naive") or {}
         for row in (historical.get("models") or {}).values()
         if row.get("paired_vs_last_price_naive")
     ]
     comparison_note = "目前尚沒有足夠的同一批歷史預測樣本，不能可靠判斷模型相對簡單基準的穩定差異。"
-    if paired_rows:
+    if prequential.get("status") == "OK" and preq_final.get("n"):
+        final_pair = preq_final.get("paired_vs_last_price_naive") or {}
+        final_eval = preq_final.get("evaluation") or {}
+        final_model = final_eval.get("model") or {}
+        all_pair = preq_all.get("paired_vs_last_price_naive") or {}
+        final_n = int(preq_final.get("n", 0) or 0)
+        total_n = int(prequential.get("origin_count", 0) or 0)
+        lo = final_pair.get("delta_ci_lower")
+        hi = final_pair.get("delta_ci_upper")
+        crosses_zero = lo is None or hi is None or float(lo) <= 0.0 <= float(hi)
+        pooled_lo = all_pair.get("delta_ci_lower")
+        pooled_warning = pooled_lo is not None and float(pooled_lo) > 0
+        comparison_note = (
+            f"已完成 {total_n} 筆逐日歷史重播，其中預先留出的最終區段有 {final_n} 筆；"
+            f"等權價格模型在最終區段的 MASE 約 {float(final_model.get('mase', float('nan'))):.2f}。"
+            + (
+                "模型與簡單基準的誤差差異區間仍包含「沒有差異」，尚未證明穩定優勢。"
+                if crosses_zero
+                else "模型與簡單基準的誤差差異區間已不含零，但仍只屬歷史重播證據。"
+            )
+            + (
+                "把全部歷史樣本池化後，平均誤差偏高是一項風險警訊。"
+                if pooled_warning else ""
+            )
+            + "模型訓練資料截止日目前無法確認，因此這不是乾淨的訓練期外 OOS，也不是真實前向證據。"
+        )
+    elif paired_rows:
         paired_n = min(int(row.get("common_origin_count", 0) or 0) for row in paired_rows)
         states = {str(row.get("uncertainty_status") or "") for row in paired_rows}
         if "INSUFFICIENT_PAIRED_SAMPLE" in states:
@@ -465,7 +511,22 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
                     else "模型與簡單基準的誤差差異已較穩定，但這仍只是歷史樣本，不是前向交易優勢。"
                 )
             )
-    if historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False):
+    preq_low_confidence = bool(
+        prequential.get("status") == "OK"
+        and preq_final.get("n")
+        and not (preq_final.get("evaluation") or {}).get("beats_naive_mae", False)
+    )
+    if preq_low_confidence:
+        validation_note = (
+            "較大規模的逐日歷史重播已完成；預先留出的最終區段中，現行等權價格模型平均誤差"
+            "沒有優於直接沿用前一日價格的簡單基準，而且差異區間仍包含沒有差異。"
+            "因此目前只能視為低信心研究參考。"
+        )
+        action_note = (
+            "目前不把單日模型方向單獨當主要依據；優先等待更多真正前向樣本，"
+            "以及可驗證的模型訓練截止日，再判斷是否存在可重複的預測優勢。"
+        )
+    elif historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False):
         validation_note = (
             "近期的歷史回看中，就目前平均絕對誤差而言，兩個價格模型都沒有優於"
             "「直接沿用前一日價格」的簡單基準；但共同樣本仍少，這不代表已證明模型穩定較差。"
@@ -504,7 +565,9 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
                 f"{ens['p10']:,.0f} ～ {ens['p90']:,.0f} 點"
                 if ens.get("p10") is not None and ens.get("p90") is not None else "目前無法提供"
             ),
-            "可信度": "低信心研究參考" if historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False)
+            "可信度": "低信心研究參考" if preq_low_confidence or (
+                historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False)
+            )
             else "研究用、尚未完成前向驗證",
         },
         "歷史驗證": validation_note,

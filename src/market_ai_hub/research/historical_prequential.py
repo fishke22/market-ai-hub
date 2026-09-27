@@ -394,3 +394,85 @@ def load_sealed_evidence(data_root: Path | None = None) -> dict[str, Any] | None
     if not sealed.exists():
         return None
     return json.loads(sealed.read_text(encoding="utf-8"))
+
+
+def equal_weight_ensemble_summary(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Derive the existing equal-weight JNU ensemble from already sealed records.
+
+    This never invokes a model and never reopens the final holdout.  It is a
+    deterministic read-only transformation of forecasts already present in the
+    sealed artifact.
+    """
+    models = evidence.get("models") or {}
+    if len(models) < 2:
+        return {"status": "INSUFFICIENT_MODELS"}
+    names = sorted(models)
+    record_sets = [models[name].get("records") or [] for name in names]
+    if not record_sets or not record_sets[0]:
+        return {"status": "NO_RECORDS"}
+    keys = [
+        [(r["origin_date"], r["contract_month"], r["target_date"]) for r in rows]
+        for rows in record_sets
+    ]
+    if any(k != keys[0] for k in keys[1:]):
+        return {"status": "BLOCKED_RECORD_IDENTITY_MISMATCH"}
+
+    combined: list[dict[str, Any]] = []
+    for i in range(len(record_sets[0])):
+        rows = [x[i] for x in record_sets]
+        first = rows[0]
+        combined.append(
+            {
+                "origin_date": first["origin_date"],
+                "target_date": first["target_date"],
+                "contract_month": first["contract_month"],
+                "partition": first["partition"],
+                "origin_price": first["origin_price"],
+                "actual": first["actual"],
+                "p10": float(np.mean([r["p10"] for r in rows])),
+                "p50": float(np.mean([r["p50"] for r in rows])),
+                "p90": float(np.mean([r["p90"] for r in rows])),
+                "drift": first["drift"],
+                "ma20": first["ma20"],
+            }
+        )
+    partitions = {
+        part: _metric_summary([r for r in combined if r["partition"] == part])
+        for part in ("HISTORICAL_DEVELOPMENT", "HISTORICAL_VALIDATION", "HISTORICAL_FINAL_HOLDOUT")
+    }
+    return {
+        "status": "OK",
+        "method": "equal_weight_sealed_model_forecasts",
+        "model_names": names,
+        "all": _metric_summary(combined),
+        "partitions": partitions,
+    }
+
+
+def compact_evidence_summary(evidence: dict[str, Any] | None) -> dict[str, Any]:
+    """Compact audit/public summary without returning 100s of per-origin records."""
+    if not evidence or evidence.get("status") != "OK":
+        return {"status": "NOT_AVAILABLE"}
+    models: dict[str, Any] = {}
+    for name, raw in (evidence.get("models") or {}).items():
+        models[name] = {
+            "identity": raw.get("identity"),
+            "all": raw.get("all"),
+            "partitions": raw.get("partitions"),
+        }
+    return {
+        "status": "OK",
+        "evidence_id": evidence.get("evidence_id"),
+        "evidence_grade": evidence.get("evidence_grade"),
+        "sample_origin": evidence.get("sample_origin"),
+        "origin_count": evidence.get("origin_count"),
+        "partition_counts": evidence.get("partition_counts"),
+        "first_origin": evidence.get("first_origin"),
+        "last_origin": evidence.get("last_origin"),
+        "protocol": evidence.get("protocol"),
+        "models": models,
+        "ensemble": equal_weight_ensemble_summary(evidence),
+        "not_forward_evidence": True,
+        "not_calibration_evidence": True,
+        "not_trading_edge": True,
+    }

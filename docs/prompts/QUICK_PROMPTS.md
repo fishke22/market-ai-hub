@@ -33,7 +33,8 @@
 - 下一交易日模型中心與參考範圍
 - 偏多 / 偏空 / 中性 / 訊號混合
 - 模型是否真的比「直接沿用前一日價格」的簡單基準更可信
-- 共同歷史比較樣本是否仍屬探索性
+- historical prequential replay 有多少筆、final holdout 有多少筆，以及 paired 區間是否支持穩定優勢
+- 真實 forward 樣本有多少；不要把 historical replay 算進 real forward
 - 確認條件、反向條件與失效條件
 - 目前資料與模型限制
 最後用白話告訴我目前比較適合優先觀察哪個研究情境；若信心低，要說明在等什麼證據。
@@ -106,6 +107,9 @@
 - RMSE
 - MASE
 - 與 last-price naive 的 paired 差異區間／樣本狀態（若系統有提供）
+- historical prequential development / validation / final holdout 是否一致
+- model training cutoff 是否已知；未知就不要稱 clean training-OOS
+- real FORWARD_PRECOMMITTED 樣本數（與 historical replay 分開）
 - 區間覆蓋率 / calibration（如果有）
 - 是否真正優於簡單基準
 

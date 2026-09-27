@@ -225,4 +225,4 @@ def test_gpu_cleanup():
 def test_v1_build_unchanged():
     from market_ai_hub.services.build_info import build_fingerprint
 
-    assert build_fingerprint()["build_id"] == "4234403f6239e131"
+    assert build_fingerprint()["build_id"] == "03f1971c29d2f394"

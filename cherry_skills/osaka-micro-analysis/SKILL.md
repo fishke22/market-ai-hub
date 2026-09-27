@@ -35,4 +35,6 @@
 - 說明確認條件、反向條件、失效條件；沒有可靠支撐壓力就省略。
 - 一般回答不得顯示內部變數、英文狀態碼、true/false/null。
 - 未完成校準就只說「機率尚在累積驗證」，不得製造假機率。
-- 使用者問「模型是否真的比基準好」時，先讀 `analyze_jnu` 的歷史驗證與模型比較可信度；共同歷史樣本少於 30 時只能說探索性，不得把單一 MAE 勝負當成穩定優勢。
+- 使用者問「模型是否真的比基準好」時，先讀 `analyze_jnu` 的歷史驗證與模型比較可信度。優先使用已封存 historical prequential final holdout；paired 區間仍含零時不得把 MAE 勝負當成穩定優勢。
+- historical prequential 是過去資料的逐日 pseudo-forward replay，不是 W3.2 real forward；不得把歷史 replay 樣本拿去湊 W4 的 50 calibration + 50 validation + 50 final-OOS。
+- model training cutoff 若未知，historical replay 只能說「時間順序隔離的歷史重播」，不得稱 clean training-OOS。

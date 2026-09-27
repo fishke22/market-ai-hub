@@ -9,6 +9,8 @@ import pytest
 from market_ai_hub.research.historical_prequential import (
     HistoricalPrequentialProtocol,
     build_front_contract_origins,
+    compact_evidence_summary,
+    equal_weight_ensemble_summary,
     load_protocol,
     run_replay,
     save_one_use_evidence,
@@ -114,3 +116,28 @@ def test_one_use_final_holdout_refuses_different_identity(tmp_path):
     assert save_one_use_evidence(first, data_root=tmp_path) == path
     with pytest.raises(RuntimeError, match="FINAL_HOLDOUT_ALREADY_OPENED"):
         save_one_use_evidence({"status": "OK", "evidence_id": "B"}, data_root=tmp_path)
+
+
+def test_equal_weight_ensemble_is_derived_from_sealed_records_without_model_calls(monkeypatch):
+    import market_ai_hub.research.historical_prequential as hp
+
+    monkeypatch.setattr(hp, "ose_last_trading_date", lambda y, m: date(2026, 12, 31))
+    monkeypatch.setattr(
+        hp,
+        "_model_identity",
+        lambda name: {
+            "name": name, "model_id": name, "revision": "test",
+            "training_cutoff": "unknown", "training_cutoff_known": False,
+        },
+    )
+    sealed = run_replay(
+        {"chronos-2": _LastPriceAdapter(), "timesfm-3.0": _LastPriceAdapter()},
+        frame=_frame(),
+        protocol=_protocol(),
+    )
+    ensemble = equal_weight_ensemble_summary(sealed)
+    assert ensemble["status"] == "OK"
+    assert ensemble["all"]["evaluation"]["model"]["mase"] == pytest.approx(1.0)
+    compact = compact_evidence_summary(sealed)
+    assert compact["origin_count"] == sealed["origin_count"]
+    assert "records" not in compact["models"]["chronos-2"]

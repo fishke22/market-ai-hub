@@ -173,6 +173,7 @@ def test_osaka_skill_target():
     assert "大阪日經225微型期貨（JNU）" in t
     assert "analyze_jnu" in t and "日經225現貨輔助資料" in t
     assert "target MCP budget = 1（`analyze_jnu`）" in t
+    assert "historical prequential" in t and "50 calibration + 50 validation + 50 final-OOS" in t
 
 
 def test_taiwan_skill():
@@ -184,6 +185,7 @@ def test_model_audit_skill():
     t = _skill_text("model-validation-audit")
     assert "MASE" in t and "不得用" in t
     assert 'analyze_jnu(view="audit")' in t and "paired" in t
+    assert "historical prequential" in t and "training cutoff" in t
 
 
 # --- token benchmark ---
