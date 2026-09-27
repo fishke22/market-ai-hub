@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **JNU_OOS_ORIGIN_AND_BASELINE_FAIRNESS_LOCAL_PASS / CHERRYSTUDIO_JNU_ROUTING_LOCAL_PASS / PAIRWISE_UNCERTAINTY_PR69_MERGED / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Current phase: **JNU_OOS_ORIGIN_AND_BASELINE_FAIRNESS_PR70_MERGED_POSTMERGE_VERIFIED / CHERRYSTUDIO_JNU_ROUTING_PR70_MERGED_POSTMERGE_VERIFIED / PAIRWISE_UNCERTAINTY_PR69_MERGED / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
 - Gate: **JNU has exact-contract JPX/OSE settlement research models and plain-Chinese output. Corrected same-origin OOS gives Chronos MASE~1.066 / TimesFM~1.072 on only 10 origins; mean MAE is not better than last-price naive, but paired 95% intervals cross zero, so evidence is exploratory and no stable model advantage is established. Public calibrated probability remains blocked because eligible settled W3.2-EP1 forward event samples are still 0. NO ORDER / personalized size / invented exact entry-stop-target remain gated.**
-- build_id：**95e91d5431d94d7f**（JNU same-origin OOS + causal baseline evaluation + paired uncertainty + CherryStudio routing source/config fingerprint；follow-up publication pending）
+- build_id：**95e91d5431d94d7f**（JNU same-origin OOS + causal baseline evaluation + paired uncertainty + CherryStudio routing；source commit `65ac4eb5658c5070949d633f65b3ab38dba5709e`；PR #70 merged main `d2df21c9a354ae124cd92d53c5c3ce3cafea88c1`）
 - Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.4**；evaluation governance **W3.1**；forward cycle **W3.2**；raw event producer **W3.2-EP1**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -20,6 +20,7 @@
 - Public `analyze_jnu` now states common-origin comparison confidence in plain Chinese. JNU model audits route to `analyze_jnu(view="audit")`; generic leaderboard is reserved for generic tournament scopes.
 - CherryStudio QUICK_FORECAST now routes directly to `analyze_jnu`; the system prompt requires same-origin evidence before treating MAE differences as stable.
 - Validation: focused OOS/baseline `114 passed, 7 deselected`; full offline `1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`; real public/audit stdio smokes PASS. No broker action was performed.
+- Publication: PR #70 head=`65ac4eb5658c5070949d633f65b3ab38dba5709e`; CI run #224 / `36291150870` PASS; merged main=`d2df21c9a354ae124cd92d53c5c3ce3cafea88c1`; post-merge stdio public JNU smoke PASS on build `95e91d5431d94d7f`.
 
 ## 2026-09-27 jerry-backtest-lab robustness comparison
 
