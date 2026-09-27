@@ -1,12 +1,12 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **JNU_DIRECT_RESEARCH_LOCAL_PASS / HUMAN_PUBLIC_OUTPUT_LOCAL_PASS / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Current phase: **JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
 - Gate: **JNU now has a real exact-contract JPX/OSE settlement research model and plain-Chinese user output, but its current 10-origin historical OOS does not beat naive baselines, so confidence is LOW. Public calibrated probability remains blocked because eligible settled W3.2-EP1 forward event samples are still 0. NO ORDER / personalized size / invented exact entry-stop-target remain gated.**
-- build_id：**858029747b588ac6**（JNU direct model + public human-output source/config fingerprint；LOCAL_PASS，GitHub publication pending）
+- build_id：**858029747b588ac6**（JNU direct model + public human-output source/config fingerprint；PR #67 merged + post-merge stdio smoke verified）
 - Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.4**；evaluation governance **W3.1**；forward cycle **W3.2**；raw event producer **W3.2-EP1**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：persistent recorder remains single-owner on prior build **72c6f533e5ae2341**; disk/stdio MCP build is now **858029747b588ac6**. No broker restart/handover was performed because explicit authorization is required. `analyze_jnu` itself is broker-free and uses public JPX/OSE files.
+- Live quote capability：read-only post-merge check shows healthy/single-owner recorder with fresh heartbeat and measurement gates=false on runtime build **e8dc080886d0b5a2**; disk/stdio MCP build is **858029747b588ac6**, so checker correctly reports runtime-build stale. No broker restart/handover was performed because explicit authorization is required. `analyze_jnu` is broker-free and uses public JPX/OSE files.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
@@ -18,7 +18,7 @@
 - Direct price forecast now uses JNU's own exact-contract official settlement history. Same-input reproducibility PASS. Actual smoke for 2026-09-28: ensemble ~66,167, neutral, reference range ~64,831-67,393.
 - Historical OOS is weak: 10 rolling origins / 32 context, Chronos MASE~2.20 and TimesFM~2.22, direction accuracy 0.20 each, neither beats last-price naive/drift. Public summary therefore says low-confidence and does not treat the one-day direction as mature signal.
 - Calibration remains unavailable: historical settlement rows are not `FORWARD_PRECOMMITTED EVENT_PROBABILITY`. Eligible settled EP1 samples remain 0; W4 50+50+50 plus acceptance gates are unchanged.
-- Validation: focused=`50 passed, 1 deselected`; build freeze=`3 passed`; full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings`; real stdio MCP smoke/reproducibility/live JPX parser PASS; diff/secret checks PASS. Feature commit=`bffa97d`.
+- Validation: focused=`50 passed, 1 deselected`; build freeze=`3 passed`; full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings`; real stdio MCP smoke/reproducibility/live JPX parser PASS; diff/secret checks PASS. Feature commit=`bffa97d`, handoff=`267acc5`; PR #67 CI `36283073790` PASS, merged main `4d23cf7d549330d5ecc644bbef33819d1d3fd792`; post-merge stdio JNU smoke PASS on build `858029747b588ac6`.
 
 ## 2026-09-26 research decision-support correction
 

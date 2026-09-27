@@ -1,7 +1,7 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU direct-research/human-output package LOCAL_PASS at commit `bffa97d`, product build `858029747b588ac6`; real CherryStudio stdio `analyze_jnu` smoke PASS on exact-contract JPX/OSE data. Live quote recorder remains on prior build `72c6f533e5ae2341` pending explicit restart/handover authorization. Real forward/event-probability evidence still NONE_YET, so market calibrated probability remains unavailable.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU direct-research/human-output MERGED_POSTMERGE_VERIFIED on product build `858029747b588ac6`; PR #67 CI `36283073790` PASS, merged main `4d23cf7d549330d5ecc644bbef33819d1d3fd792`; post-merge CherryStudio stdio `analyze_jnu` smoke PASS. Persistent quote recorder is healthy/single-owner on prior build `e8dc080886d0b5a2`, so runtime/disk mismatch remains until an explicitly authorized handover. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
 
@@ -15,7 +15,7 @@ Direct settlement forecast path now uses the exact JNU contract itself, not `^N2
 
 Calibration truth is unchanged. The 50 exact-contract price observations are historical PRICE data and must not be substituted for W3.2-EP1 `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples. W4 public calibration still has zero eligible settled event samples and requires the precommitted 50 CALIBRATION + 50 VALIDATION + 50 one-use FINAL_OOS protocol plus acceptance gates. No retrospective backfill was promoted to CALIBRATED.
 
-Validation: focused JNU/human-output regression=`50 passed, 1 deselected`; build-freeze=`3 passed`; full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings in 194.58s`; live JPX parser smoke PASS; actual CherryStudio stdio `analyze_jnu` public smoke PASS; same-input reproducibility PASS; diff check PASS; changed/untracked secret scan=0. `pypdf>=6,<7` is now an explicit project dependency. Feature commit=`bffa97d`.
+Validation: focused JNU/human-output regression=`50 passed, 1 deselected`; build-freeze=`3 passed`; full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings in 194.58s`; live JPX parser smoke PASS; actual CherryStudio stdio `analyze_jnu` public smoke PASS; same-input reproducibility PASS; diff check PASS; changed/untracked secret scan=0. `pypdf>=6,<7` is now an explicit project dependency. Feature commit=`bffa97d`, handoff commit=`267acc5`; PR #67 clean-runner CI=`36283073790` PASS, merged main=`4d23cf7d549330d5ecc644bbef33819d1d3fd792`. Post-merge stdio smoke loaded build `858029747b588ac6` and returned the expected plain-Chinese JNU result. Read-only owner check: heartbeat fresh, gates=false, runtime=`e8dc080886d0b5a2`, disk=`858029747b588ac6`; no broker action performed.
 
 ### 2026-09-26 research decision-support correction
 
