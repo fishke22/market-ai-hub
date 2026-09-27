@@ -1,5 +1,15 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
+## Latest checkpoint: 2026-09-27 vNext audit repair
+
+Read [current repairs](vnext-20260927/01_CURRENT_STATE_AND_REPAIRS.md), [roadmap](vnext-20260927/02_ARCHITECTURE_AND_ROADMAP.md), and [delivery evidence](vnext-20260927/05_DELIVERY_EVIDENCE.md) first. Base main `ff109f2`; repair branch `codex/vnext-audit-handoff`; runtime source build `dff534ae24a053c7`. Do not infer merge or live-runtime adoption from a disk build.
+
+The old 131-origin HPQ1 artifact remains immutable but is now **BLOCKED_HORIZON_MISMATCH**: 2026-09-18 → 2026-09-24 is not one OSE trading session. The September 21–23 holiday sessions were skipped in the public settlement observations. Old final metrics below are preserved history, not accepted 1d validation. Do not rerun the already-opened final, delete the attempted marker, or overwrite the seal. The CLI now reads a seal before loading models and reserves first attempts exclusively; same identity with different content is refused. Unknown/known training-cutoff strings never alone prove clean OOS. Invalid forecast paths are rejected; cross-market timestamp alignment and missing-price return handling are corrected.
+
+Next: package B (target/publication availability contract + one minimal PIT factor); reuse existing asof/FeatureStore, do not install the whole proposed framework stack. WebCodex identity/read connection was verified; local Codex performed repairs. No broker restart/login/order was performed. Preserve the two preexisting untracked scheduling files.
+
+## Historical PR72 handoff — superseded where contradicted above
+
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
 wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU historical prequential replay MERGED_POSTMERGE_VERIFIED on product build `03f1971c29d2f394`. Protocol/engine were preregistered and pushed first as commit `49f46ec6abc51723c18fe393ee90659f014c6e30`; the first one-use replay then sealed evidence `3f28cec82268445d7d377356` with 131 pseudo-forward origins (43 development / 40 validation / 48 final holdout). Feature commit `ea5805eb238c4b4d9246092b52c7719ccb600741` passed PR #72 CI #228 (`36294200271`) and merged to main `94d95f3a49521f666c1cc14d0006d13085669de0`; post-merge CherryStudio-style stdio public/audit smoke PASS on the same build and sealed evidence. Real W3.2 forward/event-probability settled samples remain 0 and market calibrated probability remains unavailable.
 

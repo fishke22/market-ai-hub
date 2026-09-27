@@ -1,0 +1,19 @@
+請接續 MARKET_AI_HUB vNext，直接施工「工作包 B：資料可得時間／預測目標契約＋一個跨市場因子的最小 PIT 特徵切片」。先讀我上傳的 01/02/03/05 文件；這些是版本化交接，不表示你已讀過舊聊天。不要重做整份規劃，也不要開始安裝全部框架。
+
+1. 使用 WebCodex 主施工，先 runtime_status、work_on_project，按工具實際schema定位本機MARKET_AI_HUB。讀AGENTS.md、AGENT_HANDOFF.md、project-status.md、本包文件與相關asof/features/FeatureStore/日曆程式；跑現有bootstrap查branch/HEAD/origin/status/build。WebCodex不可用才用Remote Desktop Commander，先確認舊job已停且無第二個writer。兩者都不能連，才給我單包回貼prompt；不要假稱已改程式。
+
+2. 本次前置修復在 codex/vnext-audit-handoff，實際commit/PR看05。若尚未合併，先確認現有工作樹是否包含該修復，保留dirty文件；沿可用checkout接續或建以該分支為基底的隔離分支，不回到舊main覆蓋修復，不自動merge。2026-09-27修復後build快照dff534ae24a053c7只是比對線索，若更新要解釋差異。
+
+3. 先解決兩個不同target：next OSE trading session與next published settlement。JPX Daily Report約次營業日09:00 JST發布、假日合併，不可把origin的15:45合成時間當known_at。既有SEALED evidence 3f28cec82268445d7d377356包含9/18→9/24的一步錯配，應保持BLOCKED_HORIZON_MISMATCH；不可重跑模型、覆寫SEALED/ATTEMPTED、或把原48筆final再當未看過。新protocol先commit/push再評估；這包以契約與synthetic負測試為主，不重跑final。
+
+4. 只讀盤點JNU與NQ/MNQ、ES、JY、VX、TMF/TX等既有本機資料的frequency、date span、received/available時間、revision、exact contract、缺口與來源；不要把帳戶權限或callback當歷史覆蓋。選一個真正可用factor先做，無真實資料則用synthetic驗工程並回報DATA_NOT_READY，不堵住主線也不造數。
+
+5. 修正／補齊最小契約：event_time、received_at、available_at、feature_available_at、source_hash/revision、representation、session/exact_contract、staleness、origin、target identity。可得時間取所有輸入的最晚可得時間並計入計算延遲；PIT backward as-of只能用origin當時已知revision，禁止future fill。先在origin選front contract，再等outcome，不能因未來缺outcome換到遠月。檢查現有direct-history cache是否對相同日期但source/model revision改變失效。沿用既有helper，避免新建第二個FeatureStore。
+
+6. 先做一個lagged return或volatility feature與可追溯packet。修好的cross_market_features只是timestamp alignment，還不是PIT join；不要直接宣稱它已接到價格模型。這包不做大型調參、不加第三個foundation model、不校準湊數、不執行broker登入與下單。
+
+7. 驗收至少涵蓋：晚到資料、未來修訂、缺bar、NaN/inf、重複timestamp、假日交易/發布日期差、跨venue時區、roll、proxy不匹配、stale、label不得進特徵。驗證修改future資料不改過去feature snapshot；synthetic成功不寫成真實預測增益。相關測試通過後跑適當offline suite；不碰live recorder mutex／session。報告確切command/exit/count與排除原因。
+
+8. 完成同一工作包後更新交接、schema/contract與狀態，commit/push本次程式與文件並建PR、查CI；不提交資料／密鑰／權重／原有他人檔案，不自動merge。給我精簡完成回報與可替換專案來源文件，列下一包C的一個baseline＋既有LightGBM/XGBoost challenger實驗提案即可，不自動越界做到RL/OMS。
+
+授權你在這個工作包內自主選擇最小正確實作與修復；缺資料或供應商問題記錄後繼續獨立工程工作。請開始實際檢查與施工。

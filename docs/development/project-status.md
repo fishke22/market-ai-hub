@@ -1,5 +1,16 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## Current override — 2026-09-27 vNext audit repair
+
+- Current phase: **VNEXT_AUDIT_REPAIRED / HPQ1_SEALED_EVIDENCE_BLOCKED_HORIZON_MISMATCH**.
+- Runtime source build: **dff534ae24a053c7**; branch `codex/vnext-audit-handoff` (base main `ff109f2`). Merge/CI state and final checks: [delivery evidence](vnext-20260927/05_DELIVERY_EVIDENCE.md).
+- Existing 131-origin sealed artifact is unchanged, but 2026-09-18 → 2026-09-24 skips OSE holiday sessions. Its old 48-final metrics below are historical records, **not accepted next-session evidence**. Public summaries now block this artifact. Do not rerun or overwrite the one-use final.
+- Fixed CLI preflight/exclusive attempted marker, exclusive full-content sealing, false clean-OOS promotion, invalid price paths, unsupported HPQ1 horizon, cross-market timestamp alignment and implicit missing-price filling.
+- W4/W5 engines remain present; no new real-forward/calibration/edge claim. No broker runtime handover occurred.
+- Next bounded package: target/publication-time contract and one minimal PIT cross-market factor, per [revised roadmap](vnext-20260927/02_ARCHITECTURE_AND_ROADMAP.md).
+
+## Historical PR72 checkpoint — superseded where contradicted above
+
 - Current phase: **JNU_HISTORICAL_PREQUENTIAL_PR72_MERGED_POSTMERGE_VERIFIED / JNU_OOS_ORIGIN_AND_BASELINE_FAIRNESS_PR70_MERGED_POSTMERGE_VERIFIED / CHERRYSTUDIO_JNU_ROUTING_PR72_MERGED_POSTMERGE_VERIFIED / PAIRWISE_UNCERTAINTY_PR69_MERGED / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
 - Gate: **JNU now has a preregistered sealed historical prequential replay: 131 unique pseudo-forward origins, including a one-use 48-origin final holdout. Equal-weight ensemble final MASE~1.123 and paired 95% CI [-24.34,229.28] do not establish stable advantage; pooled 131 CI [11.01,132.44] is a risk warning. Model training cutoffs remain unknown, so this is not clean training-OOS and never substitutes for real forward. Public calibrated probability remains blocked because eligible settled W3.2-EP1 forward event samples are still 0. NO ORDER / personalized size / invented exact entry-stop-target remain gated.**
 - build_id：**03f1971c29d2f394**（JNU historical prequential integration + prior same-origin/causal baseline fixes；HPQ1 prereg commit `49f46ec6abc51723c18fe393ee90659f014c6e30`；feature commit `ea5805eb238c4b4d9246092b52c7719ccb600741`；PR #72 CI #228 PASS；merged main `94d95f3a49521f666c1cc14d0006d13085669de0`）

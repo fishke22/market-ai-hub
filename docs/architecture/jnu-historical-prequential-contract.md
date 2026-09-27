@@ -2,6 +2,28 @@
 
 Schema: HPQ1
 
+## 2026-09-27 repair amendment
+
+The existing 131-origin seal is retained but blocked for next-session use: its
+2026-09-18 target is 2026-09-24 although OSE next trades on 2026-09-21. Builder
+and sealed-summary consumers now reject this horizon mismatch. Do not rerun the
+opened final or silently remove the offending record to reclaim validation.
+The frozen protocol YAML is unchanged; a new target/publication-time protocol
+requires a new registration and new untouched evidence, not a rewrite of HPQ1.
+
+The operational CLI reads an existing seal before loading models. A first replay
+exclusively creates FINAL_HOLDOUT_ATTEMPTED before any model factory; failures
+retain that marker for explicit audit. Sealing exclusively creates the artifact;
+only fully identical content is idempotent. Interrupted writes remain blocking
+instead of allowing silent replacement. This is local process coordination, not
+a tamper-proof external ledger. Direct library replay with supplied frames remains
+available for synthetic tests; operational real replay must use the guarded CLI.
+
+All price quantile paths must be finite, positive, ordered and exactly match the
+requested horizon. HPQ1 rejects horizons other than one. A known training-cutoff
+string alone yields HISTORICAL_PREQUENTIAL_OOS_NOT_VERIFIED, never CLEAN OOS;
+actual cutoff chronology and publication availability would need independent gates.
+
 Protocol: jnu_front_exact_settlement_1d_v1
 
 ## Purpose

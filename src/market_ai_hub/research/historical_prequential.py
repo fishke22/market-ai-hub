@@ -23,6 +23,8 @@ from market_ai_hub.config.settings import project_root
 from market_ai_hub.integrations.yuanta.resolver import ose_last_trading_date
 from market_ai_hub.research.paired_uncertainty import paired_block_bootstrap_ci
 from market_ai_hub.research.tournament import get_model_entry
+from market_ai_hub.schemas.market_data import validate_price_path
+from market_ai_hub.services.calendar import next_ose_derivatives_session
 from market_ai_hub.services.validation import (
     drift_baseline,
     evaluate_against_baselines,
@@ -126,7 +128,7 @@ def _normalized_source_frame(frame: pd.DataFrame) -> pd.DataFrame:
         df["source_hash"] = ""
     df["source_hash"] = df["source_hash"].fillna("").astype(str)
     df = df.dropna(subset=["date", "settlement"])
-    df = df[df["settlement"] > 0]
+    df = df[np.isfinite(df["settlement"]) & (df["settlement"] > 0)]
     df = df.sort_values(["contract_month", "date", "source_hash"]).drop_duplicates(
         subset=["contract_month", "date"], keep="last"
     )
@@ -157,6 +159,8 @@ def build_front_contract_origins(
         for pos in range(protocol.history_len - 1, len(g) - 1):
             origin_date = g.loc[pos, "date"]
             target_date = g.loc[pos + 1, "date"]
+            if str(target_date) != next_ose_derivatives_session(origin_date):
+                continue
             if origin_date > expiry or target_date > expiry:
                 continue
             part = _partition(origin_date, protocol)
@@ -299,6 +303,10 @@ def run_replay(
     protocol: HistoricalPrequentialProtocol | None = None,
 ) -> dict[str, Any]:
     protocol = protocol or load_protocol()
+    if protocol.horizon_steps != 1:
+        raise ValueError("HPQ1 supports only next-observation horizon_steps=1")
+    if not adapters:
+        raise ValueError("at least one model is required")
     origins = build_front_contract_origins(
         load_jnu_public_source_frame() if frame is None else frame,
         protocol,
@@ -312,6 +320,7 @@ def run_replay(
         for sample in origins:
             prediction = adapter.predict(sample.context, horizon=protocol.horizon_steps)
             path = prediction["path"]
+            validate_price_path(path, protocol.horizon_steps)
             rows.append(
                 {
                     "origin_date": str(sample.origin_date),
@@ -339,7 +348,7 @@ def run_replay(
             "partitions": partitions,
             "records": rows,
         }
-    clean_oos = all(x["training_cutoff_known"] for x in identity["models"])
+    cutoff_known = all(x["training_cutoff_known"] for x in identity["models"])
     return {
         "status": "OK",
         "schema_version": HISTORICAL_PREQUENTIAL_SCHEMA_VERSION,
@@ -355,8 +364,8 @@ def run_replay(
         "last_origin": str(origins[-1].origin_date),
         "models": model_results,
         "evidence_grade": (
-            "CLEAN_HISTORICAL_PREQUENTIAL_OOS"
-            if clean_oos
+            "HISTORICAL_PREQUENTIAL_OOS_NOT_VERIFIED"
+            if cutoff_known
             else "HISTORICAL_PREQUENTIAL_TRAINING_CUTOFF_UNKNOWN"
         ),
         "sample_origin": "HISTORICAL_PSEUDO_FORWARD",
@@ -372,20 +381,23 @@ def evidence_dir(data_root: Path | None = None) -> Path:
 
 
 def save_one_use_evidence(result: dict[str, Any], data_root: Path | None = None) -> Path:
-    """Seal the first final-holdout artifact; refuse a different replay identity later."""
+    """Exclusively seal the first artifact; only identical content is idempotent."""
     if result.get("status") != "OK":
         raise ValueError("cannot seal non-OK replay")
     out_dir = evidence_dir(data_root)
     out_dir.mkdir(parents=True, exist_ok=True)
     sealed = out_dir / "SEALED.json"
-    if sealed.exists():
+    payload = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
+    try:
+        handle = sealed.open("x", encoding="utf-8")
+    except FileExistsError:
         existing = json.loads(sealed.read_text(encoding="utf-8"))
-        if existing.get("evidence_id") != result.get("evidence_id"):
-            raise RuntimeError("FINAL_HOLDOUT_ALREADY_OPENED_FOR_DIFFERENT_EVIDENCE_ID")
+        if existing != result:
+            raise RuntimeError("FINAL_HOLDOUT_ALREADY_OPENED_FOR_DIFFERENT_CONTENT")
         return sealed
-    tmp = sealed.with_suffix(".tmp")
-    tmp.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(sealed)
+    # An interrupted write remains a blocking artifact, never silently overwritten.
+    with handle:
+        handle.write(payload)
     return sealed
 
 
@@ -403,6 +415,8 @@ def equal_weight_ensemble_summary(evidence: dict[str, Any]) -> dict[str, Any]:
     deterministic read-only transformation of forecasts already present in the
     sealed artifact.
     """
+    if _horizon_mismatches(evidence):
+        return {"status": "BLOCKED_HORIZON_MISMATCH"}
     models = evidence.get("models") or {}
     if len(models) < 2:
         return {"status": "INSUFFICIENT_MODELS"}
@@ -449,10 +463,27 @@ def equal_weight_ensemble_summary(evidence: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _horizon_mismatches(evidence: dict[str, Any]) -> list[dict[str, str]]:
+    """Old immutable artifacts still need today's contract checks before reuse."""
+    mismatches = []
+    for name, model in (evidence.get("models") or {}).items():
+        for row in model.get("records") or []:
+            expected = next_ose_derivatives_session(row["origin_date"])
+            if row["target_date"] != expected:
+                mismatches.append({"model": name, "origin_date": row["origin_date"],
+                    "target_date": row["target_date"], "expected_target_date": expected})
+    return mismatches
+
+
 def compact_evidence_summary(evidence: dict[str, Any] | None) -> dict[str, Any]:
     """Compact audit/public summary without returning 100s of per-origin records."""
     if not evidence or evidence.get("status") != "OK":
         return {"status": "NOT_AVAILABLE"}
+    mismatches = _horizon_mismatches(evidence)
+    if mismatches:
+        return {"status": "BLOCKED_HORIZON_MISMATCH", "evidence_id": evidence.get("evidence_id"),
+                "mismatches": mismatches, "not_forward_evidence": True,
+                "not_calibration_evidence": True, "not_trading_edge": True}
     models: dict[str, Any] = {}
     for name, raw in (evidence.get("models") or {}).items():
         models[name] = {

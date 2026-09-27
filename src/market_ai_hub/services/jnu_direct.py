@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import time
+import math
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 from market_ai_hub.automation.data_lake import default_data_root
+from market_ai_hub.schemas.market_data import validate_price_path
 from market_ai_hub.services.calendar import next_ose_derivatives_sessions
 from market_ai_hub.services.horizon import parse_horizon
 from market_ai_hub.services.model_runtime import get_chronos, get_timesfm
@@ -238,7 +240,7 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
     df = pd.concat(frames, ignore_index=True)
     df["contract_month"] = df["contract_month"].astype(str)
     df = df.dropna(subset=["settlement"])
-    df = df[df["settlement"] > 0]
+    df = df[df["settlement"].map(math.isfinite) & (df["settlement"] > 0)]
     df = df.sort_values(["date", "_priority"]).drop_duplicates(
         subset=["date", "contract_month"], keep="last"
     )
@@ -281,6 +283,7 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
 def _model_result(adapter, name: str, series: pd.Series, steps: int, target_dates: list[str]) -> dict:
     raw = adapter.predict(series, horizon=steps)
     path = raw.get("path") or {}
+    validate_price_path(path, steps)
     p10 = list(path.get("p10") or [])
     p50 = list(path.get("p50") or [])
     p90 = list(path.get("p90") or [])
@@ -457,7 +460,10 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         if row.get("paired_vs_last_price_naive")
     ]
     comparison_note = "目前尚沒有足夠的同一批歷史預測樣本，不能可靠判斷模型相對簡單基準的穩定差異。"
-    if prequential.get("status") == "OK" and preq_final.get("n"):
+    preq_blocked = prequential.get("status", "").startswith("BLOCKED")
+    if preq_blocked:
+        comparison_note = "歷史重播包含與預測交易日期不一致的樣本，已停止引用該批績效，等待新規格重新驗證。"
+    elif prequential.get("status") == "OK" and preq_final.get("n"):
         final_pair = preq_final.get("paired_vs_last_price_naive") or {}
         final_eval = preq_final.get("evaluation") or {}
         final_model = final_eval.get("model") or {}
@@ -516,7 +522,10 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         and preq_final.get("n")
         and not (preq_final.get("evaluation") or {}).get("beats_naive_mae", False)
     )
-    if preq_low_confidence:
+    if preq_blocked:
+        validation_note = "歷史證據的預測期間檢查未通過；目前只提供未驗證的研究價格參考。"
+        action_note = "先修正資料與交易日對齊，使用新預先登記的評估區段；不重開已使用的最終留出樣本。"
+    elif preq_low_confidence:
         validation_note = (
             "較大規模的逐日歷史重播已完成；預先留出的最終區段中，現行等權價格模型平均誤差"
             "沒有優於直接沿用前一日價格的簡單基準，而且差異區間仍包含沒有差異。"
@@ -565,7 +574,7 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
                 f"{ens['p10']:,.0f} ～ {ens['p90']:,.0f} 點"
                 if ens.get("p10") is not None and ens.get("p90") is not None else "目前無法提供"
             ),
-            "可信度": "低信心研究參考" if preq_low_confidence or (
+            "可信度": "低信心研究參考" if preq_blocked or preq_low_confidence or (
                 historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False)
             )
             else "研究用、尚未完成前向驗證",
