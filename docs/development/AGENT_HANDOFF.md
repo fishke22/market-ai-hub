@@ -1,5 +1,9 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
+## Latest design: Accuracy v2 (2026-09-27)
+
+The user requested a deeper accuracy-improvement design. [Accuracy v2](accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) now supersedes the prior vNext model priorities and continuation prompts. This is a documentation-only plan: no new model was trained or deployed, and runtime build remains `dff534ae24a053c7`. Next bounded work is P0/P1: actual model revision/license/capability checks plus decision/target/publication semantics and one PIT factor. Preserve all repair gates below; especially do not reopen the HPQ1 final. New [Project Instructions](accuracy-v2-20260927/PROJECT_INSTRUCTIONS.txt) and [start prompt](accuracy-v2-20260927/START_NEXT_CHAT.txt) are the current handoff.
+
 ## Latest checkpoint: 2026-09-27 vNext audit repair
 
 Read [current repairs](vnext-20260927/01_CURRENT_STATE_AND_REPAIRS.md), [roadmap](vnext-20260927/02_ARCHITECTURE_AND_ROADMAP.md), and [delivery evidence](vnext-20260927/05_DELIVERY_EVIDENCE.md) first. Base main `ff109f2`; repair branch `codex/vnext-audit-handoff`; runtime source build `dff534ae24a053c7`. Do not infer merge or live-runtime adoption from a disk build.

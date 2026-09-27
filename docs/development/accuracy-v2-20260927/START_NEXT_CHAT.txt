@@ -1,0 +1,22 @@
+請依我上傳的ACCURACY_V2_PROJECT_SOURCE.md接續MARKET_AI_HUB，直接完成P0/P1：「可重現版本與用途gate＋預測時點/目標契約＋一個PIT跨市場特徵切片」。此Accuracy v2取代舊PDF與舊vNext模型優先序，保留已修復治理；不要把全部候選一次安裝，也不要只回我另一份規劃。
+
+先用WebCodex查runtime_status、work_on_project定位實際MARKET_AI_HUB，按真實tool schema工作。讀AGENTS、AGENT_HANDOFF、project-status、最新來源；查HEAD/branch/origin/status/build與資料根，跑既有agent_bootstrap。WebCodex不可用才切Remote Desktop Commander，先查原job防雙writer。若都不能操作，給我精確單包備援prompt，不假稱執行。
+
+起點線索：PR74，codex/vnext-audit-handoff；程式修復97c9ef3、文件checkpoint3033efd，build dff534ae24a053c7；之後可能新增文件提交。核對實況，不覆蓋更新、不自動merge。保留原untracked排程檔。上一包1995通過是已存在程式驗證，不是新模型有效性證明。
+
+P0：
+1. 清點實際model/package/revision/hash/licence與本地adapter能力。Chronos-2上游支援covariates，但目前predict只餵單序列；分開upstream_support、adapter_implemented、local_verified，不只把flag改true。核對from_pretrained實際載入revision是否與registry相符；用目前安裝版官方API做最小可重現修正，不默默下載最新版。
+2. TimesFM-3.0權重官方條款為非商業/非生產：確認實際revision，建立研究與serving用途分離／fail-closed gate；保留合法研究對照，不擅自刪權重。若用途不可確認，維持研究隔離、阻擋其進生產候選，繼續其他工作。不啟動／切換live服務。
+
+P1：
+3. 定義並落地decision_time、reference_price及available_at、target_start/end、target_measure、exact_contract、horizon、label_available_at。next OSE session與next published settlement分成不同target；JPX次營業日發布且假日合併，不能假裝前日15:45已有報告，也不能把開盤後的nowcast當完整下一日forecast。先在origin選合約再等待outcome，不依未來outcome可得性換合約。
+4. 只讀盤點既有JNU與一個可用factor（NQ/ES/JY/TMF等）的實際history/frequency/來源/known_at/缺口。使用既有asof/FeatureStore，做一個lagged return或volatility與可追溯packet。所有輸入available_at不晚於decision_time；future revision、future fill、stale/proxy/roll不符要拒絕。沒有合格真實資料就synthetic測工程並標DATA_NOT_READY，不造行情、不新增付費來源。
+5. 檢查source/model/feature/protocol變動是否使cache失效；日期相同不代表內容相同。先確保packet可供未來naive/linear/LightGBM/Chronos比較；這包不做調參、fine-tune、模型權重融合或新市場績效認證。
+
+驗收：晚到與修訂資料、未來資料擾動不改過去packet、label漏進features、缺bar/inf/重複時間、跨venue時區、OSE假日與報告發布、roll、proxy、stale、實際model revision與research/serving gate。mock只能驗工程；查官方文件與本機版本，不能猜API。使用synthetic/暫存資料根測試，不占用live recorder mutex。
+
+禁止重開HPQ1已曝光final、覆寫SEALED、刪ATTEMPTED、拿舊48筆挑最佳模型。它的131-origin證據保持BLOCKED_HORIZON_MISMATCH。所有新的主要loss、delta、splits、trial cap、purge/label可得時間、seed與新holdout要在下一包實驗前commit/push。W4既有校準門檻不為過關下降。
+
+完成P0/P1後跑必要offline checks、更新交接、commit/push本次檔案並建/更新PR查CI，保留他人檔案，不merge、不提交行情/DB/權重/密鑰。提供測試exit/count、實際完成與DATA_READY差別、尚待驗證、新版來源快照，以及P2的具體入口：naive＋既有linear/classifier基準＋一個LightGBM任务、chronological OOF ledger與有限搜尋。別跨階段直接做全套框架或實盤。
+
+授權你在P0/P1自主採用最小正確修正。請開始實際施工，持續完成這個工作包。

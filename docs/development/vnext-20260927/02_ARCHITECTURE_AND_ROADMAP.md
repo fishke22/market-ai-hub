@@ -1,5 +1,7 @@
 # MARKET_AI_HUB vNext：精度與效率優先的修訂設計
 
+後續版本：[Accuracy v2](../accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) 已取代本文件的模型優先序與施工順序。本文件保留為歷史設計，不與新版本並列為current。
+
 日期：2026-09-27。這份設計取代舊 PDF 的施工順序；實際現況以 01 文件與 repository 為準。
 
 ## 決策

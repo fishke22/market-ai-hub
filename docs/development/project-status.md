@@ -1,5 +1,7 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+Latest design-only update: [Accuracy v2](accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) supersedes vNext model priorities. Runtime source is unchanged; proposed accuracy improvements are **NOT_IMPLEMENTED / NOT_MARKET_VALIDATED**. Next package is P0/P1; previously verified repair status below still applies.
+
 ## Current override — 2026-09-27 vNext audit repair
 
 - Current phase: **VNEXT_AUDIT_REPAIRED / HPQ1_SEALED_EVIDENCE_BLOCKED_HORIZON_MISMATCH**.
