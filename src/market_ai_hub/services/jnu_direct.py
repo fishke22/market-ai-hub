@@ -1,7 +1,8 @@
 """Direct Osaka Nikkei 225 Micro settlement research path.
 
-Uses official JPX/OSE Micro contract settlements only. The forecast target is the
-next-session settlement for the current exact contract, not an intraday trade price.
+Uses official JPX/OSE Micro contract settlements only. The Accuracy v2 forecast
+target is the next published settlement observation for the current exact contract,
+not an intraday trade price and not necessarily the next OSE holiday session.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import pandas as pd
 
 from market_ai_hub.automation.data_lake import default_data_root
 from market_ai_hub.schemas.market_data import validate_price_path
-from market_ai_hub.services.calendar import next_ose_derivatives_sessions
+from market_ai_hub.services.calendar import next_ose_derivatives_sessions, next_trading_sessions
 from market_ai_hub.services.horizon import parse_horizon
 from market_ai_hub.services.model_runtime import get_chronos, get_timesfm
 from market_ai_hub.targets.jpx_daily import JPXOSEDailyReportProvider, public_daily_report_months
@@ -349,6 +350,23 @@ def _stance(expected_return: float | None) -> str:
     return "NEUTRAL"
 
 
+def next_published_settlement_observation_dates(
+    reference_date: str,
+    steps: int,
+) -> list[str]:
+    """Expected dates for the next published daily settlement observations.
+
+    Accuracy v2 evaluates the next row in the official published-settlement series,
+    not every OSE holiday-trading session.  JPX report availability is governed
+    conservatively by the XTKS cash-business publication calendar, so the expected
+    observation dates follow those business dates as well.  This prevents the
+    2026-09-18 -> 2026-09-21 holiday-session mismatch from reappearing.
+    """
+    if int(steps) < 1:
+        return []
+    return next_trading_sessions("^N225", reference_date, int(steps))
+
+
 def analyze_jnu_direct(
     horizon: str = "1d",
     contract_month: str = "",
@@ -385,7 +403,10 @@ def analyze_jnu_direct(
     from market_ai_hub.integrations.yuanta.resolver import ose_last_trading_date
     month = str(meta["contract_month"])
     expiry = ose_last_trading_date(int(month[:4]), int(month[4:]))
-    target_dates = next_ose_derivatives_sessions(meta["latest_date"], steps)
+    target_dates = next_published_settlement_observation_dates(
+        str(meta["latest_date"]),
+        steps,
+    )
     if not target_dates or any(pd.Timestamp(d).date() > expiry for d in target_dates):
         return {
             "status": "ROLL_BOUNDARY_BLOCKED",
@@ -491,7 +512,7 @@ def analyze_jnu_direct(
         "product_name": "大阪日經225微型期貨（JNU）",
         "contract_month": meta["contract_month"],
         "quote_code": meta["quote_code"],
-        "forecast_price_type": "NEXT_SESSION_SETTLEMENT",
+        "forecast_price_type": "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
         "horizon": horizon,
         "target_dates": target_dates,
         "data": meta,
@@ -684,7 +705,7 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         "商品": "大阪日經225微型期貨（JNU）",
         "目前合約": data["contract_month"],
         "最新官方資料": f"{data['latest_date']} 清算價 {data['latest_settlement']:,.0f} 點",
-        "預測目標": "下一交易日的官方清算價",
+        "預測目標": "下一筆官方發布的清算價觀測（不一定等於下一個 OSE 假日交易時段）",
         "直接價格模型": {
             "綜合預測": f"{ens['p50']:,.0f} 點" if ens.get("p50") is not None else "目前無法提供",
             "研究方向": stance_text,

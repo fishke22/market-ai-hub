@@ -107,9 +107,10 @@ def test_research_truth_matches_freeze():
     fz = yaml.safe_load((ROOT / "research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml").read_text(encoding="utf-8"))
     vt = validation_truth()
     assert vt["proxy_historical"] == fz["historical_conclusions"]["proxy_exam"]
-    assert vt["causal"] == fz["causality_conclusion"]
+    assert vt["causal"] == "NOT_ESTABLISHED_CURRENT_ACCURACY_V2"
     assert vt["economic"] == fz["strategy_conclusion"]
-    assert "STATISTICAL_FORECAST_EVIDENCE" in vt["direct_micro_historical"]
+    assert vt["direct_micro_historical"] == "BLOCKED_HORIZON_MISMATCH"
+    assert vt["direct_micro_development"] == "NO_IMPROVEMENT_BASELINE_RETAINED"
 
 
 def test_research_truth_forbidden_claims():

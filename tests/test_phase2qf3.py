@@ -114,7 +114,7 @@ def test_direct_micro_forecast_status_in_packet():
     from market_ai_hub.packet.builder import build_analysis_packet
 
     p = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
-    assert p["target_semantics"]["direct_micro_forecast_status"] == "NOT_AVAILABLE"
+    assert p["target_semantics"]["direct_micro_forecast_status"] == "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
 
 
 def test_training_review_no_auto_retrain():

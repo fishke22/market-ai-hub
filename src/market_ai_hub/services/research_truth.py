@@ -1,9 +1,8 @@
-"""Phase 2Q-A — single-source research evidence summary（ValidationTruth）。
+"""Current research evidence summary (ValidationTruth).
 
-以 `research/phase2/freeze/PHASE2_RESEARCH_FREEZE.yaml`（權威 historical research state）為單一來源。
-所有 packet / gate / leaderboard 引用此函式，避免不同 tool 各說各話：
-- 不再輸出「尚未做 OOS」→ OOS 已做，結論 NO_EVIDENCE / STATISTICAL_FORECAST_EVIDENCE。
-- 不再輸出「cost model missing」→ cost/slippage 已做，結論 NO_ECONOMIC_EDGE。
+Accuracy v2 is the current authority.  The older Phase 2 freeze remains
+available only as legacy evidence/provenance and must never overwrite the
+newer blocked-horizon / no-improvement conclusions.
 """
 from __future__ import annotations
 
@@ -21,6 +20,10 @@ _FREEZE_PATH = project_root() / "research" / "phase2" / "freeze" / "PHASE2_RESEA
 # 證據層級（§8）：DATA → HISTORICAL → CAUSAL → ECONOMIC → FORWARD
 EVIDENCE_LAYERS = ("proxy_historical", "direct_micro_historical", "causal", "economic", "forward")
 
+CURRENT_OSAKA_DIRECT_HISTORICAL = "BLOCKED_HORIZON_MISMATCH"
+CURRENT_OSAKA_DEVELOPMENT = "NO_IMPROVEMENT_BASELINE_RETAINED"
+CURRENT_OSAKA_CAUSAL = "NOT_ESTABLISHED_CURRENT_ACCURACY_V2"
+
 
 def _load_freeze() -> dict:
     if not _FREEZE_PATH.exists():
@@ -30,25 +33,37 @@ def _load_freeze() -> dict:
 
 
 def research_evidence_summary() -> dict:
-    """權威研究狀態（single source）。forward 為 runtime current truth，此處回 metadata。"""
+    """Return current Accuracy v2 truth while preserving the old freeze as legacy."""
     fz = _load_freeze()
     hist = fz.get("historical_conclusions", {})
+    legacy_direct = hist.get("direct_micro_forecast", "NONE")
+    legacy_causal = fz.get("causality_conclusion", "NONE")
     return {
-        "source": "PHASE2_RESEARCH_FREEZE",
+        "source": "ACCURACY_V2_CURRENT",
+        "legacy_source": "PHASE2_RESEARCH_FREEZE",
         "frozen_at": fz.get("frozen_at", ""),
         "proxy_historical": hist.get("proxy_exam", "NO_EVIDENCE"),
-        "direct_micro_historical": hist.get("direct_micro_forecast", "NONE"),
-        "causal": fz.get("causality_conclusion", "NONE"),
+        "direct_micro_historical": CURRENT_OSAKA_DIRECT_HISTORICAL,
+        "direct_micro_development": CURRENT_OSAKA_DEVELOPMENT,
+        "causal": CURRENT_OSAKA_CAUSAL,
         "economic": fz.get("strategy_conclusion", "NO_ECONOMIC_EDGE"),
         "forward": {
-            "activation": fz.get("forward", {}).get("activation", ""),
-            "evidence_status": fz.get("forward", {}).get("evidence_status", "NONE_YET"),
-            "infrastructure": fz.get("forward", {}).get("infrastructure", ""),
+            "activation": "2026-09-28",
+            "evidence_status": "NONE_YET",
+            "infrastructure": "Accuracy v2 P5 immutable forward monitor ready",
             "runtime_truth_source": "get_forward_test_status",
         },
-        "strategy_candidate": fz.get("strategy_candidate", "NONE"),
-        "production_candidate": fz.get("production_candidate", "NONE"),
-        "forbidden_claims": fz.get("forbidden_claims", []),
+        "legacy_phase2": {
+            "direct_micro_historical": legacy_direct,
+            "causal": legacy_causal,
+            "note": "historical only; superseded for current claims by Accuracy v2",
+        },
+        "strategy_candidate": "NONE",
+        "production_candidate": "NONE",
+        "forbidden_claims": sorted(set(
+            list(fz.get("forbidden_claims", []))
+            + ["predictive gain confirmed", "calibrated probability", "fixed win rate"]
+        )),
     }
 
 
@@ -58,6 +73,7 @@ def validation_truth() -> dict:
     return {
         "proxy_historical": s["proxy_historical"],
         "direct_micro_historical": s["direct_micro_historical"],
+        "direct_micro_development": s["direct_micro_development"],
         "causal": s["causal"],
         "economic": s["economic"],
         "forward": s["forward"],
@@ -79,6 +95,7 @@ def evidence_by_target() -> dict:
             "OSE_NIKKEI225_MICRO_FUTURES": {
                 "proxy_historical": s["proxy_historical"],
                 "direct_micro_historical": s["direct_micro_historical"],
+                "direct_micro_development": s["direct_micro_development"],
                 "causal": s["causal"],
                 "economic": s["economic"],
                 "forward": s["forward"]["evidence_status"],
@@ -143,7 +160,9 @@ def model_gate_explanation() -> str:
     """MODEL_PREDICTIVE_GATE 的誠實解釋（§9）。UNPROVEN = general production gate，非 NO_OOS_TEST_EXISTS。"""
     return (
         "GENERAL_PRODUCTION_MODEL_GATE_UNPROVEN: "
-        "historical statistical signal exists but no forward-validated production model."
+        "current Accuracy v2 evidence has a blocked historical horizon artifact and "
+        "a development NO_IMPROVEMENT / BASELINE_RETAINED result; no forward-validated "
+        "production model exists."
     )
 
 

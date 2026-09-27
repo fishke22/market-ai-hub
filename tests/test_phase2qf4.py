@@ -82,7 +82,7 @@ def test_osaka_golden_payload():
     p = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
     ts = p["target_semantics"]
     assert ts["direct_target"] == "OSE_NIKKEI225_MICRO_FUTURES"
-    assert ts["direct_micro_forecast_status"] == "NOT_AVAILABLE"
+    assert ts["direct_micro_forecast_status"] == "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
     assert ts["proxy_model_target"] == "^N225"
     assert ts["direct_market_calendar"] == "OSE/JPX_DERIVATIVES"
     assert ts["proxy_model_calendar"] == "XTKS"

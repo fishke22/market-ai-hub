@@ -504,11 +504,16 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
             "note": "TAIEX index points are NOT executable; strategy execution must pick TX/MTX/TMF explicitly",
         }
 
-    # §13：direct Micro 目前無真正 direct 5d model path
+    # Accuracy v2: an exact-contract JNU research path exists, but it is not
+    # forward-validated and must not be relabelled as predictive gain/trading edge.
     if family == "OSAKA_MICRO":
-        packet.target_semantics["direct_micro_forecast_status"] = "NOT_AVAILABLE"
+        packet.target_semantics["direct_micro_forecast_status"] = (
+            "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
+        )
         packet.target_semantics["direct_micro_forecast_note"] = (
-            "no true Direct Micro model path; ^N225 forecast is PROXY_MODEL_REFERENCE only"
+            "exact-contract JNU research forecast path is available; "
+            "ZERO_RETURN_NAIVE remains the governed point baseline until "
+            "new forward evidence establishes incremental predictive gain"
         )
 
     # §7/§12：direct 與 proxy 各別 session/bar，輸出 machine-readable dates（HIGH-1 fix）

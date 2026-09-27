@@ -131,8 +131,23 @@ def test_direct_micro_service_forecasts_exact_contract(monkeypatch):
     assert out["target"] == EXECUTION_TARGET
     assert out["contract_month"] == "202610"
     assert out["scope"] == "DIRECT_MICRO_SETTLEMENT_RESEARCH"
+    assert out["forecast_price_type"] == "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION"
+    # 2026-09-21..23 are OSE holiday sessions but the next official published
+    # settlement observation after the 9/18 row is on the cash-business cadence.
+    assert out["target_dates"] == ["2026-09-24"]
     assert out["ensemble"]["p50"] == pytest.approx(_series_and_meta()[0].iloc[-1] + 400.0)
     assert out["calibrated_probability_available"] is False
+
+
+def test_next_published_observation_skips_ose_holiday_only_sessions():
+    import market_ai_hub.services.jnu_direct as d
+
+    assert d.next_published_settlement_observation_dates("2026-09-18", 1) == ["2026-09-24"]
+    assert d.next_published_settlement_observation_dates("2026-09-18", 3) == [
+        "2026-09-24",
+        "2026-09-25",
+        "2026-09-28",
+    ]
 
 
 def test_jnu_public_summary_is_plain_chinese(monkeypatch):
@@ -157,6 +172,8 @@ def test_jnu_public_summary_is_plain_chinese(monkeypatch):
         assert forbidden not in text
     assert "大阪日經225微型期貨（JNU）" in text
     assert "官方清算價" in text
+    assert "下一筆官方發布的清算價觀測" in text
+    assert "下一交易日的官方清算價" not in text
     assert "目前已有 0 筆合格的真實前向機率樣本" in text
     assert "至少要依時間累積 50 筆校準、50 筆驗證、50 筆最終留出樣本" in text
 

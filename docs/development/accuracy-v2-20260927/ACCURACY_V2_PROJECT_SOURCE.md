@@ -245,7 +245,7 @@ P7 不等待市場 outcome 才施工，因為它驗的是獨立執行／成本 p
 
 新增 `scripts/validate_accuracy_v2_system.py` 作整體 preflight。2026-09-27 實跑回 `READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION`：JNU direct model 真正載入成功，P4 no-new-forward baseline path=OK，P5=`WAITING_FOR_ORIGIN` for 2026-09-28T00:05Z，P7=`P7_ENGINEERING_PASS`。目前 point governance 仍是 settlement 66,140 的 zero-return baseline，development-fit 90% interval≈63,439–68,841；`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`、strong direction=false。P6 仍是條件式：沒有證明盤中OFI／共享訓練／新聞／fine-tune 的資料、runtime與獨立增益前，不為了「完工」強做。
 
-P7 focused/contract + open-source protocol=`18 passed`；P7/P5/P4 affected-scope integration=`92 passed, 1 deselected, 11 warnings`。後續 full-offline job 已啟動但其 terminal output 因 stream recovery/job registry 遺失而不可驗證，因此本 checkpoint **不宣稱它 PASS**、也沒有為了湊數重跑；最近一個已完整保存的 full-offline 證據仍是 P5 的 `2083 passed, 1 skipped, 24 deselected, 132 warnings`。P7 delta 仍需最終 PR CI PASS 才完成發布。
+P7 focused/contract + open-source protocol=`18 passed`；P7/P5/P4 affected-scope integration=`92 passed, 1 deselected, 11 warnings`。之後針對全系統進行新的完整驗證並修復三個語義一致性缺口：舊 Phase2 freeze 不再覆蓋 current Accuracy v2 truth、AnalysisPacket 不再誤稱沒有 JNU direct path、direct JNU horizon 統一成 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` 並固定 2026-09-18 → 2026-09-24 假日回歸。最終 full-offline=`2097 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0；MCP stdio=22 tools、Chronos實機CPU/CUDA/quantile PASS、TimesFM RESEARCH univariate/multivariate/past-only covariates/CUDA PASS、public collector PASS。完整矩陣見 `SYSTEM_VALIDATION_20260927.md`。
 
 ## 9. 免費官方／原始研究來源
 
