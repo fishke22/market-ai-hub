@@ -1,9 +1,23 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 Jerry robustness comparison package on branch `codex/jerry-paired-uncertainty`, source commit `734d42bbc1eda16b41ec02e7f296c3d32291df4e`, product build `41f978ce1c3e4a97`, PR #69 OPEN. Local focused/offline validation is PASS; GitHub CI run `36289136004` / run #221 was still IN_PROGRESS at documentation time. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU OOS-origin/baseline fairness + CherryStudio integration closure on branch `codex/jnu-paired-validation-agent`, product build `95e91d5431d94d7f`. The preceding paired-uncertainty package is merged via PR #69 at main `4a013e2ff10282485c99c49604e094b2e4db0190` with CI #221/#222 PASS. Follow-up focused and full offline validation are PASS; follow-up publication is pending. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
+
+### 2026-09-27 JNU OOS-origin alignment + CherryStudio evidence routing
+
+A real CherryStudio-style stdio simulation after PR #69 showed `analyze_jnu` was not consuming the generic tournament pairwise table (`get_model_leaderboard` had zero JNU direct pairwise rows). During the follow-up, a more important pre-existing validation defect was found: `run_ts_oos_validation` gave last-price naive information through origin `pos`, but the model context stopped at `pos-1`, while both were scored on `pos+1`. The baseline therefore had a one-bar information advantage.
+
+Validation schema v2 now uses the same origin for both sides: model context includes through `pos`, naive uses `close[pos]`, and target is `close[pos+1]`. Old validation cache entries are invalidated by schema version. The same deterministic paired block-bootstrap logic is shared between tournament and JNU direct validation; `analyze_jnu` public output now says whether common-origin evidence is insufficient/exploratory/stable, while `view="audit"` exposes the numerical paired evidence.
+
+Final diff review found a second look-ahead in the old drift baseline path: its per-origin forecast was reconstructed from realized OOS `actuals`, including the current target. Drift and moving-average baselines are now frozen directly from each origin's historical context before the target is read. A regression test verifies a model that exactly reproduces the causal drift baseline has identical MAE and cannot appear to beat it.
+
+Actual JNU2610 revalidation on 10 origins / 32-bar context: Chronos-2 MASE=`1.0661`, direction accuracy=`0.40`, model-minus-naive MAE delta=`+44.77`, 95% CI=`[-81.78,169.89]`; TimesFM-3.0 MASE=`1.0721`, direction accuracy=`0.50`, delta=`+48.85`, CI=`[-109.30,220.70]`. Both mean MAEs remain above last-price naive, but both CIs cross zero and n=10 is `EXPLORATORY_ONLY`; the supported wording is that no stable advantage has been demonstrated, not that the models are proven stably worse.
+
+CherryStudio routing was corrected: QUICK_FORECAST uses `analyze_jnu`; JNU model audit uses `analyze_jnu(view="audit")`; generic `get_model_leaderboard` is not a substitute for JNU direct validation. The Agent prompt now requires same-origin model-comparison confidence before describing a model-vs-baseline result as stable. Actual stdio public and audit smokes PASS; final source/config build=`95e91d5431d94d7f`.
+
+Validation: focused OOS/baseline suite=`114 passed, 7 deselected`; full offline excluding only the live-owner mutex case=`1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`, exit 0. No broker login/logout/restart/order/account action occurred.
 
 ### 2026-09-27 jerry-backtest-lab comparison / paired uncertainty
 

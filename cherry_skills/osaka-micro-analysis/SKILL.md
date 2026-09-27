@@ -11,7 +11,7 @@
 3. 需要正式資料狀態或 audit 時再呼叫 `get_analysis_packet` / coverage / event tools；不得把內部狀態碼原樣貼給一般使用者。
 
 ## Fast path + Tool budget（§17/§18/§19/§26）
-- **QUICK_FORECAST**（預設）：target MCP budget = 1（`get_analysis_packet` compact）；maximum normal calls = 2。
+- **QUICK_FORECAST**（預設）：target MCP budget = 1（`analyze_jnu`）；maximum normal calls = 2。只有需要正式資料狀態／audit 才補 `get_analysis_packet`。
 - **FULL_ANALYSIS**：1 primary packet + only missing-evidence calls；maximum = 4。
 - **MODEL_AUDIT**：allow deeper calls（predict_* / leaderboard / gates）。
 - **SYSTEM_STATUS**：prefer health/status only；maximum 2 calls。
@@ -35,3 +35,4 @@
 - 說明確認條件、反向條件、失效條件；沒有可靠支撐壓力就省略。
 - 一般回答不得顯示內部變數、英文狀態碼、true/false/null。
 - 未完成校準就只說「機率尚在累積驗證」，不得製造假機率。
+- 使用者問「模型是否真的比基準好」時，先讀 `analyze_jnu` 的歷史驗證與模型比較可信度；共同歷史樣本少於 30 時只能說探索性，不得把單一 MAE 勝負當成穩定優勢。

@@ -1,15 +1,25 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **PAIRWISE_UNCERTAINTY_LOCAL_PASS_PR69_OPEN / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
-- Gate: **JNU now has a real exact-contract JPX/OSE settlement research model and plain-Chinese user output, but its current 10-origin historical OOS does not beat naive baselines, so confidence is LOW. Public calibrated probability remains blocked because eligible settled W3.2-EP1 forward event samples are still 0. NO ORDER / personalized size / invented exact entry-stop-target remain gated.**
-- build_id：**41f978ce1c3e4a97**（paired-uncertainty branch source/config fingerprint；source commit `734d42b`；PR #69 OPEN）
+- Current phase: **JNU_OOS_ORIGIN_AND_BASELINE_FAIRNESS_LOCAL_PASS / CHERRYSTUDIO_JNU_ROUTING_LOCAL_PASS / PAIRWISE_UNCERTAINTY_PR69_MERGED / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Gate: **JNU has exact-contract JPX/OSE settlement research models and plain-Chinese output. Corrected same-origin OOS gives Chronos MASE~1.066 / TimesFM~1.072 on only 10 origins; mean MAE is not better than last-price naive, but paired 95% intervals cross zero, so evidence is exploratory and no stable model advantage is established. Public calibrated probability remains blocked because eligible settled W3.2-EP1 forward event samples are still 0. NO ORDER / personalized size / invented exact entry-stop-target remain gated.**
+- build_id：**95e91d5431d94d7f**（JNU same-origin OOS + causal baseline evaluation + paired uncertainty + CherryStudio routing source/config fingerprint；follow-up publication pending）
 - Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.4**；evaluation governance **W3.1**；forward cycle **W3.2**；raw event producer **W3.2-EP1**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
-- Live quote capability：read-only post-merge check shows healthy/single-owner recorder with fresh heartbeat and measurement gates=false on runtime build **e8dc080886d0b5a2**; disk/stdio MCP build is **858029747b588ac6**, so checker correctly reports runtime-build stale. No broker restart/handover was performed because explicit authorization is required. `analyze_jnu` is broker-free and uses public JPX/OSE files.
+- Live quote capability：this follow-up did not restart or hand over the single-owner recorder. Last verified runtime build remains **e8dc080886d0b5a2** from the prior read-only check; current disk/stdio MCP build is **95e91d5431d94d7f**, so runtime/disk mismatch is expected until a separately authorized handover. `analyze_jnu` is broker-free and uses public JPX/OSE files.
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-27 JNU OOS-origin alignment + CherryStudio closure
+
+- Real CherryStudio-style stdio validation exposed that generic tournament pairwise evidence did not reach JNU direct analysis. Investigation found a pre-existing OOS fairness bug: model input stopped at `pos-1`, while last-price naive saw `pos`, with both scored at `pos+1`.
+- Validation schema v2 aligns both model and naive at the same forecast origin `pos` and invalidates old cached runs. JNU direct validation now carries the same paired block-bootstrap uncertainty used by tournament comparisons.
+- Final review also removed look-ahead from drift/MA baselines: each baseline forecast is now computed from the historical context available at that origin, never reconstructed from realized OOS targets.
+- Actual 10-origin revalidation: Chronos MASE `1.0661`, direction accuracy `0.40`, delta vs naive `+44.77`, 95% CI `[-81.78,169.89]`; TimesFM MASE `1.0721`, direction accuracy `0.50`, delta `+48.85`, CI `[-109.30,220.70]`. Both are `EXPLORATORY_ONLY`; neither demonstrates stable advantage, and the CI does not prove stable inferiority either.
+- Public `analyze_jnu` now states common-origin comparison confidence in plain Chinese. JNU model audits route to `analyze_jnu(view="audit")`; generic leaderboard is reserved for generic tournament scopes.
+- CherryStudio QUICK_FORECAST now routes directly to `analyze_jnu`; the system prompt requires same-origin evidence before treating MAE differences as stable.
+- Validation: focused OOS/baseline `114 passed, 7 deselected`; full offline `1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`; real public/audit stdio smokes PASS. No broker action was performed.
 
 ## 2026-09-27 jerry-backtest-lab robustness comparison
 
@@ -19,14 +29,14 @@
 - DuckDB pairwise rows now persist CI/confidence/replicates/block/status; CLI compare and MCP `get_model_leaderboard.pairwise_uncertainty` expose the same semantics. NaN from SQL NULL is normalized back to unavailable instead of `[nan,nan]`.
 - Not adopted: Jerry's row-count purge/embargo (we already have stricter temporal/label-window governance), PBO/DSR/Holm before a canonical trial-family ledger, or fixed-bps/Nautilus execution logic in the forecast ranking layer.
 - Validation: focused=`90 passed, 4 deselected`; final offline=`1976 passed, 1 skipped, 35 deselected, 110 warnings in 185.06s`, excluding only the live-owner mutex case. First unfiltered offline run had exactly that one failure. Changed-file secret scan=0; diff check PASS.
-- Publication: source commit=`734d42bbc1eda16b41ec02e7f296c3d32291df4e`; PR #69 OPEN; GitHub CI run `36289136004` / #221 was IN_PROGRESS when this status was written. No merge performed.
+- Publication: source commit=`734d42bbc1eda16b41ec02e7f296c3d32291df4e`, handoff commit=`52b3d12d1605c93c140363541284ff7625cad0fd`; PR #69 CI #221/#222 PASS and merged main=`4a013e2ff10282485c99c49604e094b2e4db0190`.
 
 ## 2026-09-27 JNU direct research + human public output
 
 - Added `analyze_jnu`: JNU/JNUxxxx/JNUPMxxxx and common Chinese aliases resolve to 大阪日經225微型期貨. Public output is plain Traditional Chinese; technical enums/codes are audit-only.
 - Verified JPX public OSE daily-report archive and materialized exact-contract Micro settlement history. `JNU2610` now has 50 official observations (2026-07-13..2026-09-25), latest settlement 66,140. Parser handles both root and nested ZIP layouts; 2026-08-03 nested-directory defect was repaired and backfilled.
 - Direct price forecast now uses JNU's own exact-contract official settlement history. Same-input reproducibility PASS. Actual smoke for 2026-09-28: ensemble ~66,167, neutral, reference range ~64,831-67,393.
-- Historical OOS is weak: 10 rolling origins / 32 context, Chronos MASE~2.20 and TimesFM~2.22, direction accuracy 0.20 each, neither beats last-price naive/drift. Public summary therefore says low-confidence and does not treat the one-day direction as mature signal.
+- Historical OOS remains weak after correcting the later-discovered forecast-origin alignment defect: 10 rolling origins / 32 context, Chronos MASE~1.066 / direction accuracy 0.40 and TimesFM~1.072 / direction accuracy 0.50. Mean MAE does not beat last-price naive/drift, but paired intervals cross zero, so the comparison remains exploratory rather than proof of stable inferiority.
 - Calibration remains unavailable: historical settlement rows are not `FORWARD_PRECOMMITTED EVENT_PROBABILITY`. Eligible settled EP1 samples remain 0; W4 50+50+50 plus acceptance gates are unchanged.
 - Validation: focused=`50 passed, 1 deselected`; build freeze=`3 passed`; full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings`; real stdio MCP smoke/reproducibility/live JPX parser PASS; diff/secret checks PASS. Feature commit=`bffa97d`, handoff=`267acc5`; PR #67 CI `36283073790` PASS, merged main `4d23cf7d549330d5ecc644bbef33819d1d3fd792`; post-merge stdio JNU smoke PASS on build `858029747b588ac6`.
 
