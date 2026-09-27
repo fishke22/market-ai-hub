@@ -60,8 +60,19 @@ def test_capability_registry_is_machine_readable_and_fail_closed(monkeypatch):
     assert rows["calibrated_public_probability"]["available"] is False
     assert rows["trading_edge_claim"]["available"] is False
     assert rows["live_trading"]["available"] is False
+    assert rows["system_engineering_completion"]["available"] is True
+    assert rows["taiex_official_daily_reference"]["available"] is True
+    assert rows["taiex_official_daily_reference"]["details"]["cash_index_executable"] is False
+    assert rows["jpx_micro_investor_flow_weekly_context"]["available"] is True
+    assert (
+        rows["jpx_micro_investor_flow_weekly_context"]["details"][
+            "historical_backfill_allowed"
+        ]
+        is False
+    )
     assert out["summary"]["predictive_gain_established"] is False
     assert out["summary"]["trading_edge_established"] is False
+    assert out["summary"]["all_currently_actionable_engineering_complete"] is True
 
 
 def test_capability_registry_marks_normal_target_ready(monkeypatch):
@@ -105,3 +116,4 @@ def test_capability_registry_marks_normal_target_ready(monkeypatch):
     assert rows["p5_forward_evidence_accumulation"]["data_ready"] is True
     assert rows["chronos_price_research"]["available"] is True
     assert rows["chronos_price_research"]["blocked_reason"] == "PREDICTIVE_GAIN_NOT_ESTABLISHED_CURRENT_ACCURACY_V2"
+    assert rows["system_engineering_completion"]["available"] is True

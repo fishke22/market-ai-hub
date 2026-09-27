@@ -105,15 +105,16 @@ def test_mcp_no_order_or_credential_tools():
         assert not any(k in tl for k in ("order", "cancel", "modify", "login", "credential", "broker")), t
 
 
-def test_mcp_tool_count_is_26_and_includes_closeout_tools():
+def test_mcp_tool_count_is_27_and_includes_closeout_tools():
     import asyncio
     from market_ai_hub.mcp.server import mcp
 
     names = {tool.name for tool in asyncio.run(mcp.list_tools())}
-    assert len(names) == 26
+    assert len(names) == 27
     assert {
         "get_data_continuity_status",
         "get_capability_registry",
+        "get_system_completion_status",
         "analyze_jnu_trading_path",
         "get_itrader_advisory",
     } <= names

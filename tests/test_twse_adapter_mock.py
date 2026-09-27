@@ -92,3 +92,42 @@ def test_twse_context_table_schema_shift_fails_closed(monkeypatch):
     )
     with pytest.raises(Exception, match="schema mismatch"):
         provider.fetch_context_valuation()
+
+
+def test_twse_taiex_daily_official_ohlc_mocked(monkeypatch):
+    provider = TWSEProvider()
+    calls = []
+
+    def fake_history(month_date):
+        calls.append(month_date)
+        return {
+            "stat": "OK",
+            "fields": ["日期", "開盤指數", "最高指數", "最低指數", "收盤指數"],
+            "data": [
+                ["115/09/23", "47,894.77", "48,341.56", "47,894.77", "48,157.29"],
+                ["115/09/24", "48,075.39", "48,117.54", "47,754.72", "48,024.60"],
+            ],
+        }
+
+    monkeypatch.setattr(provider, "_get_taiex_history_json", fake_history)
+    df = provider.fetch_taiex_daily("20260923", "20260924")
+    assert calls == ["20260901"]
+    assert list(df["symbol"].unique()) == ["TAIEX"]
+    assert list(df["close"]) == [48157.29, 48024.60]
+    assert all(df["data_grade"] == "OFFICIAL_DAILY")
+    assert df.iloc[-1]["timestamp_utc"].tzinfo is not None
+
+
+def test_twse_taiex_daily_schema_shift_fails_closed(monkeypatch):
+    provider = TWSEProvider()
+    monkeypatch.setattr(
+        provider,
+        "_get_taiex_history_json",
+        lambda month_date: {
+            "stat": "OK",
+            "fields": ["日期", "開盤指數", "收盤指數"],
+            "data": [["115/09/24", "48,075.39", "48,024.60"]],
+        },
+    )
+    with pytest.raises(Exception, match="schema mismatch"):
+        provider.fetch_taiex_daily("20260924", "20260924")

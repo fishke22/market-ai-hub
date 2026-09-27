@@ -137,6 +137,20 @@ def get_system_info() -> dict:
         capability_summary = capability_registry_snapshot().get("summary", {})
     except Exception as exc:
         capability_summary = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.services.system_completion import system_completion_snapshot
+        completion_summary = system_completion_snapshot()
+        completion_summary = {
+            "status": completion_summary.get("status"),
+            "all_currently_actionable_engineering_complete": completion_summary.get(
+                "all_currently_actionable_engineering_complete"
+            ),
+            "actionable_engineering_gap_count": completion_summary.get(
+                "actionable_engineering_gap_count"
+            ),
+        }
+    except Exception as exc:
+        completion_summary = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
 
     return {
         "python": platform.python_version(),
@@ -144,6 +158,7 @@ def get_system_info() -> dict:
         **info,
         "project_path": str(project_root()),
         "capability_summary": capability_summary,
+        "system_completion": completion_summary,
         "models": {
             n: {
                 "model_role": c.role,
@@ -973,6 +988,14 @@ def get_capability_registry() -> dict:
     from market_ai_hub.services.capability_registry import capability_registry_snapshot
 
     return capability_registry_snapshot()
+
+
+@mcp.tool()
+def get_system_completion_status() -> dict:
+    """Machine-readable closeout: actionable engineering vs future/authorization dependencies."""
+    from market_ai_hub.services.system_completion import system_completion_snapshot
+
+    return system_completion_snapshot()
 
 
 @mcp.tool()

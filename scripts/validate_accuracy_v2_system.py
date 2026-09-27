@@ -10,6 +10,7 @@ from market_ai_hub.services.build_info import build_fingerprint
 from market_ai_hub.services.capability_registry import capability_registry_snapshot
 from market_ai_hub.services.data_continuity import jnu_data_continuity_status
 from market_ai_hub.services.jnu_direct import analyze_jnu_direct
+from market_ai_hub.services.system_completion import system_completion_snapshot
 
 
 def main() -> int:
@@ -24,6 +25,7 @@ def main() -> int:
     p5 = p5_forward_evidence_summary()
     p7 = run_p7_acceptance()
     capabilities = capability_registry_snapshot()
+    completion = system_completion_snapshot()
 
     p4_ready = p4.get("status") == "OK"
     analysis_ready = p4_ready and (
@@ -42,7 +44,15 @@ def main() -> int:
         and p4_ready
     )
     p7_ready = p7.get("engineering_status") == "P7_ENGINEERING_PASS"
-    overall = analysis_ready and (governed_prediction_ready or context_only_ready) and p7_ready
+    engineering_complete = bool(
+        completion.get("all_currently_actionable_engineering_complete")
+    )
+    overall = (
+        analysis_ready
+        and (governed_prediction_ready or context_only_ready)
+        and p7_ready
+        and engineering_complete
+    )
     readiness_status = (
         "READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION"
         if overall and governed_prediction_ready
@@ -56,6 +66,16 @@ def main() -> int:
         "build": build_fingerprint(),
         "data_continuity": continuity,
         "capability_registry_summary": capabilities.get("summary"),
+        "system_completion": {
+            "status": completion.get("status"),
+            "all_currently_actionable_engineering_complete": engineering_complete,
+            "actionable_engineering_gap_count": completion.get(
+                "actionable_engineering_gap_count"
+            ),
+            "conditional_packages": completion.get("conditional_packages"),
+            "deferred_non_blocking": completion.get("deferred_non_blocking"),
+            "external_dependencies": completion.get("external_dependencies"),
+        },
         "analysis": {
             "ready": analysis_ready,
             "jnu_status": jnu.get("status"),

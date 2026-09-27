@@ -11,6 +11,7 @@ from market_ai_hub.services.build_info import build_fingerprint
 from market_ai_hub.services.data_continuity import jnu_data_continuity_status
 from market_ai_hub.config.runtime_paths import data_root
 from market_ai_hub.services.model_catalog import live_model_cards
+from market_ai_hub.services.system_completion import system_completion_snapshot
 
 
 CAPABILITY_SCHEMA_VERSION = "AV2.CAPABILITIES.1"
@@ -43,6 +44,7 @@ def capability_registry_snapshot() -> dict[str, Any]:
     p5 = p5_forward_evidence_summary()
     future = future_data_readiness()
     adapters = open_source_adapter_status()
+    completion = system_completion_snapshot()
 
     target_ready = bool(
         continuity.get("mode") == "NORMAL_TARGET_DATA"
@@ -59,10 +61,65 @@ def capability_registry_snapshot() -> dict[str, Any]:
 
     capabilities = [
         _cap(
+            "system_engineering_completion",
+            available=bool(
+                completion.get("all_currently_actionable_engineering_complete")
+            ),
+            data_ready=True,
+            evidence_level="ENGINEERING_PASS",
+            blocked_reason=(
+                ""
+                if completion.get("all_currently_actionable_engineering_complete")
+                else "ACTIONABLE_ENGINEERING_GAPS_REMAIN"
+            ),
+            details={
+                "status": completion.get("status"),
+                "actionable_engineering_gap_count": completion.get(
+                    "actionable_engineering_gap_count"
+                ),
+                "future_data_is_engineering_blocker": False,
+                "P6_completion_blocker": False,
+            },
+        ),
+        _cap(
             "system_health_and_build",
             available=True,
             data_ready=True,
             evidence_level="ENGINEERING_PASS",
+        ),
+        _cap(
+            "taiex_official_daily_reference",
+            available=True,
+            data_ready=True,
+            evidence_level="OFFICIAL_DATA",
+            blocked_reason="HISTORICAL_OOS_AND_EXECUTION_VALIDATION_NOT_ESTABLISHED",
+            details={
+                "source": "TWSE:MI_5MINS_HIST",
+                "frequency": "DAILY",
+                "ohlc": True,
+                "cash_index_executable": False,
+                "proxy_fallback": "yfinance:^TWII",
+                "predictive_gain_established": False,
+                "execution_validation_established": False,
+            },
+        ),
+        _cap(
+            "jpx_micro_investor_flow_weekly_context",
+            available=True,
+            data_ready=True,
+            evidence_level="OFFICIAL_DATA",
+            blocked_reason="RECEIPT_TIME_CONTEXT_ONLY_NO_HISTORICAL_PIT_BACKFILL",
+            details={
+                "source": "JPX Trading by Type of Investor weekly CSV",
+                "source_schema": "JPX_INVESTOR_FLOW_20260423_V1",
+                "product_code": "331",
+                "target": "Nikkei 225 Micro Futures",
+                "frequency": "WEEKLY",
+                "exact_publication_timestamp_known": False,
+                "availability_semantics": "RECEIPT_TIME_ONLY",
+                "historical_backfill_allowed": False,
+                "predictive_feature_auto_use": False,
+            },
         ),
         _cap(
             "jnu_exact_contract_analysis",
@@ -280,5 +337,9 @@ def capability_registry_snapshot() -> dict[str, Any]:
             "calibrated_probability_available": bool(p5.get("CALIBRATED", False)),
             "trading_edge_established": False,
             "live_trading_enabled": False,
+            "all_currently_actionable_engineering_complete": bool(
+                completion.get("all_currently_actionable_engineering_complete")
+            ),
+            "system_completion_status": completion.get("status"),
         },
     }

@@ -146,7 +146,8 @@ def test_taiwan_futures_never_overwrite_taiex_cash_identity():
     asof = datetime(2026, 9, 24, 20, 0, tzinfo=TPE)
     reps = FR.resolve_factor_representations("TW_INDEX", asof)
     cash = _by_id(reps, "TAIEX_CASH")
-    assert cash.instrument == "^TWII"
+    assert cash.instrument == "TAIEX"
+    assert FR.definition_for_symbol("^TWII").representation_id == "TAIEX_YFINANCE_PROXY"
     assert cash.value is None  # not overwritten by any futures price
     assert FR.definition_for("TW_INDEX", "TMF_FUTURES").representation_relation == "DERIVATIVE_PROXY"
 

@@ -87,7 +87,11 @@ def _build(market, target, monkeypatch, micro=None, stock=None, index=None):
             },
         )
     if index is not None:
-        monkeypatch.setattr(b, "_index_proxy_reference", lambda: index)
+        if index.get("price_type") == "CLOSE":
+            monkeypatch.setattr(b, "_index_direct_reference", lambda: index)
+        else:
+            monkeypatch.setattr(b, "_index_direct_reference", lambda: None)
+            monkeypatch.setattr(b, "_index_proxy_reference", lambda: index)
     return b.build_analysis_packet(market=market, target=target, detail_level="compact", save_analysis=False)
 
 
@@ -135,6 +139,32 @@ def test_taiwan_index_never_uses_micro_settlement(monkeypatch):
                index={"price": 20000.0, "price_type": "PROXY", "price_timestamp": "2026-09-18"})
     assert p["reference_price"] == 20000.0
     assert p["reference_price"] != 999999.0
+
+
+def test_taiwan_index_prefers_official_twse_close(monkeypatch):
+    p = _build(
+        "taiwan_index",
+        "TAIEX",
+        monkeypatch,
+        index={
+            "price": 48024.60,
+            "price_type": "CLOSE",
+            "price_timestamp": "2026-09-24",
+            "source": "TWSE:MI_5MINS_HIST",
+            "data_grade": "OFFICIAL_DAILY",
+            "reference_trading_date": "2026-09-24",
+        },
+    )
+    assert p["reference_price"] == 48024.60
+    assert p["reference_price_type"] == "CLOSE"
+    assert p["target_data_status"] == "REFERENCE_AVAILABLE"
+    assert p["target_price_source"] == "TWSE:MI_5MINS_HIST"
+    assert "twse:MI_5MINS_HIST" in p["data_fetched"]
+    assert p["target_semantics"]["target_reference_role"] == "DAILY_REFERENCE"
+    assert (
+        p["target_semantics"]["target_data_freshness"]["availability_semantics"]
+        == "DATED_OFFICIAL_REFERENCE"
+    )
 
 
 def test_taiwan_index_no_ose_contract(monkeypatch):

@@ -1,6 +1,17 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
-版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析，但沒有把 development interval 或 quantile challenger 冒充預測增益／校準機率。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+
+## 2026-09-28 System engineering closeout
+
+- 新增 `AV2.SYSTEM_COMPLETION.1` / `accuracy_v2_engineering_closeout_v1`，由 `config/accuracy_v2_system_completion.yaml` + `system_completion_snapshot()` 固定「目前可施工工程」的完成定義。它不把 future canonical outcomes、Taiwan 新 observation periods、外部 provider 設定、未授權 runtime/order execution、sealed final 或 P6 conditional research 冒充工程缺口。
+- Current closeout snapshot：required engineering=17、actionable gaps=0、status=`ENGINEERING_COMPLETE_WAITING_FOR_EXTERNAL_EVIDENCE`。MCP 新增 `get_system_completion_status`；`get_system_info`、Capability Registry、`validate_accuracy_v2_system.py` 同步輸出 closeout truth。Static `system_manifest.yaml` / `capabilities.yaml` 亦同步到 27 MCP tools 與目前 first-class source status。
+- TAIEX direct reference 補成 TWSE 官方 `MI_5MINS_HIST` daily OHLC；AnalysisPacket 先用官方 TAIEX cash close，失敗才降級 `^TWII` proxy。2026-09 live smoke=18 rows，latest 2026-09-24 OHLC=48,075.39 / 48,117.54 / 47,754.72 / 48,024.60。TAIEX cash index 不可成交；TX/MTX/TMF execution validation 與 historical OOS evidence 仍各自未成立。
+- JPX Trading by Type of Investor 接上官方 2026-04-23 後 weekly CSV；Nikkei 225 Micro product code=`331`，以同週官方 PDF/CSV aggregate reconciliation 驗證。Latest live receipt smoke period=`20260907/20260911`、11 volume rows。CSV 無 exact publication timestamp，因此 `available_at` 固定 actual retrieval time；不得 retroactive historical PIT backfill，也不自動成 predictive feature。
+- 修正 AnalysisPacket 既有 target-semantics overwrite：session/freshness/reference-role metadata 現在 merge-preserve；settlement / FinMind / TWSE official dated references 都標 `DATED_OFFICIAL_REFERENCE`，不再錯標 proxy。
+- Deferred/non-blocking 明列：P6 CUSUM/Page-Hinkley/BOCPD/state-transition probability/fine-tuning adapters=`DEFERRED_CONDITIONAL`；broker/order execution=`PROHIBITED_NO_AUTHORIZATION` + quote-only；optional external macro sources=external config/source dependent。這些都不改 `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`。
+- Final source/config build=`b55769dfdc52be7b`。Acceptance：focused closeout=`124 passed, 4 deselected`；cross-layer/build-freeze=`193 passed, 7 deselected`；MCP stdio=`27 tools / missing=0 / PASS`；system readiness=`READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION`；full offline（只排除既有 recorder owner-mutex）=`2213 passed, 1 skipped, 24 deselected, 152 warnings in 286.83s`，exit 0。
+- 後續不是「補施工」：P5/Taiwan 必須等真正新的 future observations；P6 只有在預先規定的 data/runtime/independent-gain prerequisites 存在後才另開；scheduler、runtime handover、live execution 需另行明示授權；HPQ1 old final 與已曝光 final 不重跑、不覆寫。
 
 ## 2026-09-28 TimesFM-3 personal research activation
 

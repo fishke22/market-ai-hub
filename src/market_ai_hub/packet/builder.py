@@ -16,6 +16,7 @@ import pandas as pd
 
 from market_ai_hub.packet.schema import (
     ENSEMBLE_RESEARCH_QUANTILE_SUMMARY,
+    PRICE_TYPE_CLOSE,
     PRICE_TYPE_PROXY,
     PRICE_TYPE_SETTLEMENT,
     RESEARCH_ENSEMBLE,
@@ -124,6 +125,37 @@ def _index_proxy_reference() -> dict | None:
                 "price_timestamp": str(last["timestamp_utc"]),
                 "reference_trading_date": str(last["timestamp_local"])[:10],
                 "reference_session_valid": True}
+    except Exception:
+        return None
+
+
+def _index_direct_reference() -> dict | None:
+    """Official TWSE TAIEX cash-index close; never an executable futures price."""
+    try:
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
+
+        from market_ai_hub.providers.twse import TWSEProvider
+
+        now_tw = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Taipei"))
+        end = now_tw.strftime("%Y%m%d")
+        start = (now_tw.date() - timedelta(days=45)).strftime("%Y%m%d")
+        df = TWSEProvider().fetch_taiex_daily(start, end)
+        if df.empty:
+            return None
+        last = df.sort_values("timestamp_utc").iloc[-1]
+        trading_date = str(last["timestamp_local"])[:10]
+        return {
+            "price": float(last["close"]),
+            "price_type": PRICE_TYPE_CLOSE,
+            "price_timestamp": trading_date,
+            "reference_trading_date": trading_date,
+            "reference_session_valid": True,
+            "source": "TWSE:MI_5MINS_HIST",
+            "data_grade": "OFFICIAL_DAILY",
+            "exact_publication_timestamp_known": False,
+            "cash_index_executable": False,
+        }
     except Exception:
         return None
 
@@ -472,11 +504,19 @@ def _fill_target_session_truth(packet: "AnalysisPacket", family: str) -> None:
         packet.target_semantics["target_data_freshness"] = {
             "freshness_status": fs, "quote_age_seconds": age, "age_days": round(age / 86400.0, 2),
             "reference_timestamp": ref_ts.isoformat(), "timestamp_precision": "SESSION_DATE_ONLY",
-            "availability_semantics": ("DATED_OFFICIAL_REFERENCE"
-                                       if packet.target_price_source == "settlement"
-                                       else "DATED_PROXY_REFERENCE"),
+            "availability_semantics": (
+                "DATED_OFFICIAL_REFERENCE"
+                if packet.target_price_source
+                in ("settlement", "finmind", "twse", "TWSE:MI_5MINS_HIST")
+                else "DATED_PROXY_REFERENCE"
+            ),
         }
-    if packet.target_price_source in ("settlement", "finmind", "twse"):
+    if packet.target_price_source in (
+        "settlement",
+        "finmind",
+        "twse",
+        "TWSE:MI_5MINS_HIST",
+    ):
         packet.target_semantics["target_reference_role"] = "DAILY_REFERENCE"
     elif packet.target_price_source in ("proxy", "proxy_index"):
         packet.target_semantics["target_reference_role"] = "RESEARCH_PROXY_REFERENCE"
@@ -559,7 +599,9 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
         }
         direct_contract = "N/A"  # cash equity / cash index 無 contract_month
 
+    session_truth = dict(packet.target_semantics)
     packet.target_semantics = {
+        **session_truth,
         "direct_target": direct_target,
         "direct_market_fact": direct_market_fact,
         "direct_contract_if_applicable": direct_contract,
@@ -926,17 +968,42 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             packet.data_missing.append(f"taiwan_stock:{target}")
             packet.data_quality["taiwan_stock_analysis_status"] = analysis_status
     else:  # TAIWAN_INDEX
-        idx_proxy = _t("provider_index_proxy", lambda: _index_proxy_reference())
-        if idx_proxy:
-            packet.reference_price = idx_proxy["price"]
-            packet.reference_price_type = PRICE_TYPE_PROXY
-            packet.price_timestamp = idx_proxy.get("price_timestamp", "")
-            packet.target_data_status = "RESEARCH_PROXY"
-            packet.target_price_source = "proxy_index"
+        idx_direct = _t("provider_taiex_official", lambda: _index_direct_reference())
+        if idx_direct:
+            packet.reference_price = idx_direct["price"]
+            packet.reference_price_type = idx_direct["price_type"]
+            packet.price_timestamp = idx_direct.get("price_timestamp", "")
+            packet.target_data_status = "REFERENCE_AVAILABLE"
+            packet.target_price_source = idx_direct["source"]
+            packet.data_fetched.append("twse:MI_5MINS_HIST")
+            packet.data_quality["taiwan_index_reference"] = {
+                "status": "OFFICIAL_DAILY",
+                "source": idx_direct["source"],
+                "reference_trading_date": idx_direct.get("reference_trading_date"),
+                "exact_publication_timestamp_known": False,
+                "cash_index_executable": False,
+                "historical_oos_validated": False,
+                "execution_validation_established": False,
+            }
         else:
-            packet.target_data_status = "MISSING"
-            packet.target_price_source = "DIRECT_NOT_IMPLEMENTED"
-            packet.data_missing.append("taiwan_index")
+            idx_proxy = _t("provider_index_proxy", lambda: _index_proxy_reference())
+            if idx_proxy:
+                packet.reference_price = idx_proxy["price"]
+                packet.reference_price_type = PRICE_TYPE_PROXY
+                packet.price_timestamp = idx_proxy.get("price_timestamp", "")
+                packet.target_data_status = "RESEARCH_PROXY"
+                packet.target_price_source = "proxy_index"
+                packet.data_quality["taiwan_index_reference"] = {
+                    "status": "OFFICIAL_SOURCE_UNAVAILABLE_PROXY_ONLY",
+                    "source": "yfinance:^TWII",
+                    "cash_index_executable": False,
+                    "historical_oos_validated": False,
+                    "execution_validation_established": False,
+                }
+            else:
+                packet.target_data_status = "MISSING"
+                packet.target_price_source = "unavailable"
+                packet.data_missing.append("taiwan_index")
 
     # 2b. V2-A.2 target/reference session + freshness truth（typed；不得 fabricated live status）
     _fill_target_session_truth(packet, family)
@@ -1127,8 +1194,8 @@ def _coverage_summary_compact(family: str = "OSAKA_MICRO") -> list[dict]:
         ]
     # TAIWAN_INDEX
     return [
-        {"factor": "TAIEX", "status": "PROXY_ONLY", "source": "yfinance ^TWII (DIRECT_NOT_IMPLEMENTED)"},
-        {"factor": "TAIFEX TX/MTX/TMF", "status": "NOT_IMPLEMENTED", "source": "execution instrument semantics only"},
+        {"factor": "TAIEX", "status": "OFFICIAL_DAILY", "source": "TWSE MI_5MINS_HIST; yfinance ^TWII proxy fallback only"},
+        {"factor": "TAIFEX TX/MTX/TMF", "status": "EXECUTION_VALIDATION_NOT_ESTABLISHED", "source": "execution instrument semantics registered; no edge claim"},
         {"factor": "VIX", "status": "GLOBAL_CONTEXT", "source": "Cboe official"},
     ]
 
@@ -1141,12 +1208,12 @@ def _archive_packet(packet: AnalysisPacket, family: str = "OSAKA_MICRO") -> str:
     dataset_semantics = {
         "OSAKA_MICRO": "jpx-micro-settlement-v1",
         "TAIWAN_STOCK": "TAIWAN_STOCK_REFERENCE_RESET_CONTINUITY_V1",
-        "TAIWAN_INDEX": "UNVERSIONED",  # TAIEX pipeline 未實作
+        "TAIWAN_INDEX": "TAIEX_TWSE_MI_5MINS_HIST_V1",
     }[family]
     feature_semantics = {
         "OSAKA_MICRO": "base-v1",
         "TAIWAN_STOCK": "base-v1",
-        "TAIWAN_INDEX": "UNVERSIONED",
+        "TAIWAN_INDEX": "TAIEX_OFFICIAL_DAILY_OHLC_V1",
     }[family]
 
     rec = AnalysisRecord(

@@ -28,7 +28,7 @@ first_class_targets:
   TAIWAN_INDEX:
     forecast_target: "TAIEX"
     execution_instruments: ["TX", "MTX", "TMF"]
-    maturity: "semantics/registry exist; direct pipeline PARTIAL"
+    maturity: "official TAIEX daily OHLC/reference AVAILABLE; historical OOS and execution validation NOT_YET_ESTABLISHED"
 
 references:
   - "OSE Nikkei 225 mini"
@@ -61,8 +61,8 @@ models:
 data:
   lake_root: "data/"
   provider_matrix: "docs/reference/DATA_SOURCE_MATRIX.md"
-  authoritative_sources: ["JPX", "BLS", "Cboe", "SEC EDGAR", "BOJ"]
-  proxy_sources: ["yfinance", "^N225"]
+  authoritative_sources: ["JPX", "TWSE", "BLS", "Cboe", "SEC EDGAR", "BOJ"]
+  proxy_sources: ["yfinance", "^N225", "^TWII"]
 
 automation:
   scheduler: "scripts/register_research_tasks.ps1 (opt-in)"
@@ -75,7 +75,7 @@ mcp:
   entrypoint: "market_ai_hub.mcp.server:main_sync"
   executable: ".venv\\Scripts\\market-ai-mcp.exe"
   tool_reference: "docs/reference/MCP_TOOL_REFERENCE.md"
-  tool_count: 21
+  tool_count: 27
 
 skills:
   locations: ["skills/"]

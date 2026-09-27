@@ -30,6 +30,7 @@ async def run() -> int:
                 "predict_chronos", "predict_timesfm", "predict_ensemble", "get_model_performance",
                 "backtest", "analyze_osaka_nikkei", "analyze_taiwan_stock",
                 "get_data_continuity_status", "get_capability_registry",
+                "get_system_completion_status",
                 "analyze_jnu_trading_path", "get_itrader_advisory",
             }
             missing = expected - set(names)
