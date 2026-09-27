@@ -75,6 +75,50 @@ def load_future_data_plan(path: str | Path | None = None) -> tuple[dict[str, Any
     return dict(policy), out
 
 
+def collect_public_sources(
+    *,
+    taifex_start: str = "",
+    taifex_end: str = "",
+) -> dict[str, Any]:
+    """Refresh official/public sources only; never touches broker/session ownership."""
+    from datetime import datetime, timedelta, timezone
+
+    from market_ai_hub.providers.taifex import TaifexProvider
+    from market_ai_hub.research.accuracy_v2_p3b_taifex import materialize_tmf_settlement_snapshot
+    from market_ai_hub.services.jnu_direct import refresh_jnu_direct_data
+
+    now = datetime.now(timezone.utc)
+    start = taifex_start or (now - timedelta(days=28)).strftime("%Y/%m/%d")
+    end = taifex_end or now.strftime("%Y/%m/%d")
+    result: dict[str, Any] = {
+        "schema_version": "AV2PUBLICCOLLECT.2",
+        "started_at": now.isoformat(),
+        "broker_used": False,
+        "credentials_used": False,
+        "recorder_touched": False,
+        "order_action": False,
+        "jpx": refresh_jnu_direct_data(force=True),
+    }
+    try:
+        snap = TaifexProvider().fetch_daily_snapshot("TMF", start=start, end=end)
+        summary = materialize_tmf_settlement_snapshot(snap)
+        result["taifex_tmf"] = {
+            key: value for key, value in summary.items() if key != "results"
+        }
+        result["taifex_tmf"]["blocked_reasons"] = sorted({
+            str(row.get("reason"))
+            for row in summary.get("results", [])
+            if row.get("status") == "BLOCKED" and row.get("reason")
+        })
+    except Exception as exc:
+        result["taifex_tmf"] = {
+            "status": "REFRESH_FAILED",
+            "error": type(exc).__name__,
+        }
+    result["completed_at"] = datetime.now(timezone.utc).isoformat()
+    return result
+
+
 def future_data_readiness(path: str | Path | None = None) -> dict[str, Any]:
     policy, sources = load_future_data_plan(path)
     active_public = sorted(k for k, v in sources.items() if v.active_public_collector)

@@ -213,8 +213,34 @@ def _current_settlement_frame() -> pd.DataFrame:
         df["date"] = df["date"].map(_date_text)
         df["settlement"] = pd.to_numeric(df["settlement_price"], errors="coerce")
         df["_priority"] = 2
-        frames.append(df[["contract_month", "date", "settlement", "source_url", "source_hash", "_priority"]])
+        df["_received_at"] = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        df["_source_path"] = str(p)
+        frames.append(df[[
+            "contract_month", "date", "settlement", "source_url", "source_hash",
+            "_priority", "_received_at", "_source_path",
+        ]])
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def load_current_micro_settlement_receipts(contract_month: str = "") -> pd.DataFrame:
+    """Load official JPX settlement-CSV rows carrying observed local receipt time.
+
+    Archive rows without an observed local receipt timestamp are intentionally excluded:
+    P5 uses this narrow view to prove prediction-before-outcome causality.
+    """
+    frame = _current_settlement_frame()
+    if frame.empty:
+        return frame
+    frame = frame.copy()
+    frame["contract_month"] = frame["contract_month"].astype(str)
+    frame["date"] = frame["date"].map(_date_text)
+    frame["settlement"] = pd.to_numeric(frame["settlement"], errors="coerce")
+    frame["_received_at"] = pd.to_datetime(frame["_received_at"], utc=True, errors="coerce")
+    frame = frame.dropna(subset=["settlement", "_received_at"])
+    frame = frame[frame["settlement"].map(math.isfinite) & (frame["settlement"] > 0)]
+    if contract_month:
+        frame = frame[frame["contract_month"].eq(str(contract_month))]
+    return frame.sort_values(["date", "_received_at", "source_hash"]).reset_index(drop=True)
 
 
 def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, dict[str, Any]]:
@@ -226,7 +252,12 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
         d["date"] = d["date"].map(_date_text)
         d["settlement"] = pd.to_numeric(d["settlement"], errors="coerce")
         d["_priority"] = 1
-        keep = ["contract_month", "date", "settlement", "source_url", "source_hash", "_priority"]
+        d["_received_at"] = pd.NaT
+        d["_source_path"] = ""
+        keep = [
+            "contract_month", "date", "settlement", "source_url", "source_hash",
+            "_priority", "_received_at", "_source_path",
+        ]
         frames.append(d[keep])
     current = _current_settlement_frame()
     if not current.empty:
@@ -276,6 +307,12 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
         "source": "JPX/OSE 官方每日報告與清算價",
         "series_semantics": "EXACT_CONTRACT",
         "price_semantics": "SETTLEMENT",
+        "latest_source_hash": str(exact["source_hash"].iloc[-1] or ""),
+        "latest_source_url": str(exact["source_url"].iloc[-1] or ""),
+        "latest_received_at": (
+            pd.Timestamp(exact["_received_at"].iloc[-1]).isoformat()
+            if pd.notna(exact["_received_at"].iloc[-1]) else None
+        ),
     }
     return series, meta
 

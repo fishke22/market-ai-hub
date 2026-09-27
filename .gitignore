@@ -64,6 +64,7 @@ data/registry/
 data/tournament/
 data/feature_store/
 data/lab/
+data/automation/
 data/analysis_archive/
 data/strategy/
 data/events/

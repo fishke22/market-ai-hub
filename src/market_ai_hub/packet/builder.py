@@ -742,12 +742,24 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         future_readiness = future_data_readiness()
     except Exception as exc:
         future_readiness = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+        p5_forward = p5_forward_evidence_summary()
+    except Exception as exc:
+        p5_forward = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+        }
     packet.research_gates = {
         "TRADING_EDGE_GATE": "UNPROVEN",
         "FORWARD_VALIDATION": "NOT_YET",
         "NO_NEW_FORWARD_OUTCOME_ANALYSIS": "BASELINE_INTERVAL_VOLATILITY_ALLOWED",
         "STRONG_DIRECTION_WITHOUT_PREDICTIVE_GAIN": "BLOCKED",
         "FUTURE_DATA_ACQUISITION": future_readiness,
+        "ACCURACY_V2_P5_FORWARD": p5_forward,
     }
     packet.reanalysis_conditions = [
         "FORECAST_STALE_AFTER_EVENT",

@@ -681,10 +681,16 @@ def get_data_coverage() -> dict:
         future = future_data_readiness()
     except Exception as exc:
         future = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+        p5_forward = p5_forward_evidence_summary()
+    except Exception as exc:
+        p5_forward = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
     return {
         "factors": [r.model_dump() for r in recs],
         "summary": LiveCoverageAuditor().summary([r for r in recs]),
         "future_data_acquisition": future,
+        "accuracy_v2_p5_forward": p5_forward,
     }
 
 
@@ -846,6 +852,18 @@ def get_forward_test_status() -> dict:
         summary["w32_event_probability_status"] = "AUDIT_STATUS_UNAVAILABLE_" + type(exc).__name__
     else:
         summary["w32_event_probability_status"] = "ACCUMULATING" if event_registered else "NONE_YET"
+
+    try:
+        from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+        summary["accuracy_v2_p5"] = p5_forward_evidence_summary()
+    except Exception as exc:
+        summary["accuracy_v2_p5"] = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+        }
 
     summary.update({
         "w32_event_probability_registered": event_registered,
