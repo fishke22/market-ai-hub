@@ -1,7 +1,7 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU OOS-origin/baseline fairness + CherryStudio integration closure on branch `codex/jnu-paired-validation-agent`, product build `95e91d5431d94d7f`. The preceding paired-uncertainty package is merged via PR #69 at main `4a013e2ff10282485c99c49604e094b2e4db0190` with CI #221/#222 PASS. Follow-up focused and full offline validation are PASS; follow-up publication is pending. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU OOS-origin/baseline fairness + CherryStudio integration closure. Product build `95e91d5431d94d7f`; source commit `65ac4eb5658c5070949d633f65b3ab38dba5709e`; PR #70 CI run #224 (`36291150870`) PASS and merged main=`d2df21c9a354ae124cd92d53c5c3ce3cafea88c1`. Post-merge stdio `analyze_jnu` smoke PASS on the same build. The preceding paired-uncertainty package is merged via PR #69 at main `4a013e2ff10282485c99c49604e094b2e4db0190`. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
 
@@ -18,6 +18,8 @@ Actual JNU2610 revalidation on 10 origins / 32-bar context: Chronos-2 MASE=`1.06
 CherryStudio routing was corrected: QUICK_FORECAST uses `analyze_jnu`; JNU model audit uses `analyze_jnu(view="audit")`; generic `get_model_leaderboard` is not a substitute for JNU direct validation. The Agent prompt now requires same-origin model-comparison confidence before describing a model-vs-baseline result as stable. Actual stdio public and audit smokes PASS; final source/config build=`95e91d5431d94d7f`.
 
 Validation: focused OOS/baseline suite=`114 passed, 7 deselected`; full offline excluding only the live-owner mutex case=`1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`, exit 0. No broker login/logout/restart/order/account action occurred.
+
+Publication: source commit=`65ac4eb5658c5070949d633f65b3ab38dba5709e`; PR #70 CI #224 PASS; merged main=`d2df21c9a354ae124cd92d53c5c3ce3cafea88c1`. Post-merge stdio public JNU smoke reloaded build `95e91d5431d94d7f` and preserved the expected low-confidence / exploratory paired-evidence wording.
 
 ### 2026-09-27 jerry-backtest-lab comparison / paired uncertainty
 

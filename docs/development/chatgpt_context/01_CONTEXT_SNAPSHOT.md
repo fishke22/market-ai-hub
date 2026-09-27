@@ -10,7 +10,7 @@ CherryStudio-style stdio 實測發現 PR #69 的 generic tournament paired uncer
 
 重新計算 JNU2610 10 個 rolling OOS origins：Chronos MASE=`1.0661`、方向命中=`0.40`、model-minus-naive MAE delta=`+44.77`、95% paired CI=`[-81.78,169.89]`；TimesFM MASE=`1.0721`、方向命中=`0.50`、delta=`+48.85`、CI=`[-109.30,220.70]`。兩者平均誤差目前都沒有優於 last-price naive，但 CI 都跨 0，而且 n=10 仍是 `EXPLORATORY_ONLY`；正確結論是「尚無穩定優勢證據」，不是已證明模型穩定較差。
 
-`analyze_jnu` public 現在直接用白話顯示「模型比較可信度」；JNU 完整模型稽核用 `analyze_jnu(view="audit")` 取得 MASE、common origins、paired delta/CI，不再拿 generic leaderboard 取代 JNU direct validation。CherryStudio QUICK_FORECAST 與 Agent prompt 都已同步這個路由與證據規則。實際 public/audit stdio smoke PASS；source/config build=`95e91d5431d94d7f`。focused OOS/baseline=`114 passed, 7 deselected`；full offline=`1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`。真實 forward event-probability settled samples 仍為 0，CALIBRATED 仍不可用；未重啟或操作 broker owner。
+`analyze_jnu` public 現在直接用白話顯示「模型比較可信度」；JNU 完整模型稽核用 `analyze_jnu(view="audit")` 取得 MASE、common origins、paired delta/CI，不再拿 generic leaderboard 取代 JNU direct validation。CherryStudio QUICK_FORECAST 與 Agent prompt 都已同步這個路由與證據規則。source/config build=`95e91d5431d94d7f`；source commit=`65ac4eb5658c5070949d633f65b3ab38dba5709e`；PR #70 CI run #224 (`36291150870`) PASS，merged main=`d2df21c9a354ae124cd92d53c5c3ce3cafea88c1`，post-merge stdio public JNU smoke PASS。focused OOS/baseline=`114 passed, 7 deselected`；full offline=`1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`。真實 forward event-probability settled samples 仍為 0，CALIBRATED 仍不可用；未重啟或操作 broker owner。
 
 ### 2026-09-27 最新 Jerry robustness comparison
 
