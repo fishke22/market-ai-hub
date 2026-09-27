@@ -167,9 +167,42 @@ def _taiwan_stock_context(symbol: str, as_of: datetime) -> dict:
         CONTEXT_SCHEMA_VERSION,
         build_taiwan_stock_context,
     )
+    from market_ai_hub.services.taiwan_context_receipts import (
+        RECEIPT_POLICY_VERSION,
+        RECEIPT_SCHEMA_VERSION,
+        TaiwanContextReceiptStore,
+    )
 
     try:
-        return build_taiwan_stock_context(symbol, as_of=as_of)
+        context = build_taiwan_stock_context(
+            symbol,
+            as_of=as_of,
+            include_twse_official=True,
+        )
+        try:
+            receipt = TaiwanContextReceiptStore().capture(context)
+        except Exception as exc:  # noqa: BLE001
+            receipt = {
+                "status": "CAPTURE_FAILED",
+                "receipt_schema_version": RECEIPT_SCHEMA_VERSION,
+                "receipt_policy_version": RECEIPT_POLICY_VERSION,
+                "receipt_id": None,
+                "append_only": True,
+                "content_addressed": True,
+                "predictive_feature_allowed": False,
+                "reason": type(exc).__name__,
+            }
+        context["receipt"] = receipt
+        context["receipt_store"] = {
+            "receipt_schema_version": RECEIPT_SCHEMA_VERSION,
+            "receipt_policy_version": RECEIPT_POLICY_VERSION,
+            "append_only": True,
+            "content_addressed": True,
+            "selection_policy": "LATEST_PREEXISTING_RECEIPT_AT_OR_BEFORE_DECISION",
+            "retroactive_backfill_allowed": False,
+            "predictive_feature_allowed": False,
+        }
+        return context
     except Exception as exc:  # noqa: BLE001
         return {
             "schema_version": CONTEXT_SCHEMA_VERSION,
@@ -178,6 +211,12 @@ def _taiwan_stock_context(symbol: str, as_of: datetime) -> dict:
             "role": CONTEXT_ROLE,
             "status": "UNAVAILABLE",
             "predictive_feature_eligible": False,
+            "predictive_feature_allowed": False,
+            "historical_revision_safe": False,
+            "receipt": {
+                "status": "NOT_CAPTURED_CONTEXT_BUILD_FAILED",
+                "receipt_id": None,
+            },
             "coverage": {
                 "status": "UNAVAILABLE",
                 "context_data_ready": False,
@@ -518,12 +557,18 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
             "data path; engineering availability is not predictive gain or trading edge"
         )
         context = packet.target_context_snapshot or {}
+        receipt = dict(context.get("receipt") or {})
+        receipt_store = dict(context.get("receipt_store") or {})
         packet.target_semantics["target_context_contract"] = {
             "schema_version": context.get("schema_version"),
             "source_semantics_version": context.get("source_semantics_version"),
             "role": context.get("role"),
             "predictive_feature_eligible": False,
             "historical_revision_safe": bool(context.get("historical_revision_safe", False)),
+            "immutable_receipt_status": receipt.get("status", "NOT_CAPTURED"),
+            "immutable_receipt_id": receipt.get("receipt_id"),
+            "receipt_policy_version": receipt_store.get("receipt_policy_version"),
+            "retroactive_backfill_allowed": False,
         }
 
     # Accuracy v2: an exact-contract JNU research path exists, but it is not
@@ -769,10 +814,26 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             "schema_version": (packet.target_context_snapshot or {}).get("schema_version"),
             "coverage_status": context_coverage.get("status", "UNKNOWN"),
             "context_data_ready": bool(context_coverage.get("context_data_ready", False)),
+            "immutable_receipt_status": (
+                ((packet.target_context_snapshot or {}).get("receipt") or {}).get(
+                    "status", "NOT_CAPTURED"
+                )
+            ),
+            "receipt_id": (
+                ((packet.target_context_snapshot or {}).get("receipt") or {}).get("receipt_id")
+            ),
             "predictive_experiment_data_ready": False,
         }
         if context_coverage.get("context_data_ready"):
             packet.data_fetched.append("finmind:taiwan_stock_target_context")
+        official_crosscheck = dict(
+            (packet.target_context_snapshot or {}).get("official_source_crosscheck") or {}
+        )
+        if any(
+            str(channel.get("status") or "").startswith("AVAILABLE")
+            for channel in (official_crosscheck.get("channels") or {}).values()
+        ):
+            packet.data_fetched.append("twse:openapi_context_crosscheck")
         integrity = dict(taiwan_analysis.get("data_integrity") or {})
         analysis_status = str(taiwan_analysis.get("status") or "UNAVAILABLE")
         ref = taiwan_analysis.get("reference_price")
@@ -925,12 +986,22 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         }
         context = packet.target_context_snapshot or {}
         context_coverage = dict(context.get("coverage") or {})
+        receipt = dict(context.get("receipt") or {})
+        receipt_captured = receipt.get("status") in {"CAPTURED", "ALREADY_CAPTURED"}
         packet.research_gates["TAIWAN_TARGET_CONTEXT"] = {
             "schema_version": context.get("schema_version"),
             "coverage_status": context_coverage.get("status", "UNAVAILABLE"),
             "context_data_ready": bool(context_coverage.get("context_data_ready", False)),
             "historical_revision_safe": bool(context.get("historical_revision_safe", False)),
-            "predictive_feature_use": "BLOCKED_UNTIL_PREREGISTERED_IMMUTABLE_SNAPSHOT_PROTOCOL",
+            "immutable_receipt_status": receipt.get("status", "NOT_CAPTURED"),
+            "immutable_receipt_id": receipt.get("receipt_id"),
+            "immutable_receipt_captured": receipt_captured,
+            "future_receipt_selection_ready": receipt_captured,
+            "predictive_feature_use": (
+                "BLOCKED_UNTIL_PREREGISTERED_FEATURE_LABEL_SPLIT_PROTOCOL"
+                if receipt_captured
+                else "BLOCKED_RECEIPT_CAPTURE_UNAVAILABLE"
+            ),
             "predictive_experiment_data_ready": False,
             "news_status": (
                 ((context.get("channels") or {}).get("news") or {}).get(

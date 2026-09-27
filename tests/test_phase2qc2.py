@@ -38,7 +38,7 @@ def _build(market, target, monkeypatch, micro=None, stock=None, index=None):
         b,
         "_taiwan_stock_context",
         lambda symbol, as_of: {
-            "schema_version": "TAIWAN_STOCK_CONTEXT_V2",
+            "schema_version": "TAIWAN_STOCK_CONTEXT_V3",
             "source_semantics_version": "TEST",
             "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
             "predictive_feature_eligible": False,

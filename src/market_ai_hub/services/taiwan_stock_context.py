@@ -16,12 +16,14 @@ from typing import Any
 import pandas as pd
 
 from market_ai_hub.providers.finmind import DATASET_TIER, FinMindProvider
+from market_ai_hub.providers.twse import TWSEProvider
 from market_ai_hub.services.taiwan_stock_data import normalize_taiwan_symbol
 
-CONTEXT_SCHEMA_VERSION = "TAIWAN_STOCK_CONTEXT_V2"
-SOURCE_SEMANTICS_VERSION = "FINMIND_FREE_TARGET_CONTEXT_ASOF_V2"
+CONTEXT_SCHEMA_VERSION = "TAIWAN_STOCK_CONTEXT_V3"
+SOURCE_SEMANTICS_VERSION = "FINMIND_TWSE_RECEIPT_TARGET_CONTEXT_ASOF_V3"
 FRESHNESS_POLICY_VERSION = "TAIWAN_STOCK_CONTEXT_FRESHNESS_V2"
 SOURCE_RECONCILIATION_VERSION = "TAIWAN_STOCK_SOURCE_RECONCILIATION_V1"
+TWSE_CROSSCHECK_VERSION = "TWSE_OPENAPI_RECEIPT_CROSSCHECK_V1"
 CONTEXT_ROLE = "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE"
 DATA_GRADE = "RESEARCH_CONTEXT_VENDOR_AGGREGATE"
 _TW_TZ = "Asia/Taipei"
@@ -109,6 +111,44 @@ def _safe_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return out if math.isfinite(out) else None
+
+
+def _safe_source_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    return _safe_float(str(value).replace(",", "").strip())
+
+
+def _roc_date(value: Any) -> str | None:
+    text = str(value or "").strip().replace("/", "")
+    if len(text) != 7 or not text.isdigit():
+        return None
+    year = int(text[:3]) + 1911
+    month = int(text[3:5])
+    day = int(text[5:7])
+    try:
+        return pd.Timestamp(year=year, month=month, day=day).strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _roc_month(value: Any) -> str | None:
+    text = str(value or "").strip().replace("/", "")
+    if len(text) != 5 or not text.isdigit():
+        return None
+    year = int(text[:3]) + 1911
+    month = int(text[3:5])
+    if not 1 <= month <= 12:
+        return None
+    return f"{year:04d}-{month:02d}"
+
+
+def _same_number(left: Any, right: Any, *, tolerance: float = 1e-9) -> bool:
+    a = _safe_float(left)
+    b = _safe_float(right)
+    if a is None or b is None:
+        return False
+    return math.isclose(a, b, rel_tol=tolerance, abs_tol=tolerance)
 
 
 def _row_hash(dataset: str, payload: Any) -> str:
@@ -1082,16 +1122,255 @@ def _decorate_channel(
     return out
 
 
+def _twse_official_crosscheck(
+    provider: TWSEProvider,
+    stock_id: str,
+    *,
+    cutoff: pd.Timestamp,
+    active_channels: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Receipt-time-only official cross-check; never retroactively creates PIT data."""
+    result: dict[str, Any] = {
+        "schema_version": TWSE_CROSSCHECK_VERSION,
+        "provider": "TWSE",
+        "authority": "OFFICIAL_HIGH_TRUST",
+        "historical_backfill_policy": "PREEXISTING_RECEIPT_REQUIRED",
+        "predictive_feature_allowed": False,
+        "channels": {},
+    }
+
+    def unavailable(name: str, endpoint: str, exc: Exception) -> None:
+        result["channels"][name] = {
+            "status": "REQUEST_FAILED",
+            "source_endpoint": endpoint,
+            "reason": type(exc).__name__,
+            "predictive_feature_allowed": False,
+        }
+
+    endpoint = "/exchangeReport/BWIBBU_ALL"
+    try:
+        frame = provider.fetch_context_valuation()
+        hit = frame[frame["Code"].astype(str).str.strip().eq(stock_id)]
+        if hit.empty:
+            result["channels"]["valuation"] = {
+                "status": "NO_TARGET_ROW",
+                "source_endpoint": endpoint,
+                "predictive_feature_allowed": False,
+            }
+        else:
+            row = hit.iloc[-1]
+            values = {
+                "pe_ratio": _safe_source_number(row.get("PEratio")),
+                "pbr": _safe_source_number(row.get("PBratio")),
+                "dividend_yield": _safe_source_number(row.get("DividendYield")),
+            }
+            observation_date = _roc_date(row.get("Date"))
+            active = active_channels.get("valuation") or {}
+            active_values = dict(active.get("values") or {})
+            same_period = observation_date == active.get("observation_date")
+            same_values = all(
+                _same_number(values.get(key), active_values.get(key))
+                for key in ("pe_ratio", "pbr", "dividend_yield")
+            )
+            result["channels"]["valuation"] = {
+                "status": "AVAILABLE_RECEIPT_TIME_ONLY",
+                "source_endpoint": endpoint,
+                "observation_date": observation_date,
+                "values": values,
+                "units": {
+                    "pe_ratio": "RATIO",
+                    "pbr": "RATIO",
+                    "dividend_yield": "PERCENT",
+                },
+                "provenance_hash": _row_hash("TWSE:" + endpoint, row.to_dict()),
+                "comparison_to_active_source": (
+                    "MATCH_SAME_PERIOD_AND_UNITS"
+                    if same_period and same_values
+                    else "DIFFERENT_VALUE_OR_PERIOD_PRESERVED_NO_AVERAGING"
+                ),
+                "predictive_feature_allowed": False,
+            }
+    except Exception as exc:
+        unavailable("valuation", endpoint, exc)
+
+    endpoint = "/opendata/t187ap05_L"
+    try:
+        frame = provider.fetch_context_monthly_revenue()
+        hit = frame[frame["公司代號"].astype(str).str.strip().eq(stock_id)]
+        if hit.empty:
+            result["channels"]["monthly_revenue"] = {
+                "status": "NO_TARGET_ROW",
+                "source_endpoint": endpoint,
+                "predictive_feature_allowed": False,
+            }
+        else:
+            row = hit.iloc[-1]
+            revenue_thousand = _safe_source_number(row.get("營業收入-當月營收"))
+            values = {
+                "revenue": revenue_thousand * 1000.0 if revenue_thousand is not None else None,
+                "mom_growth": (
+                    _safe_source_number(row.get("營業收入-上月比較增減(%)")) / 100.0
+                    if _safe_source_number(row.get("營業收入-上月比較增減(%)")) is not None
+                    else None
+                ),
+                "yoy_growth": (
+                    _safe_source_number(row.get("營業收入-去年同月增減(%)")) / 100.0
+                    if _safe_source_number(row.get("營業收入-去年同月增減(%)")) is not None
+                    else None
+                ),
+            }
+            observation_period = _roc_month(row.get("資料年月"))
+            report_date = _roc_date(row.get("出表日期"))
+            active = active_channels.get("monthly_revenue") or {}
+            active_values = dict(active.get("values") or {})
+            active_period = None
+            if active_values.get("revenue_year") is not None and active_values.get("revenue_month") is not None:
+                active_period = f"{int(active_values['revenue_year']):04d}-{int(active_values['revenue_month']):02d}"
+            comparable = (
+                observation_period == active_period
+                and _same_number(values.get("revenue"), active_values.get("revenue"))
+                and _same_number(values.get("mom_growth"), active_values.get("mom_growth"))
+            )
+            result["channels"]["monthly_revenue"] = {
+                "status": "AVAILABLE_RECEIPT_TIME_ONLY",
+                "source_endpoint": endpoint,
+                "report_date": report_date,
+                "observation_period": observation_period,
+                "values": values,
+                "units": {
+                    "revenue": "TWD",
+                    "source_revenue_amount": "THOUSAND_TWD",
+                    "mom_growth": "DECIMAL_RETURN",
+                    "yoy_growth": "DECIMAL_RETURN",
+                },
+                "provenance_hash": _row_hash("TWSE:" + endpoint, row.to_dict()),
+                "comparison_to_active_source": (
+                    "MATCH_ON_PERIOD_REVENUE_AND_MOM"
+                    if comparable
+                    else "DIFFERENT_VALUE_OR_PERIOD_PRESERVED_NO_AVERAGING"
+                ),
+                "report_date_is_exact_publication_timestamp": False,
+                "predictive_feature_allowed": False,
+            }
+    except Exception as exc:
+        unavailable("monthly_revenue", endpoint, exc)
+
+    endpoint = "/exchangeReport/MI_MARGN"
+    try:
+        frame = provider.fetch_context_margin_short()
+        hit = frame[frame["股票代號"].astype(str).str.strip().eq(stock_id)]
+        if hit.empty:
+            result["channels"]["margin_short"] = {
+                "status": "NO_TARGET_ROW",
+                "source_endpoint": endpoint,
+                "predictive_feature_allowed": False,
+            }
+        else:
+            row = hit.iloc[-1]
+            values = {
+                "MarginPurchaseBuy": _safe_source_number(row.get("融資買進")),
+                "MarginPurchaseSell": _safe_source_number(row.get("融資賣出")),
+                "MarginPurchaseTodayBalance": _safe_source_number(row.get("融資今日餘額")),
+                "ShortSaleBuy": _safe_source_number(row.get("融券買進")),
+                "ShortSaleSell": _safe_source_number(row.get("融券賣出")),
+                "ShortSaleTodayBalance": _safe_source_number(row.get("融券今日餘額")),
+            }
+            result["channels"]["margin_short"] = {
+                "status": "AVAILABLE_RECEIPT_TIME_ONLY",
+                "source_endpoint": endpoint,
+                "observation_date": None,
+                "observation_date_semantics": "CURRENT_TABLE_HAS_NO_DATE_FIELD",
+                "values": values,
+                "units": "SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED",
+                "provenance_hash": _row_hash("TWSE:" + endpoint, row.to_dict()),
+                "comparison_to_active_source": "NOT_RECONCILED_OBSERVATION_DATE_MISSING",
+                "predictive_feature_allowed": False,
+            }
+    except Exception as exc:
+        unavailable("margin_short", endpoint, exc)
+
+    endpoint = "/opendata/t187ap14_L"
+    try:
+        frame = provider.fetch_context_eps_report()
+        hit = frame[frame["公司代號"].astype(str).str.strip().eq(stock_id)]
+        if hit.empty:
+            result["channels"]["eps_report"] = {
+                "status": "NO_TARGET_ROW",
+                "source_endpoint": endpoint,
+                "predictive_feature_allowed": False,
+            }
+        else:
+            row = hit.iloc[-1]
+            roc_year = str(row.get("年度") or "").strip()
+            year = int(roc_year) + 1911 if roc_year.isdigit() else None
+            quarter_raw = str(row.get("季別") or "").strip()
+            quarter = int(quarter_raw) if quarter_raw.isdigit() else None
+            active = active_channels.get("eps") or {}
+            result["channels"]["eps_report"] = {
+                "status": "AVAILABLE_RECEIPT_TIME_ONLY_NON_PIT_REPORT_DATE",
+                "source_endpoint": endpoint,
+                "report_date": _roc_date(row.get("出表日期")),
+                "observation_period": (
+                    f"{year:04d}-Q{quarter}" if year is not None and quarter in {1, 2, 3, 4} else None
+                ),
+                "values": {"basic_eps": _safe_source_number(row.get("基本每股盈餘(元)"))},
+                "units": {"basic_eps": "TWD_PER_SHARE"},
+                "active_source_value": (active.get("values") or {}).get("eps"),
+                "comparison_to_active_source": "NOT_RECONCILED_REPORT_SEMANTICS_UNVERIFIED",
+                "report_date_is_exact_publication_timestamp": False,
+                "provenance_hash": _row_hash("TWSE:" + endpoint, row.to_dict()),
+                "predictive_feature_allowed": False,
+            }
+    except Exception as exc:
+        unavailable("eps_report", endpoint, exc)
+
+    result["channels"].update(
+        {
+            "institutional_flow": {
+                "status": "NOT_AVAILABLE_FREE_OPENAPI",
+                "reason": "NO_TARGET_LEVEL_T86_ENDPOINT_IN_CURRENT_TWSE_OPENAPI",
+                "predictive_feature_allowed": False,
+            },
+            "securities_lending": {
+                "status": "RELATION_MISMATCH_NOT_SUBSTITUTE",
+                "reason": "TWT96U_IS_AVAILABLE_TO_SHORT_NOT_LENDING_TRANSACTION_VOLUME",
+                "predictive_feature_allowed": False,
+            },
+            "shareholding": {
+                "status": "COVERAGE_MISMATCH_NOT_SUBSTITUTE",
+                "reason": "DISCOVERED_TWSE_ENDPOINTS_ARE_CATEGORY_OR_TOP20_NOT_FULL_TARGET_TABLE",
+                "predictive_feature_allowed": False,
+            },
+            "news": {
+                "status": "NOT_AVAILABLE",
+                "reason": "NO_VERIFIED_TARGET_SPECIFIC_TWSE_NEWS_ENDPOINT",
+                "predictive_feature_allowed": False,
+            },
+        }
+    )
+    retrieved_at = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("UTC")
+    result["retrieved_at"] = retrieved_at.isoformat()
+    result["cutoff"] = cutoff.isoformat()
+    result["historical_backfill_eligible"] = bool(retrieved_at <= cutoff)
+    result["historical_backfill_reason"] = (
+        "PREEXISTING_RECEIPT_AT_OR_BEFORE_DECISION"
+        if retrieved_at <= cutoff
+        else "RETRIEVED_AFTER_DECISION_CANNOT_BACKDATE"
+    )
+    return result
+
+
 def build_taiwan_stock_context(
     symbol: str,
     *,
     as_of: datetime | str | pd.Timestamp | None = None,
     finmind: FinMindProvider | None = None,
+    twse: TWSEProvider | None = None,
+    include_twse_official: bool = False,
 ) -> dict[str, Any]:
     """Build a bounded target-context snapshot without feeding forecast models."""
     stock_id = normalize_taiwan_symbol(symbol)
     cutoff = _cutoff(as_of)
-    retrieved_at = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("UTC")
     provider = finmind or FinMindProvider()
 
     channels = {
@@ -1106,6 +1385,24 @@ def build_taiwan_stock_context(
         "shareholding_concentration": _shareholding_concentration_channel(),
         "news": _news_channel(),
     }
+    official_crosscheck = (
+        _twse_official_crosscheck(
+            twse or TWSEProvider(),
+            stock_id,
+            cutoff=cutoff,
+            active_channels=channels,
+        )
+        if include_twse_official
+        else {
+            "schema_version": TWSE_CROSSCHECK_VERSION,
+            "provider": "TWSE",
+            "status": "NOT_REQUESTED",
+            "historical_backfill_policy": "PREEXISTING_RECEIPT_REQUIRED",
+            "predictive_feature_allowed": False,
+            "channels": {},
+        }
+    )
+    retrieved_at = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("UTC")
     channels = {
         name: _decorate_channel(
             name,
@@ -1143,9 +1440,11 @@ def build_taiwan_stock_context(
         "predictive_feature_allowed": False,
         "historical_revision_safe": False,
         "historical_revision_note": (
-            "live vendor retrieval has no immutable historical receipt snapshot; "
-            "current context does not authorize backtest/model-feature use"
+            "live retrieval is not historical PIT merely because it is captured now; "
+            "only a pre-existing immutable receipt at or before a future decision may "
+            "be selected after a separate preregistered feature protocol"
         ),
+        "receipt_time_provenance_capability": "IMMUTABLE_RECEIPT_STORE_AVAILABLE_FUTURE_ONLY",
         "source_reconciliation": {
             "version": SOURCE_RECONCILIATION_VERSION,
             "policy": "PRESERVE_CONFLICTS_NEVER_AVERAGE",
@@ -1154,11 +1453,16 @@ def build_taiwan_stock_context(
                 "repo FinMind provider exposes the target-scoped free datasets used here"
             ),
             "twse_official_direct_context_status": (
-                "PROVIDER_EXISTS_BUT_CONTEXT_ENDPOINTS_NOT_WIRED_IN_REPO"
+                "WIRED_RECEIPT_TIME_CROSSCHECK_ONLY"
+                if include_twse_official
+                else "AVAILABLE_NOT_REQUESTED"
             ),
+            "twse_context_schema_version": TWSE_CROSSCHECK_VERSION,
+            "twse_historical_backfill_use": "BLOCKED_UNLESS_PREEXISTING_RECEIPT_AT_OR_BEFORE_DECISION",
             "research_proxy_fallback_allowed": False,
             "generic_web_fallback_allowed": False,
         },
+        "official_source_crosscheck": official_crosscheck,
         "channels": channels,
         "coverage": {
             "status": "AVAILABLE" if len(available) == len(channels) else "PARTIAL",

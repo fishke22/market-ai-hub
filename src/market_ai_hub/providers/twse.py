@@ -81,6 +81,67 @@ class TWSEProvider(BaseProvider):
             raise ProviderError(f"twse STOCK_DAY_ALL empty for {date_str}")
         return df
 
+    def _fetch_current_table(self, path: str, required: set[str]) -> pd.DataFrame:
+        """Fetch a current TWSE OpenAPI table without stale file-cache reuse."""
+        data = self._get_json(path, params={}, cache=False)
+        if not isinstance(data, list):
+            raise ProviderError(f"unexpected twse current-table payload: {path}")
+        frame = pd.DataFrame(data)
+        missing = required - set(frame.columns)
+        if missing:
+            raise ProviderError(
+                f"twse current-table schema mismatch {path}: missing {sorted(missing)}"
+            )
+        return frame
+
+    def fetch_context_valuation(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/exchangeReport/BWIBBU_ALL",
+            {"Date", "Code", "Name", "PEratio", "DividendYield", "PBratio"},
+        )
+
+    def fetch_context_margin_short(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/exchangeReport/MI_MARGN",
+            {
+                "股票代號",
+                "股票名稱",
+                "融資買進",
+                "融資賣出",
+                "融資今日餘額",
+                "融券買進",
+                "融券賣出",
+                "融券今日餘額",
+            },
+        )
+
+    def fetch_context_monthly_revenue(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/opendata/t187ap05_L",
+            {
+                "出表日期",
+                "資料年月",
+                "公司代號",
+                "公司名稱",
+                "營業收入-當月營收",
+                "營業收入-上月比較增減(%)",
+                "營業收入-去年同月增減(%)",
+            },
+        )
+
+    def fetch_context_eps_report(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/opendata/t187ap14_L",
+            {
+                "出表日期",
+                "年度",
+                "季別",
+                "公司代號",
+                "公司名稱",
+                "基本每股盈餘(元)",
+            },
+        )
+
     def fetch_symbol_daily(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         """symbol 日線（用 TWSE 官方單股 `STOCK_DAY` endpoint，逐月拉取）。
 

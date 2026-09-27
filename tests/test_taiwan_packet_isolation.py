@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 import market_ai_hub.packet.builder as builder
 from market_ai_hub.services.public_view import packet_target_model_analysis
@@ -36,13 +37,32 @@ def _analysis_summary(symbol="3706.TW", horizon="4d"):
 
 def _context_summary(symbol="3706.TW"):
     return {
-        "schema_version": "TAIWAN_STOCK_CONTEXT_V2",
-        "source_semantics_version": "FINMIND_FREE_TARGET_CONTEXT_ASOF_V2",
+        "schema_version": "TAIWAN_STOCK_CONTEXT_V3",
+        "source_semantics_version": "FINMIND_TWSE_RECEIPT_TARGET_CONTEXT_ASOF_V3",
         "freshness_policy_version": "TAIWAN_STOCK_CONTEXT_FRESHNESS_V2",
         "symbol": symbol,
         "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
         "predictive_feature_eligible": False,
         "historical_revision_safe": False,
+        "receipt": {
+            "status": "CAPTURED",
+            "receipt_id": "tw-context:0123456789abcdef0123456789abcdef",
+            "receipt_schema_version": "TAIWAN_CONTEXT_RECEIPT_V1",
+            "receipt_policy_version": "APPEND_ONLY_CONTENT_ADDRESSED_RECEIPT_TIME_V1",
+            "historical_backfill_eligible": False,
+            "append_only": True,
+            "content_addressed": True,
+            "predictive_feature_allowed": False,
+        },
+        "receipt_store": {
+            "receipt_schema_version": "TAIWAN_CONTEXT_RECEIPT_V1",
+            "receipt_policy_version": "APPEND_ONLY_CONTENT_ADDRESSED_RECEIPT_TIME_V1",
+            "append_only": True,
+            "content_addressed": True,
+            "selection_policy": "LATEST_PREEXISTING_RECEIPT_AT_OR_BEFORE_DECISION",
+            "retroactive_backfill_allowed": False,
+            "predictive_feature_allowed": False,
+        },
         "channels": {
             "valuation": {
                 "status": "AVAILABLE",
@@ -82,7 +102,7 @@ def _context_summary(symbol="3706.TW"):
     }
 
 
-def _packet(monkeypatch, analysis=None):
+def _packet(monkeypatch, analysis=None, context=None):
     monkeypatch.setattr(
         builder,
         "_taiwan_stock_analysis",
@@ -91,7 +111,7 @@ def _packet(monkeypatch, analysis=None):
     monkeypatch.setattr(
         builder,
         "_taiwan_stock_context",
-        lambda target, as_of: _context_summary(target),
+        lambda target, as_of: context or _context_summary(target),
     )
     monkeypatch.setattr(builder, "_factor_observation_summary", lambda family, cutoff: [])
     monkeypatch.setattr(builder, "_model_input_readiness", lambda family, cutoff: {})
@@ -106,6 +126,55 @@ def _packet(monkeypatch, analysis=None):
     )
 
 
+def test_taiwan_context_helper_captures_append_only_receipt(monkeypatch, tmp_path):
+    import market_ai_hub.services.taiwan_stock_context as context_service
+
+    monkeypatch.setenv("MARKET_AI_DATA_ROOT", str(tmp_path))
+
+    def fake_build(symbol, *, as_of=None, include_twse_official=False):
+        assert include_twse_official is True
+        return {
+            "schema_version": "TAIWAN_STOCK_CONTEXT_V3",
+            "source_semantics_version": "FINMIND_TWSE_RECEIPT_TARGET_CONTEXT_ASOF_V3",
+            "symbol": symbol,
+            "stock_id": "3706",
+            "as_of": "2026-09-27T12:00:00+00:00",
+            "cutoff": "2026-09-27T12:00:00+00:00",
+            "retrieved_at": "2026-09-27T10:00:00+00:00",
+            "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
+            "predictive_feature_eligible": False,
+            "predictive_feature_allowed": False,
+            "historical_revision_safe": False,
+            "channels": {},
+            "coverage": {
+                "status": "PARTIAL",
+                "context_data_ready": True,
+                "predictive_experiment_data_ready": False,
+            },
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            },
+        }
+
+    monkeypatch.setattr(context_service, "build_taiwan_stock_context", fake_build)
+    cutoff = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+
+    first = builder._taiwan_stock_context("3706.TW", cutoff)
+    second = builder._taiwan_stock_context("3706.TW", cutoff)
+
+    assert first["receipt"]["status"] == "CAPTURED"
+    assert second["receipt"]["status"] == "ALREADY_CAPTURED"
+    assert first["receipt"]["receipt_id"] == second["receipt"]["receipt_id"]
+    assert first["receipt_store"]["retroactive_backfill_allowed"] is False
+    assert first["historical_revision_safe"] is False
+    artifacts = list(
+        (tmp_path / "research_outputs" / "taiwan_context_receipts" / "snapshots").glob("*.json")
+    )
+    assert len(artifacts) == 1
+
+
 def test_taiwan_packet_has_no_jnu_specific_forward_gates(monkeypatch):
     packet = _packet(monkeypatch)
     gates = packet["research_gates"]
@@ -116,8 +185,11 @@ def test_taiwan_packet_has_no_jnu_specific_forward_gates(monkeypatch):
     context_gate = gates["TAIWAN_TARGET_CONTEXT"]
     assert context_gate["predictive_experiment_data_ready"] is False
     assert context_gate["historical_revision_safe"] is False
+    assert context_gate["immutable_receipt_captured"] is True
+    assert context_gate["future_receipt_selection_ready"] is True
+    assert context_gate["immutable_receipt_id"].startswith("tw-context:")
     assert context_gate["predictive_feature_use"] == (
-        "BLOCKED_UNTIL_PREREGISTERED_IMMUTABLE_SNAPSHOT_PROTOCOL"
+        "BLOCKED_UNTIL_PREREGISTERED_FEATURE_LABEL_SPLIT_PROTOCOL"
     )
     assert context_gate["news_status"] == "NOT_AVAILABLE"
 
@@ -129,6 +201,22 @@ def test_taiwan_packet_has_no_jnu_specific_forward_gates(monkeypatch):
         "TAIFEX TMF",
     ):
         assert forbidden not in text
+
+
+def test_taiwan_packet_receipt_failure_keeps_feature_gate_closed(monkeypatch):
+    context = _context_summary()
+    context["receipt"] = {
+        "status": "CAPTURE_FAILED",
+        "receipt_id": None,
+        "predictive_feature_allowed": False,
+        "reason": "OSError",
+    }
+    packet = _packet(monkeypatch, context=context)
+    gate = packet["research_gates"]["TAIWAN_TARGET_CONTEXT"]
+    assert gate["immutable_receipt_captured"] is False
+    assert gate["future_receipt_selection_ready"] is False
+    assert gate["predictive_feature_use"] == "BLOCKED_RECEIPT_CAPTURE_UNAVAILABLE"
+    assert gate["predictive_experiment_data_ready"] is False
 
 
 def test_taiwan_economic_edge_is_not_borrowed_from_osaka(monkeypatch):
@@ -174,11 +262,13 @@ def test_taiwan_packet_embeds_same_target_governed_model_result(monkeypatch):
     )
     assert packet["display_policy"]["may_present_as_direct_forecast"] is True
     context = packet["target_context_snapshot"]
-    assert context["schema_version"] == "TAIWAN_STOCK_CONTEXT_V2"
+    assert context["schema_version"] == "TAIWAN_STOCK_CONTEXT_V3"
     assert context["channels"]["valuation"]["values"]["pe_ratio"] == 12.0
     assert context["channels"]["eps"]["pit_usable"] is False
     assert context["channels"]["news"]["status"] == "NOT_AVAILABLE"
     assert context["coverage"]["predictive_experiment_data_ready"] is False
+    assert context["receipt"]["status"] == "CAPTURED"
+    assert packet["data_quality"]["taiwan_stock_target_context"]["immutable_receipt_status"] == "CAPTURED"
     assert packet["target_semantics"]["target_context_contract"]["predictive_feature_eligible"] is False
     assert packet["research_decision_support"]["target_context_in_packet"] is True
     assert packet["research_decision_support"]["target_context_news_status"] == "NOT_AVAILABLE"

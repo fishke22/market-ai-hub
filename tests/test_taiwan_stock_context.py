@@ -221,6 +221,67 @@ class _FakeFinMind:
         return pd.DataFrame()
 
 
+class _FakeTWSE:
+    def fetch_context_valuation(self):
+        return pd.DataFrame(
+            [
+                {
+                    "Date": "1150924",
+                    "Code": "3706",
+                    "Name": "神達",
+                    "PEratio": "12.0",
+                    "DividendYield": "2.5",
+                    "PBratio": "1.5",
+                }
+            ]
+        )
+
+    def fetch_context_monthly_revenue(self):
+        return pd.DataFrame(
+            [
+                {
+                    "出表日期": "1150908",
+                    "資料年月": "11508",
+                    "公司代號": "3706",
+                    "公司名稱": "神達",
+                    "營業收入-當月營收": "0.12",
+                    "營業收入-上月比較增減(%)": str((120.0 / 110.0 - 1.0) * 100.0),
+                    "營業收入-去年同月增減(%)": "20.0",
+                }
+            ]
+        )
+
+    def fetch_context_margin_short(self):
+        return pd.DataFrame(
+            [
+                {
+                    "股票代號": "3706",
+                    "股票名稱": "神達",
+                    "融資買進": "215",
+                    "融資賣出": "405",
+                    "融資今日餘額": "26575",
+                    "融券買進": "5",
+                    "融券賣出": "1",
+                    "融券今日餘額": "41",
+                }
+            ]
+        )
+
+    def fetch_context_eps_report(self):
+        return pd.DataFrame(
+            [
+                {
+                    "出表日期": "1150927",
+                    "年度": "115",
+                    "季別": "2",
+                    "公司代號": "3706",
+                    "公司名稱": "神達控股股份有限公司",
+                    "基本每股盈餘(元)": "2.58",
+                }
+            ]
+        )
+
+
 def _context(*, as_of="2026-09-28T00:00:00Z", **kwargs):
     return build_taiwan_stock_context(
         "3706.TW",
@@ -340,10 +401,10 @@ def test_context_contract_never_promotes_to_predictive_feature_or_edge():
     assert "2330" not in str(out)
 
 
-def test_context_v2_exposes_auditable_factor_metadata_and_source_policy():
+def test_context_v3_exposes_auditable_factor_metadata_and_source_policy():
     out = _context()
-    assert out["schema_version"] == "TAIWAN_STOCK_CONTEXT_V2"
-    assert out["source_semantics_version"] == "FINMIND_FREE_TARGET_CONTEXT_ASOF_V2"
+    assert out["schema_version"] == "TAIWAN_STOCK_CONTEXT_V3"
+    assert out["source_semantics_version"] == "FINMIND_TWSE_RECEIPT_TARGET_CONTEXT_ASOF_V3"
     assert out["freshness_policy_version"] == "TAIWAN_STOCK_CONTEXT_FRESHNESS_V2"
     assert out["predictive_feature_allowed"] is False
     assert out["source_reconciliation"]["policy"] == "PRESERVE_CONFLICTS_NEVER_AVERAGE"
@@ -374,6 +435,50 @@ def test_context_v2_exposes_auditable_factor_metadata_and_source_policy():
     assert factor["source_dataset"] == "TaiwanStockPER"
     assert factor["PIT_eligible"] is True
     assert factor["predictive_feature_allowed"] is False
+
+
+def test_twse_official_crosscheck_is_receipt_time_only_and_never_averages():
+    out = build_taiwan_stock_context(
+        "3706.TW",
+        as_of="2026-09-27T00:00:00Z",
+        finmind=_FakeFinMind(),
+        twse=_FakeTWSE(),
+        include_twse_official=True,
+    )
+    official = out["official_source_crosscheck"]
+    assert official["schema_version"] == "TWSE_OPENAPI_RECEIPT_CROSSCHECK_V1"
+    assert official["historical_backfill_eligible"] is False
+    assert official["historical_backfill_reason"] == "RETRIEVED_AFTER_DECISION_CANNOT_BACKDATE"
+
+    valuation = official["channels"]["valuation"]
+    assert valuation["observation_date"] == "2026-09-24"
+    assert valuation["values"]["pe_ratio"] == 12.0
+    assert valuation["comparison_to_active_source"] == "MATCH_SAME_PERIOD_AND_UNITS"
+
+    revenue = official["channels"]["monthly_revenue"]
+    assert revenue["observation_period"] == "2026-08"
+    assert revenue["values"]["revenue"] == pytest.approx(120.0)
+    assert revenue["comparison_to_active_source"] == "MATCH_ON_PERIOD_REVENUE_AND_MOM"
+    assert revenue["report_date_is_exact_publication_timestamp"] is False
+
+    margin = official["channels"]["margin_short"]
+    assert margin["values"]["MarginPurchaseTodayBalance"] == 26575.0
+    assert margin["observation_date"] is None
+    assert margin["comparison_to_active_source"] == "NOT_RECONCILED_OBSERVATION_DATE_MISSING"
+
+    eps = official["channels"]["eps_report"]
+    assert eps["observation_period"] == "2026-Q2"
+    assert eps["values"]["basic_eps"] == 2.58
+    assert eps["active_source_value"] == 1.48
+    assert eps["comparison_to_active_source"] == "NOT_RECONCILED_REPORT_SEMANTICS_UNVERIFIED"
+    assert eps["report_date_is_exact_publication_timestamp"] is False
+
+    assert official["channels"]["institutional_flow"]["status"] == "NOT_AVAILABLE_FREE_OPENAPI"
+    assert official["channels"]["securities_lending"]["status"] == "RELATION_MISMATCH_NOT_SUBSTITUTE"
+    assert official["channels"]["shareholding"]["status"] == "COVERAGE_MISMATCH_NOT_SUBSTITUTE"
+    assert official["channels"]["news"]["status"] == "NOT_AVAILABLE"
+    assert out["historical_revision_safe"] is False
+    assert out["coverage"]["predictive_experiment_data_ready"] is False
 
 
 def test_margin_short_lending_and_shareholding_are_cutoff_safe_context_only():
