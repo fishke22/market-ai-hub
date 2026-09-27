@@ -81,6 +81,11 @@ def _validate(raw: dict[str, Any]) -> None:
         raise P2ProtocolError("exposed quarantine cannot be reused")
     if int(raw["final_holdout"]["minimum_origins"]) < 20:
         raise P2ProtocolError("P2 final minimum cannot be weakened below 20 origins")
+    final = raw["final_holdout"]
+    if final.get("training_policy") != "FIT_SELECTED_MODEL_ON_DEVELOPMENT_ORIGINS_ONLY_STATIC_PARAMETERS":
+        raise P2ProtocolError("P2 final training policy changed")
+    if final.get("inference_context_policy") != "ORIGIN_CAUSAL_PUBLIC_HISTORY_ALLOWED_INCLUDING_POST_DEVELOPMENT_PUBLICATIONS":
+        raise P2ProtocolError("P2 final inference-context policy changed")
 
     primary = raw["primary_evaluation"]
     if primary.get("loss") != "MAE_RETURN" or primary.get("baseline") != "ZERO_RETURN":
@@ -143,6 +148,12 @@ def _validate(raw: dict[str, Any]) -> None:
         raise P2ProtocolError("outer folds must remain development information")
     if selection.get("candidate_must_beat_naive_mean") is not True:
         raise P2ProtocolError("candidate cannot advance without beating naive mean")
+    if selection.get("inner_setting_rule") != "LOWEST_INNER_OOF_MAE_RETURN_THEN_CONFIG_ORDER":
+        raise P2ProtocolError("P2 inner setting rule changed")
+    if float(selection.get("required_inner_same_origin_coverage", 0.0)) < 1.0:
+        raise P2ProtocolError("P2 inner coverage requirement cannot be weakened")
+    if float(selection.get("required_outer_same_origin_coverage", 0.0)) < 1.0:
+        raise P2ProtocolError("P2 outer coverage requirement cannot be weakened")
 
     uncertainty = raw["uncertainty"]
     if int(uncertainty["block_length_publication_origins"]) < 5:

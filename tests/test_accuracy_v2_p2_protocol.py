@@ -23,6 +23,10 @@ def test_p2_protocol_is_preregistered_before_candidate_execution():
     assert p.raw["selection"]["outer_results_are_development_information"] is True
     assert p.raw["promotion"]["required_same_origin_coverage"] == 1.0
     assert p.raw["promotion"]["required_delta_ci_upper_below"] == pytest.approx(-0.0005)
+    assert p.raw["selection"]["inner_setting_rule"] == "LOWEST_INNER_OOF_MAE_RETURN_THEN_CONFIG_ORDER"
+    assert p.raw["selection"]["required_inner_same_origin_coverage"] == 1.0
+    assert p.raw["selection"]["required_outer_same_origin_coverage"] == 1.0
+    assert p.raw["final_holdout"]["training_policy"] == "FIT_SELECTED_MODEL_ON_DEVELOPMENT_ORIGINS_ONLY_STATIC_PARAMETERS"
 
 
 def test_p2_search_budget_is_finite_and_classification_is_not_return_promotion():

@@ -29,6 +29,8 @@ protocols:
       end_policy: OPEN_ENDED_NEW_FORWARD_ONLY
       minimum_origins: 20
       one_use_for_promotion: true
+      training_policy: FIT_SELECTED_MODEL_ON_DEVELOPMENT_ORIGINS_ONLY_STATIC_PARAMETERS
+      inference_context_policy: ORIGIN_CAUSAL_PUBLIC_HISTORY_ALLOWED_INCLUDING_POST_DEVELOPMENT_PUBLICATIONS
 
     primary_evaluation:
       loss: MAE_RETURN
@@ -127,6 +129,9 @@ protocols:
       tie_preference: ridge_return
       no_winner_action: KEEP_ZERO_RETURN_BASELINE
       outer_results_are_development_information: true
+      inner_setting_rule: LOWEST_INNER_OOF_MAE_RETURN_THEN_CONFIG_ORDER
+      required_inner_same_origin_coverage: 1.0
+      required_outer_same_origin_coverage: 1.0
 
     uncertainty:
       method: PAIRED_CIRCULAR_BLOCK_BOOTSTRAP
