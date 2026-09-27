@@ -90,7 +90,7 @@ def test_health_does_not_load_timesfm(monkeypatch):
     monkeypatch.setattr(tm.TimesFM3Adapter, "load", _boom_load)
     h = s.health_check()
     assert called["n"] == 0
-    assert h["timesfm"] == "AVAILABLE_NOT_LOADED"
+    assert h["timesfm"] == "RESEARCH_ONLY_AVAILABLE_NOT_LOADED"
 
 
 def test_system_info_does_not_load_heavy_models(monkeypatch):

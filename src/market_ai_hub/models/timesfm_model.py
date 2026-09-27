@@ -39,11 +39,15 @@ from market_ai_hub.services.horizon import (
     parse_horizon,
 )
 from market_ai_hub.services.market_session import quote_freshness
+from market_ai_hub.services.model_governance import (
+    expected_model_revision,
+    require_model_use,
+    verify_loaded_revision,
+)
 from market_ai_hub.services.reproducibility import (
     DEFAULT_SEED,
     forecast_config_hash,
     input_hash,
-    model_revision_local,
     sampling_metadata,
 )
 
@@ -58,9 +62,10 @@ NATIVE_QUANTILES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 class TimesFM3Adapter:
     """包裝 timesfm3.TimesFM3Forecaster。CUDA 失敗時標記 degraded/unavailable，不影響 Chronos。"""
 
-    def __init__(self, device: str | None = None) -> None:
+    def __init__(self, device: str | None = None, *, purpose: str = "UNKNOWN") -> None:
         self._model = None
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.purpose = str(purpose or "UNKNOWN").upper()
         self._last_error = ""
 
     def status(self) -> str:
@@ -87,14 +92,18 @@ class TimesFM3Adapter:
     def load(self) -> None:
         if self._model is not None:
             return
+        require_model_use("timesfm-3.0", self.purpose)
         from timesfm3.timesfm3_forecaster import TimesFM3Forecaster  # 延遲 import
 
+        revision = expected_model_revision("timesfm-3.0")
         self._model = TimesFM3Forecaster.from_pretrained(
             MODEL_ID,
             device=self.device,
             cache_dir=str(MODEL_CACHE),
+            revision=revision,
         )
-        log.info("timesfm3 loaded on %s", self.device)
+        self._revision_evidence = verify_loaded_revision("timesfm-3.0", self._model)
+        log.info("timesfm3 loaded on %s revision=%s purpose=%s", self.device, revision, self.purpose)
 
     def predict(
         self,
@@ -158,11 +167,7 @@ def timesfm_forecast(
 
     input_hash_v = input_hash(closes)
     cfg_hash = forecast_config_hash(MODEL_ID, horizon, steps, [0.1, 0.5, 0.9], seed, data_frequency)
-    revision = model_revision_local(MODEL_ID, MODEL_CACHE)
-    if revision == "unknown":
-        from market_ai_hub.services.reproducibility import model_revision_remote
-
-        revision = model_revision_remote(MODEL_ID)
+    revision = getattr(adapter, "_revision_evidence", {}).get("expected_revision") or expected_model_revision("timesfm-3.0")
 
     freshened = quote_freshness(symbol, closes.index[-1])
 
@@ -240,7 +245,13 @@ def timesfm_forecast(
         session_status=freshened["session_status"],
         quote_live=freshened["quote_live"],
         usable_for_live_decision=freshened["usable_for_live_decision"],
-        model_metadata={"quantile_source": "timesfm-3 native 9 quantiles", "license": LICENSE_TAG},
+        model_metadata={
+            "quantile_source": "timesfm-3 native 9 quantiles",
+            "license": LICENSE_TAG,
+            "usage_purpose": adapter.purpose,
+            "serving_allowed": False,
+            "revision_evidence": getattr(adapter, "_revision_evidence", {}),
+        },
         warnings=warnings,
     )
     return fo.attach_build(build_fingerprint())

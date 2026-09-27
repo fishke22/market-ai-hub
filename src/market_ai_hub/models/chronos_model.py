@@ -33,11 +33,14 @@ from market_ai_hub.services.horizon import (
     parse_horizon,
 )
 from market_ai_hub.services.market_session import quote_freshness
+from market_ai_hub.services.model_governance import (
+    expected_model_revision,
+    verify_loaded_revision,
+)
 from market_ai_hub.services.reproducibility import (
     DEFAULT_SEED,
     forecast_config_hash,
     input_hash,
-    model_revision_local,
     sampling_metadata,
 )
 
@@ -82,12 +85,15 @@ class ChronosAdapter:
             return
         from chronos import BaseChronosPipeline  # 延遲 import，避免模組級成本
 
+        revision = expected_model_revision("chronos-2")
         self._pipeline = BaseChronosPipeline.from_pretrained(
             MODEL_ID,
+            revision=revision,
             device_map=self.device,
             cache_dir=str(MODEL_CACHE),
         )
-        log.info("chronos-2 loaded on %s", self.device)
+        self._revision_evidence = verify_loaded_revision("chronos-2", self._pipeline)
+        log.info("chronos-2 loaded on %s revision=%s verified=%s", self.device, revision, self._revision_evidence["local_verified"])
 
     def predict(
         self,
@@ -144,11 +150,7 @@ def chronos_forecast(
     # V1.3 reproducibility（Chronos-2 為 deterministic quantile，無 MC sampling）
     input_hash_v = input_hash(closes)
     cfg_hash = forecast_config_hash(MODEL_ID, horizon, steps, [0.1, 0.5, 0.9], seed, data_frequency)
-    revision = model_revision_local(MODEL_ID, MODEL_CACHE)
-    if revision == "unknown":
-        from market_ai_hub.services.reproducibility import model_revision_remote
-
-        revision = model_revision_remote(MODEL_ID)
+    revision = getattr(adapter, "_revision_evidence", {}).get("expected_revision") or expected_model_revision("chronos-2")
 
     # V1.3 market open / quote freshness
     freshened = quote_freshness(symbol, closes.index[-1])
@@ -227,7 +229,12 @@ def chronos_forecast(
         session_status=freshened["session_status"],
         quote_live=freshened["quote_live"],
         usable_for_live_decision=freshened["usable_for_live_decision"],
-        model_metadata={"quantile_source": "chronos-2 native 21 quantiles"},
+        model_metadata={
+            "quantile_source": "chronos-2 native 21 quantiles",
+            "revision_evidence": getattr(adapter, "_revision_evidence", {}),
+            "upstream_supports_covariates": True,
+            "adapter_implements_covariates": False,
+        },
         warnings=warnings,
     )
     return fo.attach_build(build_fingerprint())

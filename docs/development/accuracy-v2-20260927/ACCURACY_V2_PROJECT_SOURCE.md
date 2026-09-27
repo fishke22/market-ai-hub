@@ -1,6 +1,20 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
-版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃，**新增方法尚未在本系統證明有效，也尚未實作**。取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1 已完成工程落地，但沒有新市場準確率證據；其餘方法仍是候選。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+
+## 0. P0/P1 實作快照（2026-09-27）
+
+- 實際施工分支 `codex/vnext-audit-handoff`，本包進場 base HEAD=`fc6bd6830ecfed642c3c268e953ec3385eac08b8`；source/config worktree build=`a11cbb922621e730`。既有 `scripts/register_jpx_micro_sync_task.ps1`、`scripts/run-hidden.vbs` 保持未追蹤且未提交。
+- P0：本機 x64 venv 是 Python 3.12.13、`chronos-forecasting==2.3.2`、`timesfm==3.0.2`。Chronos-2 registry revision=`29ec3766d36d6f73f0696f85560a422f50e8498c`，TimesFM-3.0=`43046b85ec22d584a13f8098c2ed39c889e129c2`；兩個 exact snapshot 都存在本機 cache。loader 現在都明確傳 registry revision，不再以「cache 第一個 snapshot」當 loaded revision。
+- Chronos-2：官方/目前安裝 API 的 `Chronos2Pipeline.predict`/`predict_df` 支援 multivariate、past covariates 與 future covariates；本地 `ChronosAdapter.predict` 仍只餵單一序列，因此 `upstream_support=true`、`adapter_implemented(covariates)=false`、`local_verified(covariates)=false` 分開記。一次 `HF_HUB_OFFLINE=1` 的 pinned CPU actual load 在 120 秒逾時，沒有取得 runtime commit attribute，因此 loaded-revision `local_verified` **維持 false**，不拿 cache presence 代替實載證據。[R2]
+- TimesFM-3.0：官方權重條款明確是 non-commercial / non-production。adapter 預設 purpose=`UNKNOWN` 並 fail-closed；研究 tournament/smoke 必須明示 `RESEARCH`；serving singleton 與 deep health 明示 `SERVING` 而被 gate 阻擋。shallow status 顯示 `RESEARCH_ONLY_AVAILABLE_NOT_LOADED`；權重未刪除，沒有啟動/切換 live service。[R3]
+- P1 target contract 已落地：`decision_time`、`reference_price`/`reference_price_available_at`、`target_start`/`target_end`、`target_measure`、`exact_contract`、`forecast_horizon`、`label_available_at`。full-interval forecast 強制 `decision_time <= target_start < target_end`；reference 必須已可得；label 不得早於 target end。
+- JNU 語義分離：`NEXT_OSE_SESSION_SETTLEMENT` 與 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` 是不同 target。JPX Daily Report 官方說明約於**次營業日 09:00 JST**更新；假日交易統計會與假日前夜盤/後續營業日資料合併，不單獨發布，因此不得把 holiday-session outcome 假裝在前一日 15:45 已知。[R8]
+- 一個跨市場切片已完成：沿用既有 FeatureStore/as-of provenance，固定 exact factor contract，產生 `factor_lagged_return = latest/prior - 1`。packet 保存 event/available/received/provider time、provider/source/frequency、venue/session、relation、contract、snapshot/lineage、age 與 source/value content hash。拒絕 future/late、非 PIT、安全狀態錯誤、stale、proxy relation mismatch、roll、series semantics/contract mismatch、duplicate time、non-finite、缺 bar gap、snapshot 缺失；future revision 不改過去 packet；labels 不進 features。
+- 實際資料只讀盤點：目前 FeatureStore 存在，但 NQ/ES/JY/TMF 候選 representation 沒有合格歷史列可形成本包 packet。因此本包只用 synthetic temporary data root 驗工程，明確輸出 **ENGINEERING PASS / DATA_NOT_READY**；沒有造行情、沒有新增付費來源、沒有 market validation。
+- Cache identity 現在包含 target contract、source lineage/snapshot/timestamps/value-content hash、feature version/formula、model revision 與 protocol version；相同日期但內容/revision不同會失效。
+- 驗收：focused package/regression=`66 passed, 44 warnings`；針對首輪 full offline 的 4 個預期整合修正後 fixcheck=`4 passed`；final offline（只排除既有 live recorder owner mutex 測試）=`2024 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。mock/synthetic 僅證明工程。HPQ1 131/48 封存沒有重跑/覆寫/解封；W4 門檻未下降。
+- P2 入口固定為：**先 commit/push 新 protocol**（primary loss、naive delta、chronological splits、trial cap、label-overlap purge/availability、seed、新未曝光 holdout），再做同 origin 的 last-value naive＋既有 linear/classifier 基準＋一個 LightGBM 任務，產生 walk-forward OOF ledger 並只做有限搜尋。沒有新證據則保留 baseline；Chronos-2 past-only covariate ablation 延到 P3。
 
 ## 1. 結論：保留底座，修改模型策略，不整套推倒
 

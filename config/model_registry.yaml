@@ -2,7 +2,7 @@
 # 每個模型記錄 license / hardware / 狀態。RTX 4060 Ti 16GB 為本機硬體上限。
 # 禁止為了硬跑模型造成長時間 OOM / swap。
 
-schema_version: 1
+schema_version: 2
 hardware_limit_vram_mb: 16380
 
 models:
@@ -23,6 +23,10 @@ models:
     supports_probabilistic: true
     supports_finetune: true
     estimated_vram_mb: 1200
+    allowed_purposes: [RESEARCH, SERVING]
+    upstream_support: {covariates: true, multivariate: true}
+    adapter_implemented: {univariate: true, past_only_covariates: false, multivariate: false}
+    local_verified: {univariate: false, covariates: false, multivariate: false}
     status: AVAILABLE
 
   - name: timesfm-3.0
@@ -42,6 +46,10 @@ models:
     supports_probabilistic: true
     supports_finetune: true
     estimated_vram_mb: 3000
+    allowed_purposes: [RESEARCH]
+    upstream_support: {covariates: true, multivariate: true}
+    adapter_implemented: {univariate: true, past_only_covariates: true, multivariate: true}
+    local_verified: {univariate: false, covariates: false, multivariate: false}
     status: AVAILABLE
 
   - name: xgboost

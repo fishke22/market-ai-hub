@@ -63,7 +63,7 @@ def _model_statuses(deep: bool = False) -> dict:
         try:
             from market_ai_hub.models.timesfm_model import TimesFM3Adapter
 
-            out["timesfm"] = TimesFM3Adapter().status()
+            out["timesfm"] = TimesFM3Adapter(purpose="SERVING").status()
         except Exception as e:
             out["timesfm"] = f"unavailable: {e}"
     else:

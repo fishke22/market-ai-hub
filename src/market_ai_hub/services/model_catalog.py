@@ -99,7 +99,8 @@ def live_model_cards() -> dict[str, ModelCard]:
         evidence={"smoke": "PASS" if chronos_ok else "FAIL", **chronos_ev},
     )
 
-    tsfm_ok = shallow_status("timesfm") == "AVAILABLE_NOT_LOADED"
+    tsfm_status = shallow_status("timesfm")
+    tsfm_ok = tsfm_status in {"AVAILABLE_NOT_LOADED", "RESEARCH_ONLY_AVAILABLE_NOT_LOADED"}
     tsfm_val, tsfm_ev = _ts_validation_status("timesfm-3.0")
     cards["timesfm-3.0"] = ModelCard(
         name="timesfm-3.0", role=ModelRole.BASE_MODEL.value, model_task=ModelTask.PRICE_FORECAST.value,
@@ -108,8 +109,8 @@ def live_model_cards() -> dict[str, ModelCard]:
         eligible_for_price_reference=tsfm_ok,
         eligible_for_direction_vote=tsfm_val == PredictiveValidationStatus.VALIDATED.value,
         eligible_for_ensemble_weighting=tsfm_ok,
-        reason="research price forecast；direction vote 需 VALIDATED" if tsfm_ok else "load failed",
-        evidence={"smoke": "PASS" if tsfm_ok else "FAIL", "license": "TIMESFM3_NON_COMMERCIAL_ONLY", **tsfm_ev},
+        reason="research-only price forecast；serving 由用途 gate 阻擋；direction vote 需 VALIDATED" if tsfm_ok else "load failed",
+        evidence={"smoke": "PASS" if tsfm_ok else "FAIL", "runtime_status": tsfm_status, "license": "TIMESFM3_NON_COMMERCIAL_ONLY", "serving_allowed": False, **tsfm_ev},
     )
 
     from market_ai_hub.models.fincast_model import FinCastAdapter

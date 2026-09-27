@@ -23,7 +23,7 @@ def main() -> int:
     print("=== TimesFM 3.0 smoke test ===")
     print("cuda_available:", torch.cuda.is_available())
 
-    adapter = TimesFM3Adapter(device="cuda" if torch.cuda.is_available() else "cpu")
+    adapter = TimesFM3Adapter(device="cuda" if torch.cuda.is_available() else "cpu", purpose="RESEARCH")
     try:
         adapter.load()
         results["load"] = "PASS"

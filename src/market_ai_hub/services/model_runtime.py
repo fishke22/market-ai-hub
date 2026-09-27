@@ -32,5 +32,7 @@ def get_timesfm():
         if _timesfm is None:
             from market_ai_hub.models.timesfm_model import TimesFM3Adapter
 
-            _timesfm = TimesFM3Adapter()
+            # This singleton is a user-facing serving path; TimesFM-3 weights are research-only.
+            # The adapter purpose gate therefore blocks load fail-closed.
+            _timesfm = TimesFM3Adapter(purpose="SERVING")
         return _timesfm

@@ -24,6 +24,8 @@ def shallow_status(name: str) -> str:
     cache = project_root() / spec["cache"]
     cache_ok = cache.exists() and any(cache.rglob("*"))
     if pkg_ok or cache_ok:
+        if name == "timesfm":
+            return "RESEARCH_ONLY_AVAILABLE_NOT_LOADED"
         return "AVAILABLE_NOT_LOADED"
     return "UNAVAILABLE"
 

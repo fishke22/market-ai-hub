@@ -1,15 +1,19 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-Latest design-only update: [Accuracy v2](accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) supersedes vNext model priorities. Runtime source is unchanged; proposed accuracy improvements are **NOT_IMPLEMENTED / NOT_MARKET_VALIDATED**. Next package is P0/P1; previously verified repair status below still applies.
+[Accuracy v2](accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) supersedes vNext model priorities. P0/P1 engineering is now **IMPLEMENTED / MARKET_DATA_NOT_READY / NOT_MARKET_VALIDATED**; previously verified repair status below still applies.
 
-## Current override — 2026-09-27 vNext audit repair
+## Current override — 2026-09-27 Accuracy v2 P0/P1
 
-- Current phase: **VNEXT_AUDIT_REPAIRED / HPQ1_SEALED_EVIDENCE_BLOCKED_HORIZON_MISMATCH**.
-- Runtime source build: **dff534ae24a053c7**; branch `codex/vnext-audit-handoff` (base main `ff109f2`). Merge/CI state and final checks: [delivery evidence](vnext-20260927/05_DELIVERY_EVIDENCE.md).
-- Existing 131-origin sealed artifact is unchanged, but 2026-09-18 → 2026-09-24 skips OSE holiday sessions. Its old 48-final metrics below are historical records, **not accepted next-session evidence**. Public summaries now block this artifact. Do not rerun or overwrite the one-use final.
-- Fixed CLI preflight/exclusive attempted marker, exclusive full-content sealing, false clean-OOS promotion, invalid price paths, unsupported HPQ1 horizon, cross-market timestamp alignment and implicit missing-price filling.
-- W4/W5 engines remain present; no new real-forward/calibration/edge claim. No broker runtime handover occurred.
-- Next bounded package: target/publication-time contract and one minimal PIT cross-market factor, per [revised roadmap](vnext-20260927/02_ARCHITECTURE_AND_ROADMAP.md).
+- Current phase: **ACCURACY_V2_P0_P1_ENGINEERING_PASS / PIT_CROSS_MARKET_DATA_NOT_READY / HPQ1_SEALED_EVIDENCE_BLOCKED_HORIZON_MISMATCH**.
+- Branch `codex/vnext-audit-handoff`, package base HEAD `fc6bd6830ecfed642c3c268e953ec3385eac08b8`; source/config worktree build **a11cbb922621e730**. No live runtime handover or service switch occurred.
+- Model governance: Chronos-2 registry SHA `29ec3766d36d6f73f0696f85560a422f50e8498c`, package `chronos-forecasting==2.3.2`; TimesFM-3.0 SHA `43046b85ec22d584a13f8098c2ed39c889e129c2`, package `timesfm==3.0.2`. Both exact local snapshots exist. Chronos is now loaded with an explicit registry revision; actual pinned offline load timed out at 120s, so loaded-revision `local_verified` remains false rather than inferred from cache. Installed Chronos-2 API exposes multivariate and covariate inputs, but local adapter remains univariate/no-covariate.
+- TimesFM weight license remains `timesfm-non-commercial-license-v1.0`: research is explicit; UNKNOWN/SERVING fail closed; serving singleton/deep health cannot load it. Research weights remain on disk and no live service was changed.
+- P1 adds `decision_time`, reference price + availability, target start/end/measure, exact contract, horizon and label availability. `NEXT_OSE_SESSION_SETTLEMENT` is separate from `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION`; JPX next-business-day ~09:00 publication and holiday aggregation are represented instead of treating prior 15:45 as known.
+- One PIT factor packet uses existing FeatureStore/as-of lineage for an exact-contract lagged return, requires all `available_at <= decision_time`, rejects future/late/stale/proxy/roll/mixed/duplicate/nonfinite/missing-gap inputs, excludes labels, and hashes source values + source/feature/model/protocol identity. Future revisions do not mutate past packets.
+- Read-only audit of the current FeatureStore found no qualified candidate history for NQ/ES/JY/TMF representations, so only synthetic temporary-root engineering proof exists: **DATA_NOT_READY**, not market evidence.
+- Validation: focused package/regression `66 passed, 44 warnings`; first full offline exposed three expected build-freeze updates plus one research-only status compatibility fix; targeted fixcheck `4 passed`; final offline excluding only `test_single_instance_lock_releases_after_error`=`2024 passed, 1 skipped, 24 deselected, 132 warnings`, exit 0.
+- Existing HPQ1 131-origin artifact and 48 exposed final rows are unchanged and remain blocked. No tuning, fine-tune, ensemble-weight fitting, W4 threshold lowering, calibration promotion or new trading-edge claim occurred.
+- Next bounded package P2: preregister loss/delta/splits/trial cap/purge/seed/new unexposed holdout, then same-origin naive + existing linear/classifier + one LightGBM task with chronological walk-forward OOF ledger and finite search. Chronos covariates remain P3.
 
 ## Historical PR72 checkpoint — superseded where contradicted above
 
