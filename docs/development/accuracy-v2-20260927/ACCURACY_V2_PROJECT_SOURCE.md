@@ -1,6 +1,6 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
-版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1 已完成工程落地，但沒有新市場準確率證據；其餘方法仍是候選。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2 已完成工程落地；P2 development 的實際結果是 NO_IMPROVEMENT、保留 baseline，P2 新 final 尚未開啟；其餘方法仍是候選。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 0. P0/P1 實作快照（2026-09-27）
 
@@ -15,6 +15,20 @@
 - Cache identity 現在包含 target contract、source lineage/snapshot/timestamps/value-content hash、feature version/formula、model revision 與 protocol version；相同日期但內容/revision不同會失效。
 - 驗收：focused package/regression=`66 passed, 44 warnings`；針對首輪 full offline 的 4 個預期整合修正後 fixcheck=`4 passed`；final offline（只排除既有 live recorder owner mutex 測試）=`2024 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。mock/synthetic 僅證明工程。HPQ1 131/48 封存沒有重跑/覆寫/解封；W4 門檻未下降。
 - P2 入口固定為：**先 commit/push 新 protocol**（primary loss、naive delta、chronological splits、trial cap、label-overlap purge/availability、seed、新未曝光 holdout），再做同 origin 的 last-value naive＋既有 linear/classifier 基準＋一個 LightGBM 任務，產生 walk-forward OOF ledger 並只做有限搜尋。沒有新證據則保留 baseline；Chronos-2 past-only covariate ablation 延到 P3。
+
+## 0.1 P2 實作與第一個 development 結果（2026-09-27）
+
+- P2 protocol 在任何 Ridge／Logistic／LightGBM outcome 前先提交並 push：`f2edd7c`；內層 tie/coverage 與 final static-training/inference-context 規則再於**仍未跑 candidate 前**凍結為 `53386f54740e2bcd0706140f6c4df5aeb80facab`，且當時 HEAD=origin branch。這兩個 prereg commit 是後續 engine 的前置證據。
+- 任務改用 publication-causal `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` return regression，避免重用 HPQ1 已阻擋的 next-session horizon。主要 loss=`MAE_RETURN`、baseline=`ZERO_RETURN`、`d=loss(candidate)-loss(naive)`，負值才代表 candidate 較佳；最小實質改善固定為 0.0005（5 bps）。這個 delta 在 candidate 前由 43-origin pilot 的 naive MAE=`0.01554320` 尺度設定，約 3.2%，不是看完 challenger 再調。
+- Development 只到 2026-07-10；2026-07-11..2026-09-27 明列 `EXPOSED_QUARANTINE`，禁止 fit/selection/claim。新的 final 僅接受 2026-09-28 起 publication-origin，最少20個，且一用；開發 outer folds 看過後都視為 development information。
+- P2 features 固定10個自有歷史因果量：1..5期lag return、5期平均return、5/20期vol、publication weekday、到期日天數。P1 跨市場 factor 因真實資料仍 DATA_NOT_READY，P2 明令禁用；label/future-fill/full-sample scaler/winsor 也禁用。
+- Nested walk-forward 固定為 expanding outer min-train32/test10/max5；inner min-train20/validation6/max3；每折一個 origin embargo，且只允許 `train.label_available_at <= evaluation.decision_time`。Ridge 僅3個 alpha；LightGBM 僅4個小型 `regression_l1` 設定；seed=42；失敗trial也算cap；inner/outer同-origin coverage均須100%。LogisticRegression沿用既有 `BaselineClassifier("lr")`，只評方向、不能選 return champion。
+- 第一個且已凍結的真實 JPX development artifact 位於 gitignored data root，ID=`40ecb8c9bd585f882f76e9bc`，protocol hash=`6f5b98cd29e6cb9a75b6db69bd0a3e688a802735b57f406665b0f7a5bb37cb82`，development source fingerprint=`72f9e633f157069479d0982c4ea7e48677d3db9b9ed5cd58824607037d11f0cb`。83 development origins／48 quarantine／0 final-forward；5 outer folds產生50個同-origin OOF；35 inner trials全部 eligible，無 model error，故不是因模型missing才回退。
+- OOF：zero-return naive MAE=`0.0171708858`；LightGBM MAE=`0.0176094085`、delta=`+0.0004385227`、paired 95% CI=`[-0.0010278175,0.0017445661]`；Ridge MAE=`0.0189684494`、delta=`+0.0017975636`、CI=`[-0.0002190782,0.0039799257]`。兩個 challenger 的平均 loss 都比 naive 高；CI也沒有達到 prereg `upper < -0.0005`。因此 selection=`zero_return_naive`，明確 `NO_IMPROVEMENT`，不硬選複雜模型。
+- Logistic獨立方向診斷：n=50、coverage=1.0、balanced accuracy=`0.278431`、majority accuracy=`0.40`、log loss=`1.152191`；沒有支持另行升級方向模型。
+- P2 final **沒有開啟**：新 final origins=0，且 development 已保留 baseline。結果仍是 `DEVELOPMENT_INFORMATION_ONLY`／`not_final_holdout_evidence=true`／`not_calibration_evidence=true`／`not_trading_edge=true`；不得改寫成模型已被 final 證明失敗或成功。
+- P2 驗收：engine/protocol=`10 passed`；focused P2/P1/HPQ1/build=`36 passed`；full offline（只排除既有 recorder owner-mutex 測試）=`2034 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。舊 HPQ1 131/48 沒有重跑、覆寫或當新 final 使用。
+- 下一包 P3-A 只先施工 Chronos-2 past-only covariate adapter＋future-covariate fail-closed＋synthetic/PIT負測試。因 real cross-market factor 尚 DATA_NOT_READY，不能先跑真實 covariate 增益；residual shrinkage／組合等到單一 covariate path 可因果驗證後再做。
 
 ## 1. 結論：保留底座，修改模型策略，不整套推倒
 
@@ -38,7 +52,7 @@
 - 本機套件：chronos-forecasting 2.3.2、scikit-learn 1.9.1、LightGBM 4.7.0、XGBoost 3.4.1。
 - `ChronosAdapter.predict` 目前只把單一序列轉成 `[1,1,time]`，未餵跨市場協變數；registry 的 supports_covariates=false 描述本地能力缺口，不能誤讀成上游模型不支援。官方 Chronos-2 支援 multivariate/covariates，但尚待本地 adapter 與 PIT 檢查驗證。[R2]
 - 已有 logistic regression／random forest／LightGBM／XGBoost **方向分類器**。規劃的 return regression／quantile regression 是新任務，不等於現有分類器已能輸出可靠價格分布。
-- Chronos 載入呼叫未明確傳 registry revision；需核對實際權重snapshot、revision與hash，讓 registry 宣告和真正載入版本相符，不直接假定記載的revision已固定運行。
+- P0 前的缺口是 Chronos loader 未明確傳 registry revision；P0 已改為明示 pinned revision。實際 pinned offline load 曾在120秒逾時、未取得 runtime commit attribute，因此 `local_verified` 仍維持 false，不能拿 cache snapshot presence 當成實載版本證據。
 - bootstrap 中 callback 狀態是歷史 capability 記錄，不是本次登入測試，也不能推出連續多年行情。硬體以目前設定 RTX4060Ti 16GB 為研究預算，實際可用VRAM仍要量測。
 
 ## 3. 舊設計如何處理
