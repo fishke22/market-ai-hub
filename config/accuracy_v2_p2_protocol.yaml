@@ -1,0 +1,157 @@
+schema_version: AV2P2.1
+
+protocols:
+  jnu_next_published_settlement_return_1obs_v1:
+    market_family: OSAKA_MICRO
+    instrument: JNU
+    product: Nikkei 225 Micro
+    source_scope: JPX_PUBLIC_OSE_DAILY_REPORT
+    target_task: RETURN_REGRESSION
+    target_measure: NEXT_PUBLISHED_SETTLEMENT_OBSERVATION
+    target_definition: NEXT_EXACT_CONTRACT_PUBLISHED_SETTLEMENT_OVER_CURRENT_PUBLISHED_SETTLEMENT_MINUS_ONE
+    decision_time_rule: ORIGIN_PUBLICATION_TIME_PLUS_5_MINUTES
+    source_availability_rule: ALL_INPUTS_AVAILABLE_AT_OR_BEFORE_DECISION_TIME
+    exact_contract_rule: NEAREST_UNEXPIRED_EXACT_CONTRACT_ONE_PER_ORIGIN_NO_ROLL_STITCHING
+    history_len: 32
+
+    development:
+      origin_end: "2026-07-10"
+      boundary_basis: PRIOR_DEVELOPMENT_VALIDATION_ONLY_NO_P2_CANDIDATE_OUTCOMES
+    exposed_quarantine:
+      origin_start: "2026-07-11"
+      origin_end: "2026-09-27"
+      reason: HPQ1_FINAL_ALREADY_EXPOSED_AND_POST_FINAL_DATA_ALREADY_OBSERVED
+      use_for_fit: false
+      use_for_selection: false
+      use_for_claim: false
+    final_holdout:
+      origin_start: "2026-09-28"
+      end_policy: OPEN_ENDED_NEW_FORWARD_ONLY
+      minimum_origins: 20
+      one_use_for_promotion: true
+
+    primary_evaluation:
+      loss: MAE_RETURN
+      baseline: ZERO_RETURN
+      delta_semantics: CANDIDATE_MINUS_NAIVE_LOSS_NEGATIVE_FAVORS_CANDIDATE
+      minimum_meaningful_delta: 0.0005
+      delta_basis: >-
+        Fixed 5 bps absolute-return MAE improvement. Before any P2 candidate run,
+        the 43-origin pilot through 2026-05-15 had zero-return naive MAE 0.01554320;
+        5 bps is about 3.2% of that pilot error scale.
+      secondary_metrics:
+        - RMSE_RETURN
+        - DIRECTION_ACCURACY
+        - SAME_ORIGIN_COVERAGE
+        - TAIL_ABSOLUTE_ERROR_P90
+
+    feature_set:
+      version: JNU_P2_SELF_HISTORY_V1
+      maximum_feature_count: 10
+      names:
+        - lag_return_1
+        - lag_return_2
+        - lag_return_3
+        - lag_return_4
+        - lag_return_5
+        - rolling_mean_return_5
+        - rolling_volatility_5
+        - rolling_volatility_20
+        - publication_day_of_week
+        - days_to_contract_expiry
+      fit_only_preprocessing:
+        - STANDARD_SCALER_RIDGE_ONLY
+      forbidden:
+        - CROSS_MARKET_FACTOR_UNTIL_P1_DATA_READY
+        - FUTURE_FILL
+        - LABEL_COLUMNS
+        - FULL_SAMPLE_SCALER
+        - FULL_SAMPLE_WINSORIZATION
+
+    chronological_validation:
+      outer:
+        expanding: true
+        minimum_train_origins: 32
+        test_origins_per_fold: 10
+        maximum_folds: 5
+      inner:
+        expanding: true
+        minimum_train_origins: 20
+        validation_origins_per_fold: 6
+        maximum_folds: 3
+      purge:
+        rule: TRAIN_LABEL_AVAILABLE_AT_MUST_NOT_EXCEED_EVALUATION_DECISION_TIME
+        embargo_origins: 1
+        use_true_label_availability: true
+        future_rows_in_train: false
+
+    model_families:
+      zero_return_naive:
+        task: RETURN_REGRESSION
+        tuning: NONE
+      ridge_return:
+        task: RETURN_REGRESSION
+        alphas: [0.1, 1.0, 10.0]
+        fit_intercept: true
+      logistic_direction:
+        task: DIRECTION_CLASSIFICATION
+        implementation: BaselineClassifier_lr
+        flat_threshold: 0.005
+        tuning: NONE
+        promotion_task: false
+      lightgbm_return:
+        task: RETURN_REGRESSION
+        objective: regression_l1
+        settings:
+          - {n_estimators: 80, learning_rate: 0.05, max_depth: 3, num_leaves: 7, min_child_samples: 10, reg_lambda: 1.0}
+          - {n_estimators: 120, learning_rate: 0.03, max_depth: 3, num_leaves: 7, min_child_samples: 15, reg_lambda: 1.0}
+          - {n_estimators: 120, learning_rate: 0.03, max_depth: 4, num_leaves: 15, min_child_samples: 10, reg_lambda: 2.0}
+          - {n_estimators: 60, learning_rate: 0.05, max_depth: 3, num_leaves: 7, min_child_samples: 20, reg_lambda: 2.0}
+
+    search_budget:
+      maximum_candidate_model_families: 3
+      maximum_settings_per_family: 8
+      seeds: [42]
+      maximum_seeds_per_setting: 1
+      maximum_wall_seconds: 300
+      gpu_required: false
+      stop_on_first_outer_failure: false
+      rerun_failed_trial_with_new_seed: false
+      failed_trials_count_toward_cap: true
+
+    selection:
+      eligible_return_candidates: [ridge_return, lightgbm_return]
+      rule: LOWEST_OUTER_OOF_MAE_RETURN
+      candidate_must_beat_naive_mean: true
+      tie_tolerance: 0.000001
+      tie_preference: ridge_return
+      no_winner_action: KEEP_ZERO_RETURN_BASELINE
+      outer_results_are_development_information: true
+
+    uncertainty:
+      method: PAIRED_CIRCULAR_BLOCK_BOOTSTRAP
+      confidence: 0.95
+      replicates: 2000
+      block_length_publication_origins: 5
+      seed: 20260927
+
+    promotion:
+      required_final_origin_count: 20
+      required_same_origin_coverage: 1.0
+      required_delta_ci_upper_below: -0.0005
+      require_primary_loss_improvement: true
+      missing_prediction_counts_as_failure: true
+      insufficient_data_status: INSUFFICIENT_EVIDENCE
+      failed_improvement_status: NO_IMPROVEMENT
+      success_status: PREDICTIVE_GAIN_CANDIDATE
+      never_implies:
+        - CALIBRATED
+        - TRADING_EDGE
+        - PRODUCTION_SERVING
+        - FIXED_WIN_RATE
+
+    notes:
+      - P2 development may use only origins through 2026-07-10.
+      - Origins from 2026-07-11 through 2026-09-27 are quarantined and never reused for fitting, selection, or a new claim.
+      - Final evidence begins only with publication-origin dates on or after 2026-09-28.
+      - Chronos covariates, residual stacking, ensembles, fine-tuning, and regime models are outside P2.
