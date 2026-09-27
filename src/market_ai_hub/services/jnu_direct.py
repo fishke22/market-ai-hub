@@ -418,11 +418,15 @@ def analyze_jnu_direct(
 
     models = []
     errors = []
+    model_availability = []
     for name, factory in (("Chronos-2", get_chronos), ("TimesFM-3.0", get_timesfm)):
         try:
             models.append(_model_result(factory(), name, series, steps, target_dates))
+            model_availability.append({"model": name, "status": "AVAILABLE"})
         except Exception as exc:
-            errors.append(f"{name}:{type(exc).__name__}")
+            reason = type(exc).__name__
+            errors.append(f"{name}:{reason}")
+            model_availability.append({"model": name, "status": "UNAVAILABLE", "reason": reason})
     if not models:
         if robust_analysis.get("status") == "OK":
             reference = float(meta["latest_settlement"])
@@ -440,12 +444,16 @@ def analyze_jnu_direct(
                 "target_dates": target_dates,
                 "data": meta,
                 "models": [],
+                "model_availability": model_availability,
                 "ensemble": {
                     "p10": interval.get("lower_price"),
                     "p50": reference,
                     "p90": interval.get("upper_price"),
                     "expected_return": 0.0,
                     "method": "zero_return_naive_with_development_interval",
+                    "ensemble_mode": "BASELINE_ONLY",
+                    "available_model_count": 0,
+                    "available_models": [],
                 },
                 "research_stance": "NEUTRAL",
                 "research_stance_strength": "BASELINE_ONLY_NO_PREDICTIVE_GAIN",
@@ -462,6 +470,7 @@ def analyze_jnu_direct(
             "direct_model_available": False,
             "data": meta,
             "robust_analysis": robust_analysis,
+            "model_availability": model_availability,
             "errors": errors,
         }
 
@@ -469,12 +478,20 @@ def analyze_jnu_direct(
         vals = [float(m[field]) for m in models if m.get(field) is not None]
         return sum(vals) / len(vals) if vals else None
 
+    ensemble_mode = (
+        "MULTI_MODEL_AVAILABLE_ENSEMBLE"
+        if len(models) >= 2
+        else "SINGLE_MODEL_DEGRADED"
+    )
     ensemble = {
         "p10": avg("p10"),
         "p50": avg("p50"),
         "p90": avg("p90"),
         "expected_return": avg("expected_return"),
         "method": "equal_weight_available_price_models",
+        "ensemble_mode": ensemble_mode,
+        "available_model_count": len(models),
+        "available_models": [str(m.get("model")) for m in models],
     }
     stance = _stance(ensemble["expected_return"])
     historical_validation = (
@@ -517,6 +534,7 @@ def analyze_jnu_direct(
         "target_dates": target_dates,
         "data": meta,
         "models": models,
+        "model_availability": model_availability,
         "ensemble": ensemble,
         "research_stance": stance,
         "research_stance_strength": stance_strength,
@@ -719,6 +737,19 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
             )
             else "研究用、尚未完成前向驗證",
         },
+        "模型組成": (
+            (
+                f"多模型可用：{', '.join(str(x) for x in ens.get('available_models', []))}；"
+                "目前只是研究用等權組合，不代表模型共識已被驗證。"
+            )
+            if ens.get("ensemble_mode") == "MULTI_MODEL_AVAILABLE_ENSEMBLE"
+            else (
+                f"單模型可用：{', '.join(str(x) for x in ens.get('available_models', []))}；"
+                "ensemble 已降級，這不是多模型一致預測。"
+            )
+            if ens.get("ensemble_mode") == "SINGLE_MODEL_DEGRADED"
+            else "目前沒有可用 foundation price model，使用 baseline fallback。"
+        ),
         "無新前向資料時的穩健分析": robust_summary,
         "歷史驗證": validation_note,
         "模型比較可信度": comparison_note,

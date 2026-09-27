@@ -620,7 +620,12 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
                 "CALIBRATED": False,
                 "TRADING_EDGE": False,
             }
-        return jnu_continuity_user_summary(continuity)
+        public = jnu_continuity_user_summary(continuity)
+        public["產品分層"] = {
+            "Settlement Forecast": "exact JNU published-settlement target 暫停，等待 exact official data 恢復",
+            "Trading Path": "可另用 analyze_jnu_trading_path 查看 true-Micro session context；不補造 settlement target",
+        }
+        return public
 
     direct = analyze_jnu_direct(
         horizon=horizon,
@@ -648,7 +653,64 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
         "context_confidence_grade": continuity.get("context_confidence_grade"),
         "not_probability": True,
     }
+    public["產品分層"] = {
+        "本工具": "Settlement Forecast：NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
+        "交易路徑": "另用 analyze_jnu_trading_path；只讀真正 JNU Micro session quote，不與 settlement target 混算",
+        "新聞": "live-news fusion 仍延後到 P6；官方事件只作 context/risk/abstention",
+    }
     return public
+
+
+@mcp.tool()
+def analyze_jnu_trading_path(
+    level: float | None = None,
+    direction: str = "AUTO",
+    view: str = "public",
+) -> dict:
+    """JNU 真實 day/night session 的描述性 Trading Path Decision Support。
+
+    與 settlement forecast 分離；只使用 market 207 的 true JNU Micro durable quote。
+    level 可選，用於 Touch/Break/Acceptance；不自動製造支撐壓力或機率。
+    """
+    from market_ai_hub.services.jnu_trading_path import (
+        build_jnu_trading_path_context,
+        jnu_trading_path_user_summary,
+    )
+
+    result = build_jnu_trading_path_context(level=level, direction=direction)
+    return result if view == "audit" else jnu_trading_path_user_summary(result)
+
+
+@mcp.tool()
+def get_itrader_advisory(
+    strategy: str = "OCO",
+    instrument: str = "JNU",
+    position_side: str = "",
+    quantity: int | None = None,
+    cost_price: float | None = None,
+    take_profit_price: float | None = None,
+    stop_loss_price: float | None = None,
+    trigger_price: float | None = None,
+    trail_activation_ticks: int | None = None,
+    trail_retrace_ticks: int | None = None,
+    pre_activation_stop_ticks: int | None = None,
+) -> dict:
+    """純文字元大/iTRADER條件策略轉譯；不登入、不查帳務、不送單。"""
+    from market_ai_hub.services.itrader_advisory import itrader_smart_order_guidance
+
+    return itrader_smart_order_guidance(
+        strategy=strategy,
+        instrument=instrument,
+        position_side=position_side or None,
+        quantity=quantity,
+        cost_price=cost_price,
+        take_profit_price=take_profit_price,
+        stop_loss_price=stop_loss_price,
+        trigger_price=trigger_price,
+        trail_activation_ticks=trail_activation_ticks,
+        trail_retrace_ticks=trail_retrace_ticks,
+        pre_activation_stop_ticks=pre_activation_stop_ticks,
+    )
 
 
 @mcp.tool()

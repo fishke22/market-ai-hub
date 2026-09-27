@@ -137,6 +137,28 @@ def test_direct_micro_service_forecasts_exact_contract(monkeypatch):
     assert out["target_dates"] == ["2026-09-24"]
     assert out["ensemble"]["p50"] == pytest.approx(_series_and_meta()[0].iloc[-1] + 400.0)
     assert out["calibrated_probability_available"] is False
+    assert out["ensemble"]["ensemble_mode"] == "MULTI_MODEL_AVAILABLE_ENSEMBLE"
+    assert out["ensemble"]["available_model_count"] == 2
+
+
+def test_direct_micro_single_model_is_explicitly_degraded(monkeypatch):
+    import market_ai_hub.services.jnu_direct as d
+
+    monkeypatch.setattr(d, "load_direct_micro_settlements", lambda contract_month="": _series_and_meta())
+    monkeypatch.setattr(d, "get_chronos", lambda: _DummyAdapter(300.0))
+
+    def blocked_timesfm():
+        raise RuntimeError("research purpose blocked in this runtime")
+
+    monkeypatch.setattr(d, "get_timesfm", blocked_timesfm)
+    out = d.analyze_jnu_direct("1d")
+    assert out["status"] == "OK"
+    assert out["ensemble"]["ensemble_mode"] == "SINGLE_MODEL_DEGRADED"
+    assert out["ensemble"]["available_model_count"] == 1
+    assert out["ensemble"]["available_models"] == ["Chronos-2"]
+    summary = d.jnu_user_summary(out, calibration_status={"public_calibrated": False})
+    assert "單模型可用" in summary["模型組成"]
+    assert "不是多模型一致預測" in summary["模型組成"]
 
 
 def test_next_published_observation_skips_ose_holiday_only_sessions():
@@ -316,6 +338,8 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     assert out["商品"] == "大阪日經225微型期貨（JNU）"
     assert out["直接價格模型"]["可信度"] == "低信心研究參考"
     assert out["資料連續性"]["模式"] == "NORMAL_TARGET_DATA"
+    assert "Settlement Forecast" in out["產品分層"]["本工具"]
+    assert "analyze_jnu_trading_path" in out["產品分層"]["交易路徑"]
     assert "status" not in out
 
 

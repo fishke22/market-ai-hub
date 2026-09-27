@@ -9,6 +9,7 @@ from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_sum
 from market_ai_hub.research.future_data_acquisition import future_data_readiness
 from market_ai_hub.services.build_info import build_fingerprint
 from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+from market_ai_hub.config.runtime_paths import data_root
 from market_ai_hub.services.model_catalog import live_model_cards
 
 
@@ -53,6 +54,8 @@ def capability_registry_snapshot() -> dict[str, Any]:
     timesfm_ok = bool(timesfm and timesfm.engineering_status == "PASS")
     nautilus = adapters.get("nautilus_trader") or {}
     p5_settled = int(p5.get("settled_canonical_origin_count", 0) or 0)
+    quote_archive_ready = (data_root() / "live" / "yuanta" / "parquet").exists()
+    dated_event_store_ready = (data_root() / "events" / "events.duckdb").exists()
 
     capabilities = [
         _cap(
@@ -98,6 +101,56 @@ def capability_registry_snapshot() -> dict[str, Any]:
             details={
                 "point_champion": "ZERO_RETURN_NAIVE",
                 "interval_is_probability": False,
+            },
+        ),
+        _cap(
+            "jnu_trading_path_decision_support",
+            available=True,
+            data_ready=quote_archive_ready,
+            evidence_level="DESCRIPTIVE_DECISION_SUPPORT_ONLY",
+            blocked_reason=(
+                "" if quote_archive_ready else "NO_TRUE_MICRO_QUOTE_ARCHIVE"
+            ),
+            details={
+                "settlement_forecast_separate": True,
+                "true_micro_only": True,
+                "cross_contract_arithmetic_fail_closed": True,
+                "support_resistance_auto_generated": False,
+                "calibrated_probability": False,
+            },
+        ),
+        _cap(
+            "official_event_context_for_decision_support",
+            available=True,
+            data_ready=dated_event_store_ready,
+            evidence_level=(
+                "OFFICIAL_DATA"
+                if dated_event_store_ready
+                else "ENGINEERING_PASS"
+            ),
+            blocked_reason=(
+                "LIVE_NEWS_FUSION_DEFERRED_P6"
+                if dated_event_store_ready
+                else "NO_MATERIALIZED_DATED_EVENT_STORE_LIVE_NEWS_DEFERRED_P6"
+            ),
+            details={
+                "role": "CONTEXT_RISK_ABSTENTION_ONLY",
+                "provider_calendar_framework_available": True,
+                "dated_event_store_exists": dated_event_store_ready,
+                "news_sentiment_probability_allowed": False,
+            },
+        ),
+        _cap(
+            "itrader_text_advisory",
+            available=True,
+            data_ready=True,
+            evidence_level="ENGINEERING_PASS",
+            blocked_reason="UI_MAPPING_PARTIALLY_VERIFIED_NO_BROKER_ACTION",
+            details={
+                "no_order": True,
+                "no_account_access": True,
+                "no_position_query": True,
+                "no_broker_mutation": True,
             },
         ),
         _cap(

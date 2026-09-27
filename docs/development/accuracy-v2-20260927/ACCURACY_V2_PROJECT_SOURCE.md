@@ -259,6 +259,22 @@ P7 focused/contract + open-source protocol=`18 passed`；P7/P5/P4 affected-scope
 
 P5 natural-forward 準備再加一層 continuity guard，但 scheduler 仍未 apply。`run_accuracy_v2_p5_forward_cycle.py --dry-run` 實跑 `writes_prediction=false`；current preview 仍 `WAITING_FOR_ORIGIN` for 2026-09-28T00:05Z。continuity/capability focused=`43 passed`，affected integration=`95 passed, 1 deselected, 22 warnings`；第一次 full suite 只因舊 `tool_count_is_22` freeze 失敗，其餘2111 passed；修正介面 freeze 後最終 full offline=`2112 passed, 1 skipped, 24 deselected, 143 warnings`，exit 0。這些都是工程／語義／資料中斷韌性證據，不新增市場效果宣稱。
 
+## 8.3 Settlement Forecast / Trading Path / Advisory closeout（2026-09-27）
+
+工程判斷為 `PARTIAL_FIX`。Accuracy v2 Settlement Forecast 本身沒有 bug：其 target 繼續是 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION`。產品缺口在於使用者詢問開盤路徑、日夜盤、Touch/Break/Acceptance 時，不能把 official settlement forecast 當成 execution/session state。新增 contract `docs/architecture/jnu-settlement-trading-path-advisory-contract.md`，硬分 `SETTLEMENT_FORECAST` 與 `TRADING_PATH_DECISION_SUPPORT`。
+
+Trading Path 只讀 Yuanta quote-only durable archive 中 market 207 的 true JNU Micro quote identity。FunctionList 目前解析 decision contract=`JNU2612`，night quote=`JNUPM2612`；official settlement target 則為 `JNU2610` / 66,140。不同 contract month 時 `CONTRACT_MISMATCH`，禁止 settlement-to-session gap/basis arithmetic。實際 archive 9/25 的 verified day close boundary print=66,290（15:45:01 JST），但 day coverage 因第一筆 price observation 僅到08:59:34 JST、沒有 opening-boundary observation 而保持 incomplete；night data 只到22:11:52 JST、last=66,320，沒有 06:00 boundary，因此 `TARGET_PREVIOUS_NIGHT_CLOSE=null`。外部 review 提供的66,475不被 repo 證據支持，未寫入系統。
+
+`analyze_jnu_trading_path` 新增 descriptive Trend/Box/Mixed、Price Activity Profile 與 explicit-level Acceptance。最新真實 night session 僅取同一 session、不跨日混合：66,190–66,590、last 66,320、42個5m observed-price bars、state=MIXED；level=66,600 的 smoke 為 touch=false/break=false/acceptance=false。這些 bar 是 quote snapshot 聚合，不冒充 exchange OHLC。Price Activity Profile 是觀測頻率，不是成交量；目前 durable archive 沒有可證明的 `TRADE_TICK + DealPrice + DealVol` schema，因此 Volume Profile fail-closed=`VOLUME_PROFILE_NOT_AVAILABLE`，Watchlist Vol 不接受為成交量。支撐壓力仍不自動生成。
+
+Direct settlement model 新增 contributor provenance：0 model=`BASELINE_ONLY`、1 model=`SINGLE_MODEL_DEGRADED`、2+ model=`MULTI_MODEL_AVAILABLE_ENSEMBLE`。實際 runtime 為 Chronos-2 available、TimesFM-3.0 `ModelUsageBlocked`，因此現在是 single-model degraded；不能描述成多模型一致。此修正不改 point champion、P2/P5 evidence 或任何 promotion gate。
+
+News/event 只接既有 official provider/calendar framework 作 context/risk/abstention；本機目前沒有 materialized `data/events/events.duckdb`，所以 dated-event data_ready=false，Trading Path 明示 `PROVIDER_FRAMEWORK_ONLY_NO_DATED_EVENTS`。`LIVE_NEWS_FUSION_DEFERRED_P6`；未加入 unrestricted weekend-news ingestion、LLM sentiment probability、FinGPT/news fine-tune 或 OFI。
+
+新增 `get_itrader_advisory` 純文字翻譯層。策略模板 GENERAL/OCO/TRAILING；只有使用者本次明確給 side+quantity+條件才產生個人化欄位，多單平倉=SELL、空單平倉=BUY。JNU reference 5 points/tick、JPY10/point、JPY50/tick/contract。UI mapping=`PARTIALLY_VERIFIED_PUBLIC_YUANTA_CONDITION_ORDER_CONCEPTS`；永遠 NO ORDER / NO TRADING / NO ACCOUNT ACCESS / NO POSITION QUERY / NO BROKER LOGIN / NO BROKER MUTATION。
+
+MCP由24增至26 tools；Capability Registry由15增至18 capabilities（actual available=14、data_ready=13、blocked=10）。Agent compact/full prompt與快捷提示已加入 Settlement-vs-Trading-Path routing、single-model degraded、Acceptance、Volume Profile fail-closed與 broker UI text boundary。功能驗證：final focused=52 passed, 22 warnings；affected integration=121 passed, 2 deselected, 22 warnings；full offline=2127 passed, 1 skipped, 24 deselected, 143 warnings, exit 0。build=`d16fb05386cdc8ea`。以上不新增 predictive gain/calibration/trading-edge 宣稱。
+
 ## 9. 免費官方／原始研究來源
 
 以下於2026-09-27查閱；方法論證據支持「值得測試」，不代表已證明對本系統有效。

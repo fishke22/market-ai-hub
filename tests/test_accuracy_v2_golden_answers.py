@@ -76,6 +76,24 @@ def test_golden_analysis_packet_never_says_no_direct_path():
     assert "no true Direct Micro model path" not in semantics["direct_micro_forecast_note"]
 
 
+def test_golden_packet_separates_settlement_and_trading_path_and_keeps_support_unavailable():
+    packet = build_analysis_packet(
+        market="osaka",
+        target="OSE_NIKKEI225_MICRO_FUTURES",
+        horizon="1d",
+        detail_level="normal",
+        save_analysis=False,
+    )
+    ts = packet["target_semantics"]
+    assert ts["settlement_forecast_product"]["target"] == "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION"
+    assert ts["trading_path_product"]["tool"] == "analyze_jnu_trading_path"
+    assert ts["trading_path_product"]["must_not_merge_with_settlement_target"] is True
+    assert packet["support_resistance_status"] == "NOT_AVAILABLE"
+    assert packet["research_decision_support"]["execution_order_allowed"] is False
+    assert packet["research_decision_support"]["broker_ui_text_translation_allowed"] is True
+    assert packet["research_decision_support"]["broker_ui_translation_is_order_execution"] is False
+
+
 def test_golden_proxy_is_not_target():
     state = get_target_instrument_state()
     assert state["roles"]["OSE_NIKKEI225_MICRO_FUTURES"] != state["roles"]["^N225"]

@@ -44,6 +44,16 @@ Cherry Studio 只是其中一個可使用 client，不是唯一依賴。
 
 `market_open` / `freshness` / `session_status` 是不同概念，不得混。
 
+- JNU 必須先判斷使用者問的是哪一個產品：
+  - Settlement Forecast：analyze_jnu，目標固定為 NEXT_PUBLISHED_SETTLEMENT_OBSERVATION。
+  - Trading Path Decision Support：analyze_jnu_trading_path，只讀真正 JNU Micro day/night session context；不是 settlement forecast，也不是方向機率。
+- Settlement 與 Trading Path 可以同時展示，但不得混算 contract、price semantics 或 evidence。
+- TARGET_REFERENCE_SETTLEMENT、最新 session price、day close、night close 是不同型態。夜盤最後一筆未到 06:00 JST 收盤邊界時，不得稱夜盤收盤。
+- settlement contract month 與 session quote contract month 不同 → CONTRACT_MISMATCH，禁止直接相減或稱 gap/basis。
+- Trading Path 的 Trend/Box/Price Activity/Acceptance 只屬 DESCRIPTIVE_DECISION_SUPPORT_ONLY；不得升級成 predictive gain / probability / trading edge。
+- Acceptance 必須有明確 level；Touch != Break != Acceptance。不得自動捏造支撐壓力。
+- Volume Profile 只有 durable true TRADE_TICK + DealPrice + DealVol provenance 才可用；Watchlist Vol 不算 verified trade volume。
+
 ---
 
 ## D. 證據層級
@@ -66,6 +76,7 @@ DATA ──> HISTORICAL ──> CAUSAL ──> ECONOMIC ──> FORWARD ──> 
 - 未校準 quantile **≠** 保證區間（P10/P90 只是「模型統計參考區間」，不作停損 / 支撐壓力 / 失效價）。
 - MASE **≠** 勝率；MASE < 1 **≠** 獲利證明。
 - Ensemble / Wrapper **≠** 獨立票（不得重複計票）。
+- 只有一個 foundation price model 可用 → 明確寫 SINGLE_MODEL_DEGRADED；不得說「多模型一致」。
 - Engineering PASS **≠** Predictive Evidence **≠** Trading Edge。
 - `eligible_direction_vote_count = 0` → 輸出「目前無有效模型方向共識」，不寫 Flat/Up/Down 作正式方向。
 - 不得虛構支撐壓力（主力成本 / 籌碼防守帶 / 機構防守 等），模型價只能標「模型參考價」。
@@ -95,7 +106,11 @@ DATA ──> HISTORICAL ──> CAUSAL ──> ECONOMIC ──> FORWARD ──> 
 ```
 health_check
 get_system_info
+get_capability_registry
+get_data_continuity_status
 get_analysis_packet
+analyze_jnu
+analyze_jnu_trading_path
 analyze_osaka_nikkei
 analyze_taiwan_stock
 get_research_gates
@@ -123,12 +138,14 @@ packet 已含 Chronos/TimesFM/XGB/LGBM/Ensemble 結果時，不得重複呼叫 p
 | FULL_ANALYSIS | 說「完整分析」 | 市場狀態、技術、基本面、籌碼、公司行動、cross-asset、macro、events、models、evidence、gates、critic、limitations |
 | SYSTEM_STATUS | 系統正常嗎 | traffic-light（GREEN/YELLOW/RED + TRAINING OFF/RUNNING/DEFERRED） |
 | MODEL_AUDIT / FORWARD_STATUS / TRAINING_REVIEW | 對應問題 | technical |
+| JNU_TRADING_PATH | 問開盤路徑、日夜盤、Touch/Break/Acceptance | true-Micro session context；descriptive only |
+| BROKER_UI_TRANSLATION | 使用者已明確提供條件，要求轉成券商條件策略文字 | get_itrader_advisory；advisory only |
 
 - Quick request 簡潔；Full analysis 完整；不要所有問題都套同一巨大模板。
 - Support/Resistance：`support_resistance_status=NOT_AVAILABLE` 就輸出 N/A，不得由 P10/P90 生成。
 - Invalidation：僅 explicit validated invalidation evidence 才提供，不從 quantile 製造。
 - Direction：`eligible_direction_vote_count=0` → `NO_VALIDATED_MODEL_CONSENSUS`，不得輸出 Up/Down/Flat。
-- 不得輸出任何交易建議（進場/買點/停損價/做多做空）；research reference only。
+- 不得替使用者決定進場/買點/停損/多空/口數，也不得下單。只有當使用者本次已明確提供自己的方向、口數與條件時，可用 get_itrader_advisory 做 broker UI 純文字轉譯；這不是交易建議或送單。
 - 不要在第一屏輸出幾千字工具過程。
 
 ---
@@ -162,7 +179,7 @@ Statistical 誤寫 Trading？causality 過？cost 過？Forward N 足夠？只�
 
 ## M. 不交易
 
-不 broker login / 下單 / 取消 / 修改 / 建倉 / 平倉 / 槓桿 / 資金配置。
+不 broker login / 下單 / 取消 / 修改 / 建倉 / 平倉 / 查帳務／持倉／餘額 / 槓桿 / 資金配置。get_itrader_advisory 僅為文字模板轉譯，不得觸發任何 broker action。
 
 若未來 runtime 新增交易能力，也需新的 validation / approval 重新審查。
 

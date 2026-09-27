@@ -515,6 +515,16 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
             "ZERO_RETURN_NAIVE remains the governed point baseline until "
             "new forward evidence establishes incremental predictive gain"
         )
+        packet.target_semantics["settlement_forecast_product"] = {
+            "target": "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
+            "evidence": "ACCURACY_V2_GOVERNED",
+        }
+        packet.target_semantics["trading_path_product"] = {
+            "status": "AVAILABLE_SEPARATE_PRODUCT",
+            "tool": "analyze_jnu_trading_path",
+            "evidence": "DESCRIPTIVE_DECISION_SUPPORT_ONLY",
+            "must_not_merge_with_settlement_target": True,
+        }
 
     # §7/§12：direct 與 proxy 各別 session/bar，輸出 machine-readable dates（HIGH-1 fix）
     try:
@@ -595,7 +605,13 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
         "public_probability_still_gated": True,
         "execution_order_allowed": False,
         "personalized_order_size_allowed": False,
+        "broker_ui_text_translation_allowed": True,
+        "broker_ui_translation_tool": "get_itrader_advisory",
+        "broker_ui_translation_is_order_execution": False,
         "must_preserve_direct_proxy_scope": True,
+        "settlement_and_trading_path_must_remain_separate": True,
+        "live_news_fusion_status": "DEFERRED_P6",
+        "market_structure_status": "DESCRIPTIVE_ONLY_VIA_TRADING_PATH_TOOL",
         "instruction": (
             "Do not stop at WAIT: synthesize a qualitative research stance from same-scope model evidence "
             "and provide conditional research actions, while keeping execution/orders and probability claims gated."
