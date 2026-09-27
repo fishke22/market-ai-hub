@@ -1,0 +1,108 @@
+schema_version: AV2DATA.1
+verified_at: "2026-09-27"
+policy:
+  public_only_or_already_authorized_quote_sources: true
+  no_paid_data_required: true
+  no_order_or_account_access: true
+  no_broker_login_or_recorder_restart: true
+  available_at_is_observed_receipt_unless_official_publication_time_is_explicit: true
+  no_future_fill: true
+  no_continuous_proxy_for_exact_contract_task: true
+  raw_private_market_data_committed_to_git: false
+
+sources:
+  jpx_micro_settlement:
+    authority: JPX
+    instrument_family: JNU
+    representation: OSE_MICRO_FUTURES
+    source_type: OFFICIAL_SETTLEMENT_CSV
+    exact_contract: true
+    acquisition: PUBLIC_HTTP
+    collector: scripts/update_jpx_micro_direct.py
+    cadence: DAILY_AFTER_PUBLICATION_WINDOW
+    availability_semantics: ACTUAL_FETCH_RECEIPT_AND_OFFICIAL_PUBLICATION_RULE
+    backfill_policy: PUBLIC_OFFICIAL_ARCHIVE_ALLOWED
+    status: ACTIVE_PUBLIC_COLLECTOR
+
+  jpx_ose_daily_report:
+    authority: JPX
+    instrument_family: JNU
+    representation: OSE_MICRO_FUTURES
+    source_type: OFFICIAL_DAILY_REPORT
+    exact_contract: true
+    acquisition: PUBLIC_HTTP
+    collector: scripts/update_jpx_micro_direct.py
+    cadence: DAILY_AND_ARCHIVE_SYNC
+    availability_semantics: OFFICIAL_NEXT_BUSINESS_DAY_PUBLICATION_RULE
+    backfill_policy: PUBLIC_OFFICIAL_ARCHIVE_ALLOWED
+    status: ACTIVE_PUBLIC_COLLECTOR
+
+  taifex_tmf_settlement:
+    authority: TAIFEX
+    instrument_family: TMF
+    representation: TMF_FUTURES
+    source_type: OFFICIAL_DAILY_SETTLEMENT_CSV
+    exact_contract: true
+    acquisition: PUBLIC_HTTP
+    collector: scripts/update_taifex_tmf_official.py
+    cadence: DAILY_AFTER_REGULAR_SESSION
+    availability_semantics: ACTUAL_FETCH_RECEIPT_ONLY
+    backfill_policy: >-
+      Historical rows may be downloaded but become PIT-usable only for origins
+      after their actual recorded receipt time.
+    status: ACTIVE_PUBLIC_COLLECTOR
+
+  ose_micro_live_quote:
+    authority: YUANTA_AUTHORIZED_QUOTE
+    instrument_family: JNU
+    representation: OSE_MICRO_FUTURES
+    source_type: BROKER_QUOTE_CALLBACK
+    exact_contract: true
+    acquisition: EXISTING_RECORDER_ONLY
+    collector: EXISTING_SINGLE_OWNER_RECORDER
+    cadence: EXISTING_RUNTIME
+    availability_semantics: CALLBACK_EVENT_AND_RECEIPT_TIMESTAMPS
+    backfill_policy: NO_SYNTHETIC_BACKFILL
+    status: PREEXISTING_QUOTE_PATH_DO_NOT_RESTART
+
+  taifex_tmf_live_quote:
+    authority: YUANTA_AUTHORIZED_QUOTE
+    instrument_family: TMF
+    representation: TMF_FUTURES
+    source_type: BROKER_QUOTE_CALLBACK
+    exact_contract: true
+    acquisition: EXISTING_RECORDER_ONLY
+    collector: EXISTING_SINGLE_OWNER_RECORDER
+    cadence: EXISTING_RUNTIME
+    availability_semantics: CALLBACK_EVENT_AND_RECEIPT_TIMESTAMPS
+    backfill_policy: NO_SYNTHETIC_BACKFILL
+    status: PREEXISTING_QUOTE_PATH_DO_NOT_RESTART
+
+  cme_public_website_settlement:
+    authority: CME
+    instrument_family: NQ_ES_JY
+    representation: EXACT_FUTURES_CONTRACT
+    source_type: WEBSITE_SETTLEMENT
+    exact_contract: true
+    acquisition: DISABLED
+    collector: NONE
+    cadence: NONE
+    availability_semantics: NOT_AVAILABLE
+    backfill_policy: NONE
+    status: BLOCKED_AUTOMATED_WEBSITE_ACCESS
+    reason: >-
+      2026-09-27 local probe returned CME 403 Data Terms response prohibiting
+      automated scraping. No header/cookie/browser bypass is permitted.
+
+  cme_authorized_quote:
+    authority: YUANTA_AUTHORIZED_QUOTE
+    instrument_family: NQ_ES_JY
+    representation: EXACT_FUTURES_CONTRACT
+    source_type: BROKER_QUOTE_CALLBACK
+    exact_contract: true
+    acquisition: EXISTING_RECORDER_CAPABILITY_ONLY
+    collector: EXISTING_SINGLE_OWNER_RECORDER
+    cadence: EXISTING_RUNTIME_WHEN_ENTITLED_AND_CONFIGURED
+    availability_semantics: CALLBACK_EVENT_AND_RECEIPT_TIMESTAMPS
+    backfill_policy: NO_SYNTHETIC_BACKFILL
+    status: PREBUILD_ONLY_NO_RUNTIME_HANDOVER

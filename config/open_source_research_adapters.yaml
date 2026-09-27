@@ -1,0 +1,58 @@
+schema_version: OSSA.1
+verified_at: "2026-09-27"
+
+adapters:
+  qlib:
+    upstream: microsoft/qlib
+    release: "v0.9.7"
+    release_commit: "da920b7"
+    license: "MIT"
+    source_url: "https://github.com/microsoft/qlib"
+    python_support: "3.8-3.12"
+    integration_stage: "P6_CONDITIONAL_RESEARCH_ADAPTER"
+    integration_mode: "ISOLATED_SUBPROCESS_FILE_CONTRACT"
+    core_venv_install_allowed: false
+    live_execution_allowed: false
+    serving_dependency_allowed: false
+    executable_env: "MARKET_AI_QLIB_PYTHON"
+    status: "BOUNDARY_READY_NOT_INSTALLED"
+    dependency_note: >-
+      Release v0.9.7 declares mlflow without a <3.13 pin. The older project note
+      claiming an upstream mlflow<3.13 constraint is stale. Isolation remains
+      required because Qlib is alpha-stage and has a broad research dependency
+      surface; the Hub core environment is not downgraded or mutated for it.
+
+  nautilus_trader:
+    upstream: nautechsystems/nautilus_trader
+    selected_release: "1.231.0"
+    selected_commit: "27a8e54"
+    selected_release_status: "BETA_STABLE_1X_LINE"
+    not_selected_prerelease: "2.0.0rc5"
+    license: "LGPL-3.0"
+    source_url: "https://github.com/nautechsystems/nautilus_trader"
+    integration_stage: "P7_OFFLINE_PARITY_ONLY"
+    integration_mode: "ISOLATED_SUBPROCESS_FILE_CONTRACT"
+    core_venv_install_allowed: false
+    live_execution_allowed: false
+    serving_dependency_allowed: false
+    executable_env: "MARKET_AI_NAUTILUS_PYTHON"
+    status: "BOUNDARY_READY_NOT_INSTALLED"
+    dependency_note: >-
+      Use only a pinned stable 1.x research environment if/when P7 starts.
+      Do not install --pre or use the v2 release-candidate line for live capital.
+
+  lightgbm:
+    upstream: microsoft/LightGBM
+    installed_version: "4.7.0"
+    integration_stage: "NATIVE_ALREADY_INSTALLED"
+    integration_mode: "CORE_LIBRARY"
+    live_execution_allowed: false
+    status: "AVAILABLE_RESEARCH_MODEL"
+
+  exchange_calendars:
+    upstream: gerrymanoim/exchange_calendars
+    installed_version: "4.13.2"
+    integration_stage: "NATIVE_ALREADY_INSTALLED"
+    integration_mode: "CORE_LIBRARY"
+    live_execution_allowed: false
+    status: "AVAILABLE_CALENDAR"
