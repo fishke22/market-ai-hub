@@ -36,6 +36,7 @@ adapters:
     live_execution_allowed: false
     serving_dependency_allowed: false
     executable_env: "MARKET_AI_NAUTILUS_PYTHON"
+    default_data_root_relative_executable: "lab/nautilus_trader_1_231_0/.venv/Scripts/python.exe"
     status: "BOUNDARY_READY_NOT_INSTALLED"
     dependency_note: >-
       Use only a pinned stable 1.x research environment if/when P7 starts.

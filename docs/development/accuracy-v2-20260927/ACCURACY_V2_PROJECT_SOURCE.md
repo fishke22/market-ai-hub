@@ -235,6 +235,18 @@ Qlib仍保留獨立research adapter候選；Hub研究extra MLflow3.16.1與先前
 
 每包先讀repo、找既有helper，再做最小差分、測試、交接、commit/push與PR/CI；成功的意思是工程／資料／效果各自有證據，不是勾完框架安裝清單。P0/P1本次新對話直接施工，其他包在其前提達成後接續，不一回合越級全部安裝。
 
+## 8.1 P7 完工與系統 readiness checkpoint（2026-09-27）
+
+P7 不等待市場 outcome 才施工，因為它驗的是獨立執行／成本 proxy／paper simulation／搬移重建，而不是預測效果。P7 protocol 已在任何正式 parity 結果前以 commit `3bd723e820b67212673c2ea5d7d83254fd7a11ae` push；protocol hash=`bc16ff60e8f9f113d94ce0c400464c32fa1200daaba4b2f0041a9ef4b0af6eb6`。固定使用 NautilusTrader 1.231.0 / commit `27a8e54` / LGPL-3.0、isolated subprocess/file contract、禁止 core venv install、live execution、serving dependency與 prerelease。
+
+實機隔離環境位於 gitignored `data/lab/nautilus_trader_1_231_0/.venv`，實際 import/version=`1.231.0`。固定 synthetic normalized-bar parity 以64 bars、seed=20260927、兩次重跑驗證；正式結果兩次 digest 相同=`4b78da7e33b0da481260454a6f85d02542a82222318257a9508965de41e1b1ed`，64/64 bars、2 fills、1 closed position、0 open position，finite simulated account，no network market data / no live adapter / no external order action 全部 PASS。這只證明離線執行決定性與基本 order/fill accounting，不是 JNU 預測表現。
+
+成本診斷沿用既有 `CostModel` 假設，不另造實盤成本：ZERO_COST=0 bps、BASE_COST=26 bps、STRESS_COST=120 bps round trip；只做敏感度/可靠性欄位，不聲稱實際成交成本或 economic edge。P7 simulated-paper acceptance 與 migration acceptance PASS；搬移 recipe 要求重建 `.venv`、設定/preserve `MARKET_AI_DATA_ROOT`、用 `scripts/provision_accuracy_v2_p7_engine.py --apply` 重建隔離引擎、另行重建 SDK/WinCred/task，不把 venv/密鑰整包複製到 Git，也不授權 runtime handover/recorder restart。
+
+新增 `scripts/validate_accuracy_v2_system.py` 作整體 preflight。2026-09-27 實跑回 `READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION`：JNU direct model 真正載入成功，P4 no-new-forward baseline path=OK，P5=`WAITING_FOR_ORIGIN` for 2026-09-28T00:05Z，P7=`P7_ENGINEERING_PASS`。目前 point governance 仍是 settlement 66,140 的 zero-return baseline，development-fit 90% interval≈63,439–68,841；`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`、strong direction=false。P6 仍是條件式：沒有證明盤中OFI／共享訓練／新聞／fine-tune 的資料、runtime與獨立增益前，不為了「完工」強做。
+
+P7 focused/contract + open-source protocol=`18 passed`；P7/P5/P4 affected-scope integration=`92 passed, 1 deselected, 11 warnings`。後續 full-offline job 已啟動但其 terminal output 因 stream recovery/job registry 遺失而不可驗證，因此本 checkpoint **不宣稱它 PASS**、也沒有為了湊數重跑；最近一個已完整保存的 full-offline 證據仍是 P5 的 `2083 passed, 1 skipped, 24 deselected, 132 warnings`。P7 delta 仍需最終 PR CI PASS 才完成發布。
+
 ## 9. 免費官方／原始研究來源
 
 以下於2026-09-27查閱；方法論證據支持「值得測試」，不代表已證明對本系統有效。

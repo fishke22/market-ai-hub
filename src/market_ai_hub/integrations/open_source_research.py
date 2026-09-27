@@ -16,6 +16,7 @@ import pandas as pd
 import yaml
 
 from market_ai_hub.config.settings import project_root
+from market_ai_hub.config.runtime_paths import data_root
 
 
 MANIFEST_PATH = project_root() / "config" / "open_source_research_adapters.yaml"
@@ -37,17 +38,22 @@ class OpenSourceAdapterSpec:
 
     @property
     def configured_executable(self) -> Path | None:
-        if not self.executable_env:
-            return None
-        value = os.environ.get(self.executable_env, "").strip()
-        return Path(value) if value else None
+        if self.executable_env:
+            value = os.environ.get(self.executable_env, "").strip()
+            if value:
+                return Path(value)
+        fallback = str(self.raw.get("default_data_root_relative_executable") or "").strip()
+        return data_root() / Path(fallback) if fallback else None
 
     def status(self) -> dict[str, Any]:
         exe = self.configured_executable
         exists = bool(exe and exe.exists() and exe.is_file())
+        manifest_status = self.raw.get("status")
+        effective_status = "READY_TO_EXECUTE" if exists else manifest_status
         return {
             "name": self.name,
-            "status": self.raw.get("status"),
+            "status": effective_status,
+            "manifest_status": manifest_status,
             "integration_stage": self.raw.get("integration_stage"),
             "integration_mode": self.raw.get("integration_mode"),
             "core_venv_install_allowed": bool(self.raw.get("core_venv_install_allowed", False)),
