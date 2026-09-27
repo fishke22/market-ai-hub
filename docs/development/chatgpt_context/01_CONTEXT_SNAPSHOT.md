@@ -4,6 +4,16 @@
 
 ## 1. 先讀這段
 
+### 2026-09-27 最新 Jerry robustness comparison
+
+本棒比較本機 `MARKET_AI_HUB` 與 `fishke22/jerry-backtest-lab`（reviewed HEAD=`4df8b3a12a4d781fa950e32b4c86298f672e4c2e`）。Jerry 有 cost stress、CPCV/purge/embargo、PBO、DSR、Holm、second-engine replay 等有用概念，但 reviewed tree 沒有頂層 LICENSE，因此沒有複製程式碼；也沒有加入 `vectorbt` / `nautilus_trader` 依賴。
+
+真正併入的是「共同 forecast origins 的 paired uncertainty」：price 用每個 origin 的 absolute-error(A)-absolute-error(B)，direction 用 correctness(A)-correctness(B)，再做 deterministic circular block bootstrap；block length 依 horizon 下 label-window overlap 推導。common n<5=`INSUFFICIENT_PAIRED_SAMPLE` 且不算 CI，5–29=`EXPLORATORY_ONLY`，30+=`ESTIMATED`。這些狀態只是 historical-OOS 差異的不確定性，不會升級成 CALIBRATED / PREDICTIVE_EVIDENCE / TRADING_EDGE。
+
+Pairwise CI/confidence/replicates/block/status 已存入 tournament DuckDB、CLI compare，並由 MCP `get_model_leaderboard.pairwise_uncertainty` 對主腦公開；SQL NULL→pandas NaN 會重新正規化為 unavailable，不輸出假的 `[nan,nan]`。Jerry 的 row-count purge/embargo、PBO/DSR/Holm、fixed-bps execution engine 暫不搬：前者不如現有 forecast-origin/label-window/available-at governance 嚴格，後兩者需要先有 canonical trial-family ledger / 獨立 economic-value layer。
+
+branch=`codex/jerry-paired-uncertainty`；source commit=`734d42bbc1eda16b41ec02e7f296c3d32291df4e`；source/config build=`41f978ce1c3e4a97`；PR #69 OPEN。Focused offline=`90 passed, 4 deselected`；final offline=`1976 passed, 1 skipped, 35 deselected, 110 warnings in 185.06s`，只排除現場 recorder 持有 global mutex 的 `test_single_instance_lock_releases_after_error`；未停止 recorder。changed-file secret scan=0、diff check PASS。GitHub CI run `36289136004` / #221 在此快照寫入時仍 IN_PROGRESS。ACTUAL_FORWARD_EVIDENCE / ACTUAL_EVENT_PROBABILITY_EVIDENCE 仍 NONE_YET。
+
 ### 2026-09-27 最新 JNU direct + 白話輸出
 
 source/config build=`858029747b588ac6`，feature commit=`bffa97d`。新增 `analyze_jnu`：JNU/JNUxxxx/JNUPMxxxx/大阪微日經等名稱都會解析成大阪日經225微型期貨；public MCP 回覆只給一般使用者白話中文，`XTKS`、enum/status code、true/false/null、MISSING/NEEDS_CONFIG、Direct/Proxy 等技術字樣不再是 JNU public 主輸出。

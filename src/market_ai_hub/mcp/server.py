@@ -725,7 +725,19 @@ def get_model_leaderboard(target: str = "", horizon: str = "") -> dict:
     from market_ai_hub.research.tournament.performance_store import PerformanceStore
     from market_ai_hub.services.research_truth import mase_wording
 
-    rows = PerformanceStore().leaderboard(target=target or None, horizon=horizon or None)
+    import math
+
+    store = PerformanceStore()
+    rows = store.leaderboard(target=target or None, horizon=horizon or None)
+    pairwise_rows = store.pairwise(target=target or None, horizon=horizon or None)
+
+    def finite_or_none(value):
+        try:
+            out = float(value)
+        except (TypeError, ValueError):
+            return None
+        return out if math.isfinite(out) else None
+
     MIN_SAMPLE = 30
     scoped = []
     for r in rows:
@@ -749,11 +761,36 @@ def get_model_leaderboard(target: str = "", horizon: str = "") -> dict:
             "mcc": r.get("mcc"),
             "horizon": r.get("horizon"),
         })
+    pairwise_uncertainty = []
+    for row in pairwise_rows:
+        metric = row.get("metric")
+        pairwise_uncertainty.append({
+            "model_a": row.get("model_a"),
+            "model_b": row.get("model_b"),
+            "target": row.get("target"),
+            "horizon": row.get("horizon"),
+            "metric": metric,
+            "common_origin_count": row.get("common_origin_count"),
+            "common_origin_coverage_rate": finite_or_none(row.get("common_origin_coverage_rate")),
+            "delta_a_minus_b": finite_or_none(row.get("delta_a_minus_b")),
+            "delta_ci_lower": finite_or_none(row.get("delta_ci_lower")),
+            "delta_ci_upper": finite_or_none(row.get("delta_ci_upper")),
+            "delta_ci_confidence": finite_or_none(row.get("delta_ci_confidence")),
+            "bootstrap_block_length": row.get("bootstrap_block_length"),
+            "uncertainty_status": row.get("uncertainty_status") or "LEGACY_NO_UNCERTAINTY",
+            "delta_semantics": (
+                "A_MINUS_B_LOSS_NEGATIVE_FAVORS_A" if metric == "mae"
+                else "A_MINUS_B_SCORE_POSITIVE_FAVORS_A" if metric == "direction_accuracy"
+                else "NOT_EVALUABLE"
+            ),
+        })
     return {
         "records": scoped,
+        "pairwise_uncertainty": pairwise_uncertainty,
         "note": (
             "target/dataset 分層；n < MIN_SAMPLE 標 INSUFFICIENT_SAMPLE，"
-            "不宣稱 stable/best validated/winner；MASE≈1 = baseline-level error，非 random guessing"
+            "不宣稱 stable/best validated/winner；pairwise CI 只量化共同 origins 的差異不確定性，"
+            "EXPLORATORY_ONLY 不是 predictive evidence；MASE≈1 = baseline-level error，非 random guessing"
         ),
     }
 

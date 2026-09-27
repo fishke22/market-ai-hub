@@ -1,8 +1,8 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
-- Current phase: **JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
+- Current phase: **PAIRWISE_UNCERTAINTY_LOCAL_PASS_PR69_OPEN / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**
 - Gate: **JNU now has a real exact-contract JPX/OSE settlement research model and plain-Chinese user output, but its current 10-origin historical OOS does not beat naive baselines, so confidence is LOW. Public calibrated probability remains blocked because eligible settled W3.2-EP1 forward event samples are still 0. NO ORDER / personalized size / invented exact entry-stop-target remain gated.**
-- build_id：**858029747b588ac6**（JNU direct model + public human-output source/config fingerprint；PR #67 merged + post-merge stdio smoke verified）
+- build_id：**41f978ce1c3e4a97**（paired-uncertainty branch source/config fingerprint；source commit `734d42b`；PR #69 OPEN）
 - Schemas：PPM **3A.2.3**；V2 daily label **2C.2**；prediction audit **2H.4**；evaluation governance **W3.1**；forward cycle **W3.2**；raw event producer **W3.2-EP1**；calibration evaluation **2I.1**；calibration fitting **W4.1**；daily first-passage **W5.1**
 - Session routing：venue registry（XTAI/XTKS/XNAS/XNYS/CBOE/OSE/TAIFEX/CME/FX/CRYPTO）；no unknown→TWSE fallback
 - Factor routing：representation_relation + temporal_role → resolved_role；cross-representation return BLOCKED
@@ -10,6 +10,16 @@
 - CUSUM/Page-Hinkley/BOCPD：**NOT_IMPLEMENTED_RESEARCH_CHALLENGER**
 - Probability velocity/acceleration：**NOT_AVAILABLE**
 - Actual market V2-G sequence：**NOT_AVAILABLE**
+
+## 2026-09-27 jerry-backtest-lab robustness comparison
+
+- Reviewed `fishke22/jerry-backtest-lab` HEAD `4df8b3a12a4d781fa950e32b4c86298f672e4c2e`. It contains useful anti-overfit concepts (cost stress, CPCV/purge/embargo, PBO, DSR, Holm, second-engine replay), but its tree has no top-level LICENSE; no source code was copied and no Jerry dependency was added.
+- Adopted only paired same-origin uncertainty: price comparisons bootstrap per-origin absolute-error deltas; direction comparisons bootstrap per-origin correctness deltas. Circular block length comes from overlapping forecast label windows at the evaluated horizon.
+- Evidence states: common n<5=`INSUFFICIENT_PAIRED_SAMPLE`/no CI; 5–29=`EXPLORATORY_ONLY`; 30+=`ESTIMATED`. This is historical-OOS uncertainty, not calibration/predictive evidence/edge.
+- DuckDB pairwise rows now persist CI/confidence/replicates/block/status; CLI compare and MCP `get_model_leaderboard.pairwise_uncertainty` expose the same semantics. NaN from SQL NULL is normalized back to unavailable instead of `[nan,nan]`.
+- Not adopted: Jerry's row-count purge/embargo (we already have stricter temporal/label-window governance), PBO/DSR/Holm before a canonical trial-family ledger, or fixed-bps/Nautilus execution logic in the forecast ranking layer.
+- Validation: focused=`90 passed, 4 deselected`; final offline=`1976 passed, 1 skipped, 35 deselected, 110 warnings in 185.06s`, excluding only the live-owner mutex case. First unfiltered offline run had exactly that one failure. Changed-file secret scan=0; diff check PASS.
+- Publication: source commit=`734d42bbc1eda16b41ec02e7f296c3d32291df4e`; PR #69 OPEN; GitHub CI run `36289136004` / #221 was IN_PROGRESS when this status was written. No merge performed.
 
 ## 2026-09-27 JNU direct research + human public output
 
