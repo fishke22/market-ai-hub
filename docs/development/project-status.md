@@ -70,7 +70,21 @@
 - Explicit claims in the embedded block remain `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`; Taiwan economic status remains `ECONOMIC_EDGE_NOT_EVALUATED`. No JNU P5/JPX/TMF/iTRADER/Phase2V-C evidence is borrowed.
 - Validation: focused=`83 passed, 8 warnings`; build/integration=`87 passed, 2 deselected`; full offline excluding only recorder owner-mutex=`2151 passed, 1 skipped, 24 deselected, 152 warnings`, exit 0.
 - No scheduler install, recorder/runtime handover, broker/account/position/order action, model tuning, P2-final opening or HPQ1 replay occurred.
-- Next bounded Taiwan package: version/reconcile target-specific freshness + fundamentals + flow/news coverage (PE/PBR/EPS/monthly revenue and related source/cutoff semantics) before any new predictive experiment.
+- P1 next package was target-specific freshness/fundamental/flow/news reconciliation; P2 below completes that context-contract step without opening a predictive experiment.
+## 2026-09-28 Taiwan-stock P2 target-context contract
+
+- Current Taiwan state: **CORPORATE_ACTION_FAIL_CLOSED / GOVERNED_ANALYZER_PACKET_INTEGRATED / TARGET_CONTEXT_V1 / CONSERVATIVE_ASOF_CONTEXT / HISTORICAL_REVISION_UNSAFE / PREDICTIVE_FEATURE_USE_BLOCKED / PREDICTIVE_GAIN_UNPROVEN**. Source/config build=`899654e021391f7f`.
+- Added `AnalysisPacket.target_context_snapshot` with contract `TAIWAN_STOCK_CONTEXT_V1`, source semantics `FINMIND_FREE_TARGET_CONTEXT_ASOF_V1`, role `TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE`.
+- Target-scoped free context: PE/PBR/dividend yield via `TaiwanStockPER`; monthly revenue via `TaiwanStockMonthRevenue`; EPS via `TaiwanStockFinancialStatements`; institutional buy/sell flow via `TaiwanStockInstitutionalInvestorsBuySell`. No context channel is wired into model features.
+- Daily date-only valuation/flow rows use next-local-midnight conservative available-at. Monthly revenue uses `create_time` + one local day; missing `create_time` stays non-PIT and future period rows remain cutoff-filtered.
+- EPS period-end date is not publication time: EPS remains `AVAILABLE_NON_PIT_CONTEXT`, `available_at=null`, `pit_usable=false`.
+- Target-specific news is `NOT_AVAILABLE`; generic-web fallback and news-sentiment probability are explicitly forbidden in this contract.
+- Real 3706 cutoff 2026-09-28T00:00Z: valuation 2026-09-24 PE=14.02/PBR=1.37/dividend_yield=5.1; Aug-2026 revenue=13,557,215,000, MoM≈5.638%, available conservatively 2026-09-08T16:00Z; EPS 2026-Q2=1.48 but non-PIT; 2026-09-24 institutional aggregate net=-812,496; news unavailable. Coverage PARTIAL, locally as-of usable channels=3, predictive experiment data ready=false.
+- Research gate: `predictive_feature_use=BLOCKED_UNTIL_PREREGISTERED_IMMUTABLE_SNAPSHOT_PROTOCOL`, `historical_revision_safe=false`, `predictive_experiment_data_ready=false`.
+- Validation: focused=`90 passed, 8 warnings`; build/integration=`139 passed, 2 deselected, 8 warnings`; full offline=`2158 passed, 1 skipped, 24 deselected, 152 warnings`, exit 0.
+- Claims remain `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`; no model tuning/predictive experiment/JNU replay/runtime/broker/order action.
+- Next: immutable receipt/snapshot + revision provenance for candidate context channels, verified EPS publication timestamps, and a verified target-specific news source before any preregistered predictive feature experiment.
+
 ## Historical PR72 checkpoint — superseded where contradicted above
 
 - Current phase: **JNU_HISTORICAL_PREQUENTIAL_PR72_MERGED_POSTMERGE_VERIFIED / JNU_OOS_ORIGIN_AND_BASELINE_FAIRNESS_PR70_MERGED_POSTMERGE_VERIFIED / CHERRYSTUDIO_JNU_ROUTING_PR72_MERGED_POSTMERGE_VERIFIED / PAIRWISE_UNCERTAINTY_PR69_MERGED / JNU_DIRECT_RESEARCH_MERGED_POSTMERGE_VERIFIED / HUMAN_PUBLIC_OUTPUT_MERGED_POSTMERGE_VERIFIED / RESEARCH_DECISION_SUPPORT_MERGED / W3.2-EP1 MERGED / W5.1 MERGED / W4.1 MERGED / C2.3 AUTOMATION_ADOPTED / ACTUAL_FORWARD_EVIDENCE=NONE_YET / ACTUAL_EVENT_PROBABILITY_EVIDENCE=NONE_YET**

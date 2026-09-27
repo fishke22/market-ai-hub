@@ -24,7 +24,20 @@
 - Data-integrity BLOCKED also closes packet `may_present_as_direct_forecast`, `may_present_research_stance` and `research_stance_allowed`; conditional WAIT/repair behavior remains available. No yfinance or other weaker target fallback is permitted after the integrity failure.
 - Taiwan/JNU evidence isolation is unchanged: no `ACCURACY_V2_P5_FORWARD`, JPX/TMF, iTRADER or Osaka Phase2V-C evidence is imported into the Taiwan target family.
 - Acceptance: focused packet/data/public contract=`83 passed, 8 warnings`; build/integration=`87 passed, 2 deselected`; full offline (only existing recorder owner-mutex excluded)=`2151 passed, 1 skipped, 24 deselected, 152 warnings`, exit 0.
-- Next bounded Taiwan work: version target-specific freshness/fundamental/flow/news inputs and reconcile PE/PBR/EPS/monthly revenue coverage under explicit as-of/source semantics before preregistering any new predictive experiment.
+- P1 當時的下一包是 target-specific freshness/fundamental/flow/news context；下方 P2 已完成這個 engineering/data-context step，但沒有開 predictive experiment。
+## 0.TW.2 Taiwan-stock P2 target-context contract（2026-09-28）
+
+- 新增 `TAIWAN_STOCK_CONTEXT_V1` / `FINMIND_FREE_TARGET_CONTEXT_ASOF_V1` / `TAIWAN_STOCK_CONTEXT_FRESHNESS_V1`，並以 `AnalysisPacket.target_context_snapshot` 輸出；role 固定 `TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE`。這層不進 forecast feature、direction vote、probability、ensemble weight 或 economic edge。
+- 免費 target-scoped channel：`TaiwanStockPER` -> PE/PBR/dividend yield；`TaiwanStockMonthRevenue` -> revenue/MoM/YoY；`TaiwanStockFinancialStatements` -> EPS context；`TaiwanStockInstitutionalInvestorsBuySell` -> daily institutional net flow。實際 3706 schema 已先 probe 再施工，不猜欄位。
+- 日期語義：PER/法人資料只有 source date，採「source date + next Taiwan local midnight」作保守 available-at；月營收用 `create_time`（日期）+ next local midnight。若月營收缺 `create_time`，只准 `AVAILABLE_NON_PIT_CONTEXT`，且仍先過 period-date cutoff，不得顯示 future period。
+- 財報 dataset 只有 period-end `date/type/value/origin_name`，沒有 publication timestamp；因此 EPS 的 period end 不冒充 available-at，`pit_usable=false`、freshness=UNKNOWN。若未補 verified publication timestamp source，不准用於 historical feature/backtest。
+- News：repo 沒有已驗證的 target-specific free news provider；實際 `TaiwanStockNews` FinMind probe 回 HTTP 400。故 news=`NOT_AVAILABLE`、`generic_web_news_fallback_allowed=false`、`news_sentiment_probability_allowed=false`。
+- Live vendor context 即使個別 row 有保守 as-of 也仍 `historical_revision_safe=false`，因目前沒有 immutable historical receipt snapshot。Research gate 明確 `predictive_feature_use=BLOCKED_UNTIL_PREREGISTERED_IMMUTABLE_SNAPSHOT_PROTOCOL`，`predictive_experiment_data_ready=false`。
+- 3706 real smoke，cutoff=2026-09-28T00:00Z：valuation 2026-09-24，PE=14.02、PBR=1.37、dividend_yield=5.1；monthly revenue row=2026-09-01（revenue_month=8），revenue=13,557,215,000、MoM≈0.05638、YoY=null、conservative available-at=2026-09-08T16:00Z；EPS period=2026-06-30 value=1.48 但 non-PIT；institutional flow 2026-09-24 aggregate net=-812,496；news NOT_AVAILABLE。coverage=PARTIAL，pit_usable_channels=3/5，predictive experiment data ready=false。
+- Acceptance：focused=`90 passed, 8 warnings`；build/integration=`139 passed, 2 deselected, 8 warnings`；full offline（只排除既有 recorder owner-mutex）=`2158 passed, 1 skipped, 24 deselected, 152 warnings`，exit 0。source/config build=`899654e021391f7f`。
+- `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false` 不變；沒有新增模型、調參、開 predictive experiment、重播 JNU evidence、scheduler/recorder/runtime/broker/account/order 動作。
+- 下一個 bounded Taiwan package：先建立 immutable receipt/snapshot 與 revision-safe provenance；EPS 先補 verified publication timestamp，news 先補 verified target-specific source，之後才可 preregister 精確 feature/label/split protocol。
+
 ## 0. P0/P1 實作快照（2026-09-27）
 
 - 實際施工分支 `codex/vnext-audit-handoff`，本包進場 base HEAD=`fc6bd6830ecfed642c3c268e953ec3385eac08b8`；source/config worktree build=`a11cbb922621e730`。既有 `scripts/register_jpx_micro_sync_task.ps1`、`scripts/run-hidden.vbs` 保持未追蹤且未提交。

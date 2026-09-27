@@ -160,6 +160,40 @@ def _taiwan_stock_analysis(symbol: str, horizon: str) -> dict:
         }
 
 
+def _taiwan_stock_context(symbol: str, as_of: datetime) -> dict:
+    """Build optional same-target context without changing forecast/model gates."""
+    from market_ai_hub.services.taiwan_stock_context import (
+        CONTEXT_ROLE,
+        CONTEXT_SCHEMA_VERSION,
+        build_taiwan_stock_context,
+    )
+
+    try:
+        return build_taiwan_stock_context(symbol, as_of=as_of)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "schema_version": CONTEXT_SCHEMA_VERSION,
+            "symbol": symbol,
+            "as_of": pd.Timestamp(as_of).isoformat(),
+            "role": CONTEXT_ROLE,
+            "status": "UNAVAILABLE",
+            "predictive_feature_eligible": False,
+            "coverage": {
+                "status": "UNAVAILABLE",
+                "context_data_ready": False,
+                "predictive_experiment_data_ready": False,
+            },
+            "channels": {},
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+                "result_role": CONTEXT_ROLE,
+            },
+            "reason": type(exc).__name__,
+        }
+
+
 # 可用 yfinance symbols（避免 404 的 US10Y/US2Y）→ regime 引擎欄位名
 # 全域因子共通 reuse；local target context 依 family 分離（§7）。
 REGIME_GLOBAL_SYMBOLS = {"^VIX": "VIX", "USDJPY=X": "USDJPY=X", "^TNX": "US10Y", "^FVX": "US5Y"}
@@ -483,6 +517,14 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
             "same-target Taiwan analyzer is embedded from the corporate-action-governed "
             "data path; engineering availability is not predictive gain or trading edge"
         )
+        context = packet.target_context_snapshot or {}
+        packet.target_semantics["target_context_contract"] = {
+            "schema_version": context.get("schema_version"),
+            "source_semantics_version": context.get("source_semantics_version"),
+            "role": context.get("role"),
+            "predictive_feature_eligible": False,
+            "historical_revision_safe": bool(context.get("historical_revision_safe", False)),
+        }
 
     # Accuracy v2: an exact-contract JNU research path exists, but it is not
     # forward-validated and must not be relabelled as predictive gain/trading edge.
@@ -631,6 +673,21 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
                 if integrated
                 else "TAIWAN_ANALYZER_NOT_AVAILABLE"
             ),
+            "target_context_in_packet": bool(packet.target_context_snapshot),
+            "target_context_role": (
+                (packet.target_context_snapshot or {}).get("role")
+                or "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE"
+            ),
+            "target_context_coverage_status": (
+                ((packet.target_context_snapshot or {}).get("coverage") or {}).get("status")
+                or "UNAVAILABLE"
+            ),
+            "target_context_predictive_feature_eligible": False,
+            "target_context_news_status": (
+                ((packet.target_context_snapshot or {}).get("channels") or {})
+                .get("news", {})
+                .get("status", "NOT_AVAILABLE")
+            ),
         })
     else:
         packet.research_decision_support["broker_ui_text_translation_allowed"] = False
@@ -701,6 +758,21 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             lambda: _taiwan_stock_analysis(target, horizon),
         )
         packet.target_model_analysis = taiwan_analysis
+        packet.target_context_snapshot = _t(
+            "taiwan_stock_target_context",
+            lambda: _taiwan_stock_context(target, packet.information_cutoff),
+        )
+        context_coverage = dict(
+            (packet.target_context_snapshot or {}).get("coverage") or {}
+        )
+        packet.data_quality["taiwan_stock_target_context"] = {
+            "schema_version": (packet.target_context_snapshot or {}).get("schema_version"),
+            "coverage_status": context_coverage.get("status", "UNKNOWN"),
+            "context_data_ready": bool(context_coverage.get("context_data_ready", False)),
+            "predictive_experiment_data_ready": False,
+        }
+        if context_coverage.get("context_data_ready"):
+            packet.data_fetched.append("finmind:taiwan_stock_target_context")
         integrity = dict(taiwan_analysis.get("data_integrity") or {})
         analysis_status = str(taiwan_analysis.get("status") or "UNAVAILABLE")
         ref = taiwan_analysis.get("reference_price")
@@ -850,6 +922,21 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             "forward": packet.validation_truth.get("forward", "NOT_YET_VALIDATED"),
             "economic": packet.validation_truth.get("economic", "NOT_ESTABLISHED"),
             "jnu_accuracy_v2_evidence_allowed": False,
+        }
+        context = packet.target_context_snapshot or {}
+        context_coverage = dict(context.get("coverage") or {})
+        packet.research_gates["TAIWAN_TARGET_CONTEXT"] = {
+            "schema_version": context.get("schema_version"),
+            "coverage_status": context_coverage.get("status", "UNAVAILABLE"),
+            "context_data_ready": bool(context_coverage.get("context_data_ready", False)),
+            "historical_revision_safe": bool(context.get("historical_revision_safe", False)),
+            "predictive_feature_use": "BLOCKED_UNTIL_PREREGISTERED_IMMUTABLE_SNAPSHOT_PROTOCOL",
+            "predictive_experiment_data_ready": False,
+            "news_status": (
+                ((context.get("channels") or {}).get("news") or {}).get(
+                    "status", "NOT_AVAILABLE"
+                )
+            ),
         }
     packet.reanalysis_conditions = [
         "FORECAST_STALE_AFTER_EVENT",

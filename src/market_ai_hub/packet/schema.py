@@ -54,6 +54,9 @@ class AnalysisPacket(BaseModel):
     # same-target, corporate-action-normalized research model summary; it must
     # not inherit Osaka/JNU evidence or raw uncalibrated class scores.
     target_model_analysis: dict[str, Any] = Field(default_factory=dict)
+    # Same-target context (valuation/fundamentals/flow/news coverage) with explicit
+    # as-of/source semantics. Context is never an implicit model feature.
+    target_context_snapshot: dict[str, Any] = Field(default_factory=dict)
 
     best_baseline: dict[str, Any] = Field(default_factory=dict)
     best_validated_model: dict[str, Any] = Field(default_factory=dict)

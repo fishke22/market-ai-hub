@@ -34,11 +34,64 @@ def _analysis_summary(symbol="3706.TW", horizon="4d"):
     }
 
 
+def _context_summary(symbol="3706.TW"):
+    return {
+        "schema_version": "TAIWAN_STOCK_CONTEXT_V1",
+        "source_semantics_version": "FINMIND_FREE_TARGET_CONTEXT_ASOF_V1",
+        "freshness_policy_version": "TAIWAN_STOCK_CONTEXT_FRESHNESS_V1",
+        "symbol": symbol,
+        "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
+        "predictive_feature_eligible": False,
+        "historical_revision_safe": False,
+        "channels": {
+            "valuation": {
+                "status": "AVAILABLE",
+                "values": {"pe_ratio": 12.0, "pbr": 1.5},
+                "pit_usable": True,
+            },
+            "eps": {
+                "status": "AVAILABLE_NON_PIT_CONTEXT",
+                "values": {"eps": 1.48},
+                "pit_usable": False,
+            },
+            "monthly_revenue": {
+                "status": "AVAILABLE",
+                "values": {"revenue": 120.0, "yoy_growth": 0.2},
+                "pit_usable": True,
+            },
+            "institutional_flow": {
+                "status": "AVAILABLE",
+                "values": {"total_net": 200.0},
+                "pit_usable": True,
+            },
+            "news": {
+                "status": "NOT_AVAILABLE",
+                "generic_web_news_fallback_allowed": False,
+            },
+        },
+        "coverage": {
+            "status": "PARTIAL",
+            "context_data_ready": True,
+            "predictive_experiment_data_ready": False,
+        },
+        "validation_claims": {
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+        },
+    }
+
+
 def _packet(monkeypatch, analysis=None):
     monkeypatch.setattr(
         builder,
         "_taiwan_stock_analysis",
         lambda target, horizon: analysis or _analysis_summary(target, horizon),
+    )
+    monkeypatch.setattr(
+        builder,
+        "_taiwan_stock_context",
+        lambda target, as_of: _context_summary(target),
     )
     monkeypatch.setattr(builder, "_factor_observation_summary", lambda family, cutoff: [])
     monkeypatch.setattr(builder, "_model_input_readiness", lambda family, cutoff: {})
@@ -60,6 +113,13 @@ def test_taiwan_packet_has_no_jnu_specific_forward_gates(monkeypatch):
     assert "TAIWAN_STOCK_VALIDATION" in gates
     assert "ACCURACY_V2_P5_FORWARD" not in gates
     assert "FUTURE_DATA_ACQUISITION" not in gates
+    context_gate = gates["TAIWAN_TARGET_CONTEXT"]
+    assert context_gate["predictive_experiment_data_ready"] is False
+    assert context_gate["historical_revision_safe"] is False
+    assert context_gate["predictive_feature_use"] == (
+        "BLOCKED_UNTIL_PREREGISTERED_IMMUTABLE_SNAPSHOT_PROTOCOL"
+    )
+    assert context_gate["news_status"] == "NOT_AVAILABLE"
 
     text = json.dumps(gates, ensure_ascii=False)
     for forbidden in (
@@ -113,6 +173,15 @@ def test_taiwan_packet_embeds_same_target_governed_model_result(monkeypatch):
         "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
     )
     assert packet["display_policy"]["may_present_as_direct_forecast"] is True
+    context = packet["target_context_snapshot"]
+    assert context["schema_version"] == "TAIWAN_STOCK_CONTEXT_V1"
+    assert context["channels"]["valuation"]["values"]["pe_ratio"] == 12.0
+    assert context["channels"]["eps"]["pit_usable"] is False
+    assert context["channels"]["news"]["status"] == "NOT_AVAILABLE"
+    assert context["coverage"]["predictive_experiment_data_ready"] is False
+    assert packet["target_semantics"]["target_context_contract"]["predictive_feature_eligible"] is False
+    assert packet["research_decision_support"]["target_context_in_packet"] is True
+    assert packet["research_decision_support"]["target_context_news_status"] == "NOT_AVAILABLE"
 
 
 def test_taiwan_packet_data_integrity_block_never_falls_back_to_weaker_reference(monkeypatch):

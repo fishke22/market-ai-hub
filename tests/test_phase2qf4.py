@@ -104,6 +104,28 @@ def test_2330_golden_payload(monkeypatch):
     monkeypatch.setattr(b, "_load_latest_micro_settlement", lambda: {"price": 999999, "contract": "202703", "date": "2026-09-18", "price_type": "SETTLEMENT"})
     monkeypatch.setattr(
         b,
+        "_taiwan_stock_context",
+        lambda symbol, as_of: {
+            "schema_version": "TAIWAN_STOCK_CONTEXT_V1",
+            "source_semantics_version": "TEST",
+            "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
+            "predictive_feature_eligible": False,
+            "historical_revision_safe": False,
+            "coverage": {
+                "status": "PARTIAL",
+                "context_data_ready": False,
+                "predictive_experiment_data_ready": False,
+            },
+            "channels": {"news": {"status": "NOT_AVAILABLE"}},
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        b,
         "_taiwan_stock_analysis",
         lambda symbol, horizon: {
             "status": "OK",
