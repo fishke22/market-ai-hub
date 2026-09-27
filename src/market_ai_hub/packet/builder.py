@@ -202,6 +202,39 @@ def _taiwan_stock_context(symbol: str, as_of: datetime) -> dict:
             "retroactive_backfill_allowed": False,
             "predictive_feature_allowed": False,
         }
+        try:
+            from market_ai_hub.research.taiwan_context_forward import (
+                summarize_taiwan_context_receipts,
+            )
+
+            inventory = summarize_taiwan_context_receipts(
+                context["stock_id"],
+                decision_time=datetime.now(timezone.utc),
+            )
+            context["forward_receipt_inventory"] = {
+                key: inventory.get(key)
+                for key in (
+                    "schema_version",
+                    "protocol_id",
+                    "protocol_hash",
+                    "status",
+                    "receipt_count_total",
+                    "receipt_count_as_of_decision",
+                    "tracked_factor_count",
+                    "factors_with_observation_as_of_decision",
+                    "blocked_channels",
+                    "predictive_feature_allowed",
+                    "predictive_experiment_data_ready",
+                    "validation_claims",
+                )
+            }
+        except Exception as exc:  # noqa: BLE001
+            context["forward_receipt_inventory"] = {
+                "status": "UNAVAILABLE",
+                "reason": type(exc).__name__,
+                "predictive_feature_allowed": False,
+                "predictive_experiment_data_ready": False,
+            }
         return context
     except Exception as exc:  # noqa: BLE001
         return {
@@ -822,6 +855,18 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             "receipt_id": (
                 ((packet.target_context_snapshot or {}).get("receipt") or {}).get("receipt_id")
             ),
+            "candidate_semantics_status": (
+                (
+                    (packet.target_context_snapshot or {}).get("forward_receipt_inventory")
+                    or {}
+                ).get("status", "UNAVAILABLE")
+            ),
+            "candidate_semantics_protocol_hash": (
+                (
+                    (packet.target_context_snapshot or {}).get("forward_receipt_inventory")
+                    or {}
+                ).get("protocol_hash")
+            ),
             "predictive_experiment_data_ready": False,
         }
         if context_coverage.get("context_data_ready"):
@@ -987,7 +1032,17 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         context = packet.target_context_snapshot or {}
         context_coverage = dict(context.get("coverage") or {})
         receipt = dict(context.get("receipt") or {})
+        forward_inventory = dict(context.get("forward_receipt_inventory") or {})
         receipt_captured = receipt.get("status") in {"CAPTURED", "ALREADY_CAPTURED"}
+        candidate_semantics_ready = (
+            forward_inventory.get("status") == "READY_FOR_FORWARD_RECEIPT_ACCUMULATION"
+        )
+        if not receipt_captured:
+            predictive_feature_use = "BLOCKED_RECEIPT_CAPTURE_UNAVAILABLE"
+        elif not candidate_semantics_ready:
+            predictive_feature_use = "BLOCKED_CANDIDATE_SEMANTICS_CONTRACT"
+        else:
+            predictive_feature_use = "BLOCKED_UNTIL_PREREGISTERED_FEATURE_LABEL_SPLIT_PROTOCOL"
         packet.research_gates["TAIWAN_TARGET_CONTEXT"] = {
             "schema_version": context.get("schema_version"),
             "coverage_status": context_coverage.get("status", "UNAVAILABLE"),
@@ -997,11 +1052,25 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
             "immutable_receipt_id": receipt.get("receipt_id"),
             "immutable_receipt_captured": receipt_captured,
             "future_receipt_selection_ready": receipt_captured,
-            "predictive_feature_use": (
-                "BLOCKED_UNTIL_PREREGISTERED_FEATURE_LABEL_SPLIT_PROTOCOL"
-                if receipt_captured
-                else "BLOCKED_RECEIPT_CAPTURE_UNAVAILABLE"
+            "candidate_semantics_protocol_id": forward_inventory.get("protocol_id"),
+            "candidate_semantics_protocol_hash": forward_inventory.get("protocol_hash"),
+            "candidate_semantics_status": forward_inventory.get("status", "UNAVAILABLE"),
+            "candidate_semantics_frozen": candidate_semantics_ready,
+            "forward_receipt_count": forward_inventory.get("receipt_count_total", 0),
+            "forward_receipt_count_as_of_decision": forward_inventory.get(
+                "receipt_count_as_of_decision", 0
             ),
+            "tracked_candidate_factor_count": forward_inventory.get(
+                "tracked_factor_count", 0
+            ),
+            "candidate_factors_observed_count": forward_inventory.get(
+                "factors_with_observation_as_of_decision", 0
+            ),
+            "independent_observation_counts_are_predictive_samples": False,
+            "blocked_candidate_channels": sorted(
+                (forward_inventory.get("blocked_channels") or {}).keys()
+            ),
+            "predictive_feature_use": predictive_feature_use,
             "predictive_experiment_data_ready": False,
             "news_status": (
                 ((context.get("channels") or {}).get("news") or {}).get(

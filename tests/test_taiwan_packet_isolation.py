@@ -63,6 +63,23 @@ def _context_summary(symbol="3706.TW"):
             "retroactive_backfill_allowed": False,
             "predictive_feature_allowed": False,
         },
+        "forward_receipt_inventory": {
+            "schema_version": "TWCTXFORWARD.1",
+            "protocol_id": "taiwan_context_forward_receipts_v1",
+            "protocol_hash": "test-protocol-hash",
+            "status": "READY_FOR_FORWARD_RECEIPT_ACCUMULATION",
+            "receipt_count_total": 2,
+            "receipt_count_as_of_decision": 2,
+            "tracked_factor_count": 28,
+            "factors_with_observation_as_of_decision": 27,
+            "blocked_channels": {
+                "eps": {"status": "BLOCKED_PUBLICATION_SEMANTICS_UNVERIFIED"},
+                "shareholding_concentration": {"status": "BLOCKED_FREE_SOURCE_UNAVAILABLE"},
+                "news": {"status": "BLOCKED_VERIFIED_TARGET_SOURCE_UNAVAILABLE"},
+            },
+            "predictive_feature_allowed": False,
+            "predictive_experiment_data_ready": False,
+        },
         "channels": {
             "valuation": {
                 "status": "AVAILABLE",
@@ -188,6 +205,17 @@ def test_taiwan_packet_has_no_jnu_specific_forward_gates(monkeypatch):
     assert context_gate["immutable_receipt_captured"] is True
     assert context_gate["future_receipt_selection_ready"] is True
     assert context_gate["immutable_receipt_id"].startswith("tw-context:")
+    assert context_gate["candidate_semantics_frozen"] is True
+    assert context_gate["candidate_semantics_protocol_id"] == "taiwan_context_forward_receipts_v1"
+    assert context_gate["forward_receipt_count"] == 2
+    assert context_gate["tracked_candidate_factor_count"] == 28
+    assert context_gate["candidate_factors_observed_count"] == 27
+    assert context_gate["independent_observation_counts_are_predictive_samples"] is False
+    assert set(context_gate["blocked_candidate_channels"]) == {
+        "eps",
+        "shareholding_concentration",
+        "news",
+    }
     assert context_gate["predictive_feature_use"] == (
         "BLOCKED_UNTIL_PREREGISTERED_FEATURE_LABEL_SPLIT_PROTOCOL"
     )
@@ -216,6 +244,20 @@ def test_taiwan_packet_receipt_failure_keeps_feature_gate_closed(monkeypatch):
     assert gate["immutable_receipt_captured"] is False
     assert gate["future_receipt_selection_ready"] is False
     assert gate["predictive_feature_use"] == "BLOCKED_RECEIPT_CAPTURE_UNAVAILABLE"
+    assert gate["predictive_experiment_data_ready"] is False
+
+
+def test_taiwan_packet_candidate_semantics_failure_keeps_feature_gate_closed(monkeypatch):
+    context = _context_summary()
+    context["forward_receipt_inventory"] = {
+        **context["forward_receipt_inventory"],
+        "status": "BLOCKED_CANDIDATE_CONTRACT_MISMATCH",
+    }
+    packet = _packet(monkeypatch, context=context)
+    gate = packet["research_gates"]["TAIWAN_TARGET_CONTEXT"]
+    assert gate["immutable_receipt_captured"] is True
+    assert gate["candidate_semantics_frozen"] is False
+    assert gate["predictive_feature_use"] == "BLOCKED_CANDIDATE_SEMANTICS_CONTRACT"
     assert gate["predictive_experiment_data_ready"] is False
 
 

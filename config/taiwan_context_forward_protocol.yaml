@@ -1,0 +1,118 @@
+schema_version: TWCTXFORWARD.1
+
+protocol:
+  protocol_id: taiwan_context_forward_receipts_v1
+  role: DATA_CONTEXT_GOVERNANCE_ONLY
+  context_schema_version: TAIWAN_STOCK_CONTEXT_V3
+  receipt_schema_version: TAIWAN_CONTEXT_RECEIPT_V1
+  receipt_policy_version: APPEND_ONLY_CONTENT_ADDRESSED_RECEIPT_TIME_V1
+
+  policy:
+    public_or_existing_free_sources_only: true
+    no_broker_or_account_access: true
+    no_recorder_restart_or_runtime_handover: true
+    no_order_action: true
+    scheduler_install_allowed: false
+    historical_backfill_allowed: false
+    future_revision_backfill_allowed: false
+    receipt_time_revision_safe_is_not_source_pit_eligibility: true
+    replay_available_at_is_max_source_available_at_and_receipt_time: true
+    repeated_retrieval_counts_as_independent_observation: false
+    same_period_revision_counts_as_independent_observation: false
+    same_period_revision_is_recorded_as_new_source_version: true
+    predictive_feature_allowed: false
+    predictive_experiment_data_ready: false
+    automatic_feature_promotion: false
+
+  identity:
+    observation_identity_fields: [stock_id, factor_id, observation_period]
+    source_version_identity_fields: [stock_id, factor_id, observation_period, provenance_hash]
+    retrieval_identity_field: receipt_id
+
+  tracked_channels:
+    valuation:
+      source_provider: FinMind
+      source_dataset: TaiwanStockPER
+      availability_semantics: SOURCE_DATE_PLUS_ONE_LOCAL_DAY_CONSERVATIVE
+      factors:
+        pe_ratio: {units: RATIO, period_semantics: TRADING_DATE}
+        pbr: {units: RATIO, period_semantics: TRADING_DATE}
+        dividend_yield: {units: PERCENT, period_semantics: TRADING_DATE}
+
+    monthly_revenue:
+      source_provider: FinMind
+      source_dataset: TaiwanStockMonthRevenue
+      availability_semantics: CREATE_DATE_PLUS_ONE_LOCAL_DAY_CONSERVATIVE
+      factors:
+        monthly_revenue: {units: TWD, period_semantics: REVENUE_MONTH}
+        monthly_revenue_mom: {units: DECIMAL_RETURN, period_semantics: REVENUE_MONTH}
+        monthly_revenue_yoy: {units: DECIMAL_RETURN, period_semantics: REVENUE_MONTH}
+
+    dividend_ex_right:
+      source_provider: FinMind
+      source_dataset: TaiwanStockDividend
+      availability_semantics: ANNOUNCEMENT_TIME_IF_PRESENT_ELSE_ANNOUNCEMENT_DATE_PLUS_ONE_LOCAL_DAY
+      factors:
+        cash_ex_dividend_trading_date: {units: DATE, period_semantics: ANNOUNCED_CORPORATE_ACTION}
+        stock_ex_dividend_trading_date: {units: DATE, period_semantics: ANNOUNCED_CORPORATE_ACTION}
+        cash_earnings_distribution: {units: SOURCE_NATIVE_AMOUNT_UNIT_UNSPECIFIED, period_semantics: ANNOUNCED_CORPORATE_ACTION}
+        stock_earnings_distribution: {units: SOURCE_NATIVE_AMOUNT_UNIT_UNSPECIFIED, period_semantics: ANNOUNCED_CORPORATE_ACTION}
+
+    institutional_flow:
+      source_provider: FinMind
+      source_dataset: TaiwanStockInstitutionalInvestorsBuySell
+      availability_semantics: SOURCE_DATE_PLUS_ONE_LOCAL_DAY_CONSERVATIVE
+      factors:
+        foreign_investor_net: {units: SHARES, period_semantics: TRADING_DATE}
+        investment_trust_net: {units: SHARES, period_semantics: TRADING_DATE}
+        dealer_net: {units: SHARES, period_semantics: TRADING_DATE}
+        foreign_dealer_self_net: {units: SHARES, period_semantics: TRADING_DATE}
+        institutional_total_net: {units: SHARES, period_semantics: TRADING_DATE}
+
+    margin_short:
+      source_provider: FinMind
+      source_dataset: TaiwanStockMarginPurchaseShortSale
+      availability_semantics: SOURCE_DATE_PLUS_ONE_LOCAL_DAY_CONSERVATIVE
+      factors:
+        margin_purchase_buy: {units: SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+        margin_purchase_sell: {units: SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+        margin_purchase_today_balance: {units: SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+        short_sale_buy: {units: SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+        short_sale_sell: {units: SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+        short_sale_today_balance: {units: SOURCE_NATIVE_COUNT_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+
+    securities_lending:
+      source_provider: FinMind
+      source_dataset: TaiwanStockSecuritiesLending
+      availability_semantics: SOURCE_DATE_PLUS_ONE_LOCAL_DAY_CONSERVATIVE
+      factors:
+        securities_lending_total_volume: {units: SOURCE_NATIVE_VOLUME_UNIT_UNSPECIFIED, period_semantics: TRADING_DATE}
+        securities_lending_trade_count: {units: COUNT, period_semantics: TRADING_DATE}
+
+    shareholding:
+      source_provider: FinMind
+      source_dataset: TaiwanStockShareholding
+      availability_semantics: SOURCE_DATE_PLUS_ONE_LOCAL_DAY_CONSERVATIVE
+      factors:
+        foreign_investment_shares: {units: SHARES, period_semantics: TRADING_DATE}
+        foreign_investment_shares_ratio: {units: PERCENT, period_semantics: TRADING_DATE}
+        foreign_investment_remaining_shares: {units: SHARES, period_semantics: TRADING_DATE}
+        foreign_investment_remaining_ratio: {units: PERCENT, period_semantics: TRADING_DATE}
+        shares_issued: {units: SHARES, period_semantics: TRADING_DATE}
+
+  blocked_channels:
+    eps:
+      status: BLOCKED_PUBLICATION_SEMANTICS_UNVERIFIED
+      reason: EXACT_PUBLICATION_TIMESTAMP_AND_REPORT_DEFINITION_NOT_VERIFIED
+    shareholding_concentration:
+      status: BLOCKED_FREE_SOURCE_UNAVAILABLE
+      reason: FINMIND_DATASET_REQUIRES_NON_FREE_TIER
+    news:
+      status: BLOCKED_VERIFIED_TARGET_SOURCE_UNAVAILABLE
+      reason: NO_VERIFIED_REPRODUCIBLE_TARGET_SPECIFIC_FREE_NEWS_SOURCE
+
+  claims:
+    PREDICTIVE_GAIN: false
+    CALIBRATED: false
+    TRADING_EDGE: false
+    independent_receipt_observation_is_predictive_sample: false
