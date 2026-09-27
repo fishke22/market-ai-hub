@@ -75,6 +75,27 @@ def test_pairwise_common_origins_reports_each_models_full_coverage():
     assert len(pair["common_origin_indices"]) == pair["common_origin_count"]
 
 
+def test_pairwise_block_bootstrap_respects_horizon_overlap_and_small_sample_boundary():
+    from market_ai_hub.research.tournament.engine import _paired_block_bootstrap_ci
+
+    origins = [10, 11, 12, 20, 30, 40, 50, 60, 70, 80]
+    result = _paired_block_bootstrap_ci(
+        np.array([-1.0, -0.8, -0.5, -0.2, 0.1, 0.2, 0.4, 0.5, 0.8, 1.0]),
+        origins,
+        steps=3,
+    )
+    assert result["bootstrap_block_length"] == 3
+    assert result["bootstrap_replicates"] == 1000
+    assert result["uncertainty_status"] == "EXPLORATORY_ONLY"
+    assert np.isfinite(result["delta_ci_lower"])
+    assert np.isfinite(result["delta_ci_upper"])
+    assert result["delta_ci_lower"] <= result["delta_ci_upper"]
+
+    small = _paired_block_bootstrap_ci(np.array([1.0, 2.0, 3.0, 4.0]), [1, 2, 3, 4], steps=2)
+    assert small["uncertainty_status"] == "INSUFFICIENT_PAIRED_SAMPLE"
+    assert small["delta_ci_lower"] is None and small["delta_ci_upper"] is None
+
+
 def test_random_walk_respects_horizon_in_both_baseline_paths():
     from market_ai_hub.research.evaluation import random_walk
     from market_ai_hub.research.tournament.baselines import RandomWalk
@@ -380,7 +401,10 @@ def test_cli_run_persists_pairwise_and_compare_uses_common_origins(tmp_path, mon
             "model_a": "m1", "model_b": "m2", "task": "price", "common_origin_count": 1,
             "common_origin_coverage_rate": 0.5, "model_a_coverage_rate": 1.0,
             "model_b_coverage_rate": 0.5, "metric": "mae", "model_a_metric_common": 2.0,
-            "model_b_metric_common": 0.5, "delta_a_minus_b": 1.5, "common_origin_indices": [4],
+            "model_b_metric_common": 0.5, "delta_a_minus_b": 1.5,
+            "delta_ci_lower": None, "delta_ci_upper": None, "delta_ci_confidence": 0.95,
+            "bootstrap_replicates": 1000, "bootstrap_block_length": 1,
+            "uncertainty_status": "INSUFFICIENT_PAIRED_SAMPLE", "common_origin_indices": [4],
         }],
     }
     class Engine:
@@ -405,3 +429,36 @@ def test_cli_run_persists_pairwise_and_compare_uses_common_origins(tmp_path, mon
     output = capsys.readouterr().out
     assert "common_n=1" in output and "m1=2.0" in output and "m2=0.5" in output
     assert "full_coverage=1.0" in output and "full_coverage=0.5" in output
+    assert "delta_ci=-" in output and "uncertainty=INSUFFICIENT_PAIRED_SAMPLE" in output
+
+
+def test_mcp_leaderboard_exposes_pairwise_uncertainty_without_promoting(monkeypatch):
+    from market_ai_hub.mcp import server
+    from market_ai_hub.research.tournament import performance_store
+
+    class Store:
+        def leaderboard(self, target=None, horizon=None):
+            return [{
+                "model": "m1", "target": target or "X", "sample_size": 10, "mase": 0.9,
+                "direction_accuracy": 0.6, "balanced_accuracy": 0.55, "mcc": 0.1,
+                "horizon": horizon or "1d",
+            }]
+
+        def pairwise(self, model_a=None, model_b=None, target=None, horizon=None):
+            return [{
+                "model_a": "m1", "model_b": "last_price_naive", "target": target or "X",
+                "horizon": horizon or "1d", "metric": "mae", "common_origin_count": 10,
+                "common_origin_coverage_rate": 1.0, "delta_a_minus_b": -0.2,
+                "delta_ci_lower": -0.5, "delta_ci_upper": 0.1, "delta_ci_confidence": 0.95,
+                "bootstrap_block_length": 1, "uncertainty_status": "EXPLORATORY_ONLY",
+            }]
+
+    monkeypatch.setattr(performance_store, "PerformanceStore", Store)
+    out = server.get_model_leaderboard(target="X", horizon="1d")
+    assert out["records"][0]["sample_status"] == "INSUFFICIENT_SAMPLE"
+    pair = out["pairwise_uncertainty"][0]
+    assert pair["delta_ci_lower"] == pytest.approx(-0.5)
+    assert pair["delta_ci_upper"] == pytest.approx(0.1)
+    assert pair["uncertainty_status"] == "EXPLORATORY_ONLY"
+    assert pair["delta_semantics"] == "A_MINUS_B_LOSS_NEGATIVE_FAVORS_A"
+    assert "不是 predictive evidence" in out["note"]

@@ -176,11 +176,22 @@ def cmd_compare(args) -> int:
         coverage_a = row["model_a_coverage_rate"] if direct else row["model_b_coverage_rate"]
         coverage_b = row["model_b_coverage_rate"] if direct else row["model_a_coverage_rate"]
         metric = row.get("metric") or "NOT_EVALUABLE"
+        ci_lower = row.get("delta_ci_lower")
+        ci_upper = row.get("delta_ci_upper")
+        if ci_lower is not None and not np.isfinite(float(ci_lower)):
+            ci_lower = None
+        if ci_upper is not None and not np.isfinite(float(ci_upper)):
+            ci_upper = None
+        if not direct and ci_lower is not None and ci_upper is not None:
+            ci_lower, ci_upper = -float(ci_upper), -float(ci_lower)
+        ci = "-" if ci_lower is None or ci_upper is None else f"[{ci_lower:.6g},{ci_upper:.6g}]"
+        uncertainty = row.get("uncertainty_status") or "LEGACY_NO_UNCERTAINTY"
         print(
             f"{row['target']}/{row['horizon']} metric={metric} common_n={row['common_origin_count']} "
             f"common_coverage={row['common_origin_coverage_rate']} "
             f"{args.model_a}={metric_a} full_coverage={coverage_a} "
-            f"{args.model_b}={metric_b} full_coverage={coverage_b}"
+            f"{args.model_b}={metric_b} full_coverage={coverage_b} "
+            f"delta_ci={ci} uncertainty={uncertainty} block={row.get('bootstrap_block_length')}"
         )
     return 0
 

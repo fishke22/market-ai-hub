@@ -32,7 +32,9 @@ PAIRWISE_COLUMNS = [
     "evaluation_window_end", "model_a", "revision_a", "model_b", "revision_b", "task",
     "common_origin_count", "common_origin_coverage_rate", "model_a_coverage_rate",
     "model_b_coverage_rate", "metric", "model_a_metric_common", "model_b_metric_common",
-    "delta_a_minus_b", "common_origin_indices_json",
+    "delta_a_minus_b", "delta_ci_lower", "delta_ci_upper", "delta_ci_confidence",
+    "bootstrap_replicates", "bootstrap_block_length", "uncertainty_status",
+    "common_origin_indices_json",
 ]
 
 # 單一 canonical boundary：這些欄位不得存放 NaN/±Inf
@@ -44,6 +46,7 @@ NUMERIC_METRIC_FIELDS = (
 PAIRWISE_NUMERIC_FIELDS = (
     "common_origin_coverage_rate", "model_a_coverage_rate", "model_b_coverage_rate",
     "model_a_metric_common", "model_b_metric_common", "delta_a_minus_b",
+    "delta_ci_lower", "delta_ci_upper", "delta_ci_confidence",
 )
 ACCOUNTING_FIELDS = ("sample_size", "effective_sample_size", "failure_count",
                      "abstention_count", "nonfinite_count", "invalid_target_count")
@@ -132,10 +135,18 @@ class PerformanceStore:
                     common_origin_count BIGINT, common_origin_coverage_rate DOUBLE,
                     model_a_coverage_rate DOUBLE, model_b_coverage_rate DOUBLE, metric VARCHAR,
                     model_a_metric_common DOUBLE, model_b_metric_common DOUBLE, delta_a_minus_b DOUBLE,
+                    delta_ci_lower DOUBLE, delta_ci_upper DOUBLE, delta_ci_confidence DOUBLE,
+                    bootstrap_replicates BIGINT, bootstrap_block_length BIGINT, uncertainty_status VARCHAR,
                     common_origin_indices_json VARCHAR
                 )
                 """
             )
+            for name, dtype in (
+                ("delta_ci_lower", "DOUBLE"), ("delta_ci_upper", "DOUBLE"),
+                ("delta_ci_confidence", "DOUBLE"), ("bootstrap_replicates", "BIGINT"),
+                ("bootstrap_block_length", "BIGINT"), ("uncertainty_status", "VARCHAR"),
+            ):
+                con.execute(f"ALTER TABLE pairwise_results ADD COLUMN IF NOT EXISTS {name} {dtype}")
 
     def save(self, exam_hash: str, target: str, horizon: str, regime: str,
              window: tuple[str, str], revision: str, summary: dict) -> None:

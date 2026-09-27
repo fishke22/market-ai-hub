@@ -55,6 +55,75 @@ def _finite_or_none(value) -> float | None:
     return out if np.isfinite(out) else None
 
 
+PAIRWISE_BOOTSTRAP_REPLICATES = 1000
+PAIRWISE_BOOTSTRAP_CONFIDENCE = 0.95
+PAIRWISE_MIN_CI_SAMPLES = 5
+PAIRWISE_STABLE_SAMPLE = 30
+PAIRWISE_BOOTSTRAP_SEED = 20260927
+
+
+def _overlap_block_length(origins: list[int], steps: int) -> int:
+    """Conservative block size from overlapping forecast label windows."""
+    if not origins:
+        return 1
+    ordered = sorted(int(x) for x in origins)
+    horizon = max(1, int(steps))
+    best = 1
+    right = 0
+    for left, origin in enumerate(ordered):
+        if right < left:
+            right = left
+        while right + 1 < len(ordered) and ordered[right + 1] < origin + horizon:
+            right += 1
+        best = max(best, right - left + 1)
+    return min(best, len(ordered))
+
+
+def _paired_block_bootstrap_ci(
+    deltas: np.ndarray,
+    origins: list[int],
+    steps: int,
+    *,
+    replicates: int = PAIRWISE_BOOTSTRAP_REPLICATES,
+    confidence: float = PAIRWISE_BOOTSTRAP_CONFIDENCE,
+    seed: int = PAIRWISE_BOOTSTRAP_SEED,
+) -> dict:
+    """Deterministic circular block-bootstrap CI for a paired mean delta.
+
+    This is uncertainty evidence only. Samples below the existing leaderboard
+    stability threshold remain EXPLORATORY_ONLY and never become predictive evidence.
+    """
+    values = np.asarray(deltas, dtype=float)
+    n = int(values.size)
+    block_length = _overlap_block_length(origins, steps)
+    status = (
+        "INSUFFICIENT_PAIRED_SAMPLE" if n < PAIRWISE_MIN_CI_SAMPLES
+        else "EXPLORATORY_ONLY" if n < PAIRWISE_STABLE_SAMPLE
+        else "ESTIMATED"
+    )
+    out = {
+        "bootstrap_replicates": int(replicates),
+        "bootstrap_block_length": int(block_length),
+        "delta_ci_confidence": float(confidence),
+        "uncertainty_status": status,
+        "delta_ci_lower": None,
+        "delta_ci_upper": None,
+    }
+    if n < PAIRWISE_MIN_CI_SAMPLES or not np.isfinite(values).all():
+        return out
+    blocks = int(np.ceil(n / block_length))
+    rng = np.random.default_rng(seed)
+    starts = rng.integers(0, n, size=(replicates, blocks))
+    offsets = np.arange(block_length, dtype=int)
+    sample_idx = (starts[:, :, None] + offsets[None, None, :]) % n
+    sample_idx = sample_idx.reshape(replicates, -1)[:, :n]
+    means = values[sample_idx].mean(axis=1)
+    alpha = (1.0 - confidence) / 2.0
+    out["delta_ci_lower"] = _finite_or_none(np.quantile(means, alpha))
+    out["delta_ci_upper"] = _finite_or_none(np.quantile(means, 1.0 - alpha))
+    return out
+
+
 @dataclass
 class ModelRun:
     model: str
@@ -165,7 +234,7 @@ class TournamentEngine:
             "horizon": exam.horizon,
             "n_origins": len(origins),
             "summaries": summaries,
-            "pairwise_comparisons": self._paired_comparisons(runs),
+            "pairwise_comparisons": self._paired_comparisons(runs, steps),
         }
 
     @staticmethod
@@ -222,7 +291,7 @@ class TournamentEngine:
             out.update(self._direction_metrics(acts, dirs, origin))
         return out
 
-    def _paired_comparisons(self, runs: dict[str, ModelRun]) -> list[dict]:
+    def _paired_comparisons(self, runs: dict[str, ModelRun], steps: int = 1) -> list[dict]:
         names = list(runs)
         comparisons = []
         for i, name_a in enumerate(names):
@@ -245,27 +314,37 @@ class TournamentEngine:
                     "model_b_coverage_rate": status_b.count("VALID") / n if n else None,
                     "common_origin_indices": [int(origins[j]) for j in common],
                 }
+                common_origins = [int(origins[j]) for j in common]
                 if not common:
                     row.update(metric=None, model_a_metric_common=None,
                                model_b_metric_common=None, delta_a_minus_b=None)
+                    row.update(_paired_block_bootstrap_ci(np.asarray([], dtype=float), [], steps))
                 elif a.task == "price":
                     actual = np.asarray([a.actuals[j] for j in common], dtype=float)
                     fa = np.asarray([a.points[j] for j in common], dtype=float)
                     fb = np.asarray([b.points[j] for j in common], dtype=float)
-                    ma = float(np.mean(np.abs(actual - fa)))
-                    mb = float(np.mean(np.abs(actual - fb)))
+                    loss_a = np.abs(actual - fa)
+                    loss_b = np.abs(actual - fb)
+                    deltas = loss_a - loss_b
+                    ma = float(np.mean(loss_a))
+                    mb = float(np.mean(loss_b))
                     row.update(metric="mae", model_a_metric_common=ma,
                                model_b_metric_common=mb, delta_a_minus_b=ma - mb)
+                    row.update(_paired_block_bootstrap_ci(deltas, common_origins, steps))
                 else:
                     actual = np.asarray([a.actuals[j] for j in common], dtype=float)
                     origin = np.asarray([a.origin_prices[j] for j in common], dtype=float)
                     true = np.where(actual > origin, "up", np.where(actual < origin, "down", "flat"))
                     pa = np.asarray([a.directions[j] for j in common])
                     pb = np.asarray([b.directions[j] for j in common])
-                    ma = float((true == pa).mean())
-                    mb = float((true == pb).mean())
+                    score_a = (true == pa).astype(float)
+                    score_b = (true == pb).astype(float)
+                    deltas = score_a - score_b
+                    ma = float(score_a.mean())
+                    mb = float(score_b.mean())
                     row.update(metric="direction_accuracy", model_a_metric_common=ma,
                                model_b_metric_common=mb, delta_a_minus_b=ma - mb)
+                    row.update(_paired_block_bootstrap_ci(deltas, common_origins, steps))
                 comparisons.append(row)
         return comparisons
 
