@@ -31,7 +31,15 @@ def test_timesfm_research_gate_fails_when_exact_snapshot_missing(tmp_path):
     assert "PINNED_SNAPSHOT_MISSING" in decision["failures"]
 
 
-def test_timesfm_research_gate_matches_local_pinned_runtime():
+def test_timesfm_research_gate_matches_pinned_contract_with_local_prereqs(monkeypatch):
+    monkeypatch.setattr(
+        "market_ai_hub.services.model_governance.package_version",
+        lambda name: "3.0.2" if name == "timesfm" else "NOT_INSTALLED",
+    )
+    monkeypatch.setattr(
+        "market_ai_hub.services.model_governance.exact_snapshot_present",
+        lambda model_id, cache_dir, revision: True,
+    )
     decision = timesfm3_research_access_gate(TIMESFM3_PERSONAL_RESEARCH_ACK)
     assert decision["allowed"] is True
     assert decision["package_version_expected"] == "3.0.2"
@@ -45,6 +53,10 @@ def test_timesfm_research_singleton_is_separate_from_serving(monkeypatch):
 
     runtime._timesfm_research = None
     runtime._timesfm = None
+    monkeypatch.setattr(
+        "market_ai_hub.services.model_governance.require_timesfm3_research_access",
+        lambda acknowledgement, **kwargs: {"allowed": True},
+    )
 
     class FakeAdapter:
         def __init__(self, *, purpose):
@@ -61,13 +73,28 @@ def test_timesfm_research_singleton_is_separate_from_serving(monkeypatch):
     assert research is not serving
 
 
-def test_timesfm_research_singleton_revalidates_ack_after_initialization():
+def test_timesfm_research_singleton_revalidates_ack_after_initialization(monkeypatch):
     import market_ai_hub.services.model_runtime as runtime
 
     runtime._timesfm_research = None
+    calls = []
+
+    def fake_require(acknowledgement, **kwargs):
+        calls.append(acknowledgement)
+        if acknowledgement != TIMESFM3_PERSONAL_RESEARCH_ACK:
+            raise ModelUsageBlocked(
+                "timesfm-3.0 research access blocked: PERSONAL_RESEARCH_ACK_REQUIRED"
+            )
+        return {"allowed": True}
+
+    monkeypatch.setattr(
+        "market_ai_hub.services.model_governance.require_timesfm3_research_access",
+        fake_require,
+    )
     runtime.get_timesfm_research(TIMESFM3_PERSONAL_RESEARCH_ACK)
     with pytest.raises(ModelUsageBlocked, match="PERSONAL_RESEARCH_ACK_REQUIRED"):
         runtime.get_timesfm_research("wrong")
+    assert calls == [TIMESFM3_PERSONAL_RESEARCH_ACK, "wrong"]
 
 
 def test_predict_timesfm_blocks_before_market_fetch_without_ack(monkeypatch):
@@ -101,7 +128,25 @@ def test_predict_timesfm_ack_uses_research_runtime_not_serving(monkeypatch):
     )
     adapter = SimpleNamespace(purpose="RESEARCH")
     calls = {}
+    access = {
+        "schema_version": "TIMESFM3_RESEARCH_USAGE_V1",
+        "model": "timesfm-3.0",
+        "usage_mode": "PERSONAL_NONCOMMERCIAL_NONPRODUCTION_RESEARCH",
+        "allowed": True,
+        "reason": "ALLOWED",
+        "weight_license": "timesfm-non-commercial-license-v1.0",
+        "local_files_only": True,
+        "automatic_download_allowed": False,
+        "commercial_use_allowed": False,
+        "production_use_allowed": False,
+        "future_covariates_allowed": False,
+        "past_only_covariates_allowed": True,
+    }
 
+    monkeypatch.setattr(
+        "market_ai_hub.services.model_governance.timesfm3_research_access_gate",
+        lambda acknowledgement: access,
+    )
     monkeypatch.setattr(
         "market_ai_hub.providers.yfinance_provider.YFinanceProvider.fetch",
         lambda *args, **kwargs: frame,
