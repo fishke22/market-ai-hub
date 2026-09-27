@@ -1,6 +1,8 @@
 """Phase 2G.1 — Target Instrument Contract（true execution target）。"""
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel
 
 # 角色標記（不得混稱）
@@ -21,6 +23,43 @@ REFERENCE_INSTRUMENTS = {
     "CME_NIKKEI": REFERENCE,
     "^N225": PROXY,                # yfinance research proxy，不是最終交易標的
 }
+
+
+_INSTRUMENT_ALIASES = {
+    "JNU": EXECUTION_TARGET,
+    "OSE_NIKKEI225_MICRO_FUTURES": EXECUTION_TARGET,
+    "大阪微日經": EXECUTION_TARGET,
+    "大阪微型日經": EXECUTION_TARGET,
+    "大阪日經微型": EXECUTION_TARGET,
+    "大阪日經225微型期貨": EXECUTION_TARGET,
+    "日經225微型期貨": EXECUTION_TARGET,
+    "NIKKEI225 MICRO": EXECUTION_TARGET,
+    "NIKKEI 225 MICRO": EXECUTION_TARGET,
+    "NIKKEI 225 MICRO FUTURES": EXECUTION_TARGET,
+}
+
+
+def normalize_instrument_alias(value: str) -> str:
+    """Map common user-facing aliases/quote codes to the canonical execution target."""
+    raw = str(value or "").strip()
+    if not raw:
+        return raw
+    upper = raw.upper()
+    if re.fullmatch(r"JNU(?:PM)?\d{4}", upper):
+        return EXECUTION_TARGET
+    if upper in _INSTRUMENT_ALIASES:
+        return _INSTRUMENT_ALIASES[upper]
+    if raw in _INSTRUMENT_ALIASES:
+        return _INSTRUMENT_ALIASES[raw]
+    compact = re.sub(r"\s+", " ", upper)
+    return _INSTRUMENT_ALIASES.get(compact, raw)
+
+
+def instrument_display_name(value: str) -> str:
+    canonical = normalize_instrument_alias(value)
+    if canonical == EXECUTION_TARGET:
+        return "大阪日經225微型期貨（JNU）"
+    return canonical
 
 
 def role_of(instrument: str) -> str:

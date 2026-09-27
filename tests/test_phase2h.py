@@ -155,7 +155,7 @@ def test_V1_MCP_backward_compat():
     names = asyncio.run(main())
     for want in ("health_check", "get_system_info", "get_market_data", "predict_chronos",
                  "predict_timesfm", "predict_ensemble", "get_model_performance",
-                 "backtest", "analyze_osaka_nikkei", "analyze_taiwan_stock"):
+                 "backtest", "analyze_jnu", "analyze_osaka_nikkei", "analyze_taiwan_stock"):
         assert want in names
     for want in ("get_analysis_packet", "get_data_coverage", "get_event_calendar",
                  "get_official_release_snapshot", "get_target_instrument_state",
@@ -170,7 +170,8 @@ def _skill_text(name: str) -> str:
 
 def test_osaka_skill_target():
     t = _skill_text("osaka-micro-analysis")
-    assert "OSE Nikkei 225 Micro Futures" in t and "PROXY" in t
+    assert "大阪日經225微型期貨（JNU）" in t
+    assert "analyze_jnu" in t and "日經225現貨輔助資料" in t
 
 
 def test_taiwan_skill():

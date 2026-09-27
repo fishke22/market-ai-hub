@@ -14,11 +14,11 @@ from typing import Any
 
 # ── 2Q-F.5 §6：canonical instrument display names ──
 CANONICAL_INSTRUMENT_NAMES = {
-    "OSE_NIKKEI225_MICRO_FUTURES": "OSE Nikkei 225 Micro Futures",
-    "OSE_NIKKEI225_MINI_FUTURES": "OSE Nikkei 225 mini Futures",
-    "OSE_NIKKEI225_LARGE_FUTURES": "OSE Nikkei 225 Futures (Large)",
-    "^N225": "Nikkei 225 index (^N225, PROXY)",
-    "TAIEX": "TAIEX cash index (forecast/reference)",
+    "OSE_NIKKEI225_MICRO_FUTURES": "大阪日經225微型期貨（JNU）",
+    "OSE_NIKKEI225_MINI_FUTURES": "大阪日經225小型期貨",
+    "OSE_NIKKEI225_LARGE_FUTURES": "大阪日經225大型期貨",
+    "^N225": "日經225現貨指數（輔助參考）",
+    "TAIEX": "臺灣加權指數（指數參考）",
 }
 
 
