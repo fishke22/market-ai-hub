@@ -1,9 +1,19 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU direct-research/human-output MERGED_POSTMERGE_VERIFIED on product build `858029747b588ac6`; PR #67 CI `36283073790` PASS, merged main `4d23cf7d549330d5ecc644bbef33819d1d3fd792`; post-merge CherryStudio stdio `analyze_jnu` smoke PASS. Persistent quote recorder is healthy/single-owner on prior build `e8dc080886d0b5a2`, so runtime/disk mismatch remains until an explicitly authorized handover. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 Jerry robustness comparison package on branch `codex/jerry-paired-uncertainty`, source commit `734d42bbc1eda16b41ec02e7f296c3d32291df4e`, product build `41f978ce1c3e4a97`, PR #69 OPEN. Local focused/offline validation is PASS; GitHub CI run `36289136004` / run #221 was still IN_PROGRESS at documentation time. Real forward/event-probability evidence remains NONE_YET and market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
+
+### 2026-09-27 jerry-backtest-lab comparison / paired uncertainty
+
+Reviewed local clone of `fishke22/jerry-backtest-lab` at `4df8b3a12a4d781fa950e32b4c86298f672e4c2e`. Useful robustness ideas include cost stress, CPCV/purge/embargo, PBO, DSR, Holm multiple-testing control and second-engine replay, but only one bounded capability was appropriate to integrate now: paired same-origin uncertainty. No Jerry source code was copied; the reviewed tree had no top-level LICENSE, and no Jerry-only dependency was added.
+
+Tournament pairwise comparisons now compute deterministic circular block-bootstrap CIs from per-origin metric deltas. Block length is derived from overlapping forecast label windows at the evaluated horizon. Fewer than 5 common origins produce `INSUFFICIENT_PAIRED_SAMPLE` with no CI; 5–29 remain `EXPLORATORY_ONLY`; 30+ are `ESTIMATED`. These states quantify historical OOS comparison uncertainty only and never imply predictive evidence, calibration, or trading edge. CI metadata is persisted in DuckDB, printed by `tournament compare`, and exposed through MCP `get_model_leaderboard.pairwise_uncertainty`.
+
+Jerry's row-count purge/embargo, PBO/DSR/Holm and fixed-bps execution engine were not transplanted. MARKET_AI_HUB already has stricter forecast-origin/label-window/available-at governance; PBO/DSR/Holm need a canonical trial-family ledger before they can be interpreted without understating prior experimentation; trading cost remains a separate economic-value layer rather than forecast evidence.
+
+Validation: focused offline=`90 passed, 4 deselected`; full offline first pass=`1976 passed, 1 skipped, 34 deselected, 1 failed` where the sole failure was the existing Windows global SPARK owner mutex while the live recorder held the single-owner lock; final offline excluding only `test_single_instance_lock_releases_after_error`=`1976 passed, 1 skipped, 35 deselected, 110 warnings in 185.06s`, exit 0. Changed-file secret scan=0; staged diff check PASS. No broker login/logout/restart/order/account action occurred. Review details: `research/phase3/reports/JERRY_BACKTEST_LAB_INTEGRATION_2026-09-27.md`.
 
 ### 2026-09-27 JNU direct model + human-output closure
 
