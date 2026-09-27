@@ -245,7 +245,19 @@ P7 不等待市場 outcome 才施工，因為它驗的是獨立執行／成本 p
 
 新增 `scripts/validate_accuracy_v2_system.py` 作整體 preflight。2026-09-27 實跑回 `READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION`：JNU direct model 真正載入成功，P4 no-new-forward baseline path=OK，P5=`WAITING_FOR_ORIGIN` for 2026-09-28T00:05Z，P7=`P7_ENGINEERING_PASS`。目前 point governance 仍是 settlement 66,140 的 zero-return baseline，development-fit 90% interval≈63,439–68,841；`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`、strong direction=false。P6 仍是條件式：沒有證明盤中OFI／共享訓練／新聞／fine-tune 的資料、runtime與獨立增益前，不為了「完工」強做。
 
-P7 focused/contract + open-source protocol=`18 passed`；P7/P5/P4 affected-scope integration=`92 passed, 1 deselected, 11 warnings`。之後針對全系統進行新的完整驗證並修復三個語義一致性缺口：舊 Phase2 freeze 不再覆蓋 current Accuracy v2 truth、AnalysisPacket 不再誤稱沒有 JNU direct path、direct JNU horizon 統一成 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` 並固定 2026-09-18 → 2026-09-24 假日回歸。最終 full-offline=`2097 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0；MCP stdio=22 tools、Chronos實機CPU/CUDA/quantile PASS、TimesFM RESEARCH univariate/multivariate/past-only covariates/CUDA PASS、public collector PASS。完整矩陣見 `SYSTEM_VALIDATION_20260927.md`。
+P7 focused/contract + open-source protocol=`18 passed`；P7/P5/P4 affected-scope integration=`92 passed, 1 deselected, 11 warnings`。之後針對全系統進行新的完整驗證並修復三個語義一致性缺口：舊 Phase2 freeze 不再覆蓋 current Accuracy v2 truth、AnalysisPacket 不再誤稱沒有 JNU direct path、direct JNU horizon 統一成 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` 並固定 2026-09-18 → 2026-09-24 假日回歸。最終 full-offline=`2112 passed, 1 skipped, 24 deselected, 143 warnings`，exit 0；MCP stdio=24 tools、Chronos實機CPU/CUDA/quantile PASS、TimesFM RESEARCH univariate/multivariate/past-only covariates/CUDA PASS、public collector PASS。完整矩陣見 `SYSTEM_VALIDATION_20260927.md`。
+
+## 8.2 Data Continuity / Capability / Golden Answer checkpoint（2026-09-27）
+
+為處理「未來 exact JNU 資料暫時或長期拿不到」而不製造假 target，本系統新增 `AV2.CONTINUITY.1`。它先讀 exact-contract official history，再比較 JPX/OSE Daily Report 與 receipt-timestamped settlement channel；量化 source channel count、matching channel count、hash、revision conflict 與 independent publisher count。兩個 JPX channel 仍屬同一 publisher，因此即使雙通道一致，也不能宣稱兩個獨立出版者。current actual state=`NORMAL_TARGET_DATA`；JNU2610 latest=2026-09-25 / 66,140；next published observation=2026-09-28；expected publication=2026-09-29T00:00:00Z；grace 後 stale threshold=00:30Z。實際最新 redundancy=`SINGLE_CHANNEL_ONLY`，context-confidence=`MEDIUM` 且 `context_confidence_not_probability=true`。
+
+若 exact target reference 缺失、next expected observation overdue 或兩個 official channel 發生 value conflict，系統切到 `DATA_CONTINUITY_MODE`。此模式只允許最後可信 JNU settlement、P4 volatility/regime/empirical interval、官方事件與其他市場資料作 context/risk assessment；proxy 永遠不能代替 JNU target，不能新增 predictive-gain evidence、不能公開 calibrated probability、不能宣稱 trading edge。`analyze_jnu` 在 continuity mode 不呼叫 direct target model；P5 仍可 settle 已經在 origin 前凍結的 pending outcomes，但禁止新的 precommit。資料恢復後才回 normal target path；錯過的 prediction 不補寫。
+
+新增 `AV2.CAPABILITIES.1` machine-readable registry，MCP 提供 `get_capability_registry` 與 `get_data_continuity_status`。每項 capability 固定回 `available / data_ready / evidence_level / user_visible / blocked_reason / details`，讓 Agent 不需從零散文字猜測可用性。實際 registry 共15項，current available=11、data_ready=11、blocked=8；predictive gain / calibrated probability / trading edge / live trading 仍 false。MCP stdio tool count 因此由22增為24。
+
+新增 Golden Answer regression：禁止 direct target 退回 next-session wording、禁止 interval 被當 probability、禁止 legacy Phase2 VAR evidence 回到 current truth、禁止再說沒有 Direct Micro path、禁止 proxy=target、禁止未證明的 predictive/trading edge。P4 target 欄位也同步為 `next_published_observation_date`。
+
+P5 natural-forward 準備再加一層 continuity guard，但 scheduler 仍未 apply。`run_accuracy_v2_p5_forward_cycle.py --dry-run` 實跑 `writes_prediction=false`；current preview 仍 `WAITING_FOR_ORIGIN` for 2026-09-28T00:05Z。continuity/capability focused=`43 passed`，affected integration=`95 passed, 1 deselected, 22 warnings`；第一次 full suite 只因舊 `tool_count_is_22` freeze 失敗，其餘2111 passed；修正介面 freeze 後最終 full offline=`2112 passed, 1 skipped, 24 deselected, 143 warnings`，exit 0。這些都是工程／語義／資料中斷韌性證據，不新增市場效果宣稱。
 
 ## 9. 免費官方／原始研究來源
 

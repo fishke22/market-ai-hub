@@ -901,7 +901,19 @@ def run_p5_cycle(
     }
     audit = db or PA.PredictionAuditDB()
     settled = settle_p5_pending(now=as_of, db=audit)
-    precommit = precommit_p5_forward(now=as_of, db=audit, protocol=p)
+
+    from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+    continuity = jnu_data_continuity_status(now=as_of)
+    if continuity.get("context_only"):
+        precommit = P5CycleResult(
+            status=STATUS_DATA_NOT_READY,
+            reason="DATA_CONTINUITY_MODE:" + str(
+                continuity.get("reason") or "EXACT_TARGET_NOT_READY"
+            ),
+        )
+    else:
+        precommit = precommit_p5_forward(now=as_of, db=audit, protocol=p)
+
     evidence = p5_forward_evidence_summary(now=as_of, db=audit, protocol=p)
     payload = {
         "schema_version": "AV2P5RUN.1",
@@ -909,6 +921,7 @@ def run_p5_cycle(
         "local_date": local_date,
         "attempt_count": attempt_count,
         "collection": collection,
+        "data_continuity": continuity,
         "settlements": [x.model_dump() for x in settled],
         "precommit": precommit.model_dump(),
         "evidence": evidence,

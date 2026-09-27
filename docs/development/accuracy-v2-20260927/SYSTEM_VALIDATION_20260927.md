@@ -5,7 +5,7 @@
 ## 最終狀態
 
 - branch: `codex/vnext-audit-handoff`
-- source/config build: `3e79f6d0f71a0276`
+- source/config build: `794f5d800aeb9924`
 - readiness: `READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION`
 - P2: `NO_IMPROVEMENT / BASELINE_RETAINED`
 - P5: `COLLECTING_FORWARD_EVIDENCE`, canonical predictions=0, settled origins=0
@@ -18,12 +18,12 @@
 
 `.venv\Scripts\python.exe -m pytest -q -k "not test_single_instance_lock_releases_after_error"`
 
-- 2097 passed
+- 2112 passed
 - 1 skipped
 - 24 deselected
-- 132 warnings
+- 143 warnings
 - exit 0
-- elapsed 201.11s
+- final continuity/capability suite elapsed 215.63s
 
 唯一固定排除的是既有 recorder owner-mutex 單例；本次沒有停止、重啟、重登或接管 recorder。warnings 主要是測試碼中的 `datetime.utcnow()` deprecation，屬技術債，不是目前功能失敗。
 
@@ -32,7 +32,7 @@
 | 功能面 | 實際驗證 | 結果 |
 |---|---|---|
 | repo/build | HEAD/origin/dirty/build bootstrap | PASS |
-| MCP stdio | 外部 stdio initialize + list_tools | PASS；22 tools、expected missing=set() |
+| MCP stdio | 外部 stdio initialize + list_tools | PASS；24 tools、expected missing=set() |
 | MCP health | health_check | PASS；DuckDB/providers healthy |
 | public collector | JPX + TAIFEX 實際 refresh | PASS；broker/credentials/recorder/order 均 false |
 | JPX | 2026-09-25 JNU official settlement/archive | PASS |
@@ -58,9 +58,9 @@
 | P7 migration | rebuild recipe/path/isolation | PASS |
 | secret/live boundary | no Git secret migration / no live order | PASS / fail closed |
 
-## MCP 22 個工具
+## MCP 24 個工具
 
-`health_check`, `get_system_info`, `get_data_source_status`, `get_data_coverage`, `get_target_instrument_state`, `get_event_calendar`, `get_official_release_snapshot`, `get_research_gates`, `get_forward_test_status`, `get_model_leaderboard`, `get_model_performance`, `get_analysis_packet`, `get_analysis_archive_status`, `get_market_data`, `analyze_jnu`, `analyze_osaka_nikkei`, `analyze_taiwan_stock`, `predict_chronos`, `predict_timesfm`, `predict_ensemble`, `run_ts_validation`, `backtest`。
+`health_check`, `get_system_info`, `get_data_source_status`, `get_data_coverage`, `get_data_continuity_status`, `get_capability_registry`, `get_target_instrument_state`, `get_event_calendar`, `get_official_release_snapshot`, `get_research_gates`, `get_forward_test_status`, `get_model_leaderboard`, `get_model_performance`, `get_analysis_packet`, `get_analysis_archive_status`, `get_market_data`, `analyze_jnu`, `analyze_osaka_nikkei`, `analyze_taiwan_stock`, `predict_chronos`, `predict_timesfm`, `predict_ensemble`, `run_ts_validation`, `backtest`。
 
 工具存在不等於其結果可以升級為 production evidence；Agent 必須一起讀 research gates、資料級別與 validation truth。
 
@@ -77,6 +77,14 @@ exact-contract JNU direct research path 已可實際載入 Chronos，因此現�
 ### 3. Direct JNU 使用 next-session 語義
 
 direct path 已統一成 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION`。2026-09-18 的下一筆 expected published observation 固定測試為 2026-09-24；使用者文字改為「下一筆官方發布的清算價觀測」，不再說「下一交易日」。
+
+## Data Continuity 與 Capability Registry
+
+目前 actual continuity snapshot 是 `NORMAL_TARGET_DATA`：JNU2610 latest official reference=2026-09-25 / 66,140，next expected published observation=2026-09-28，expected publication=2026-09-29T00:00:00Z，stale-after=00:30Z。最新 source redundancy=`SINGLE_CHANNEL_ONLY`：receipt channel 有 hash-verified 66,140；最新 local Daily Report channel 沒有同日 row。兩者本來也都屬 JPX/OSE，所以 independent publisher count 明確維持1。context-confidence=`MEDIUM` 且不是 probability。
+
+continuity mode 的負測試固定：overdue、no exact reference、source conflict 都必須 context-only；direct target prediction / new P5 precommit / predictive-gain update / calibrated probability / trading edge 全部阻擋，proxy 不能變 target。P5 可繼續 settle 已存在的 frozen pending outcome。正常資料則完全不改原本 JNU/P5 路徑。
+
+Capability Registry 共15項，Agent 可直接讀 `available/data_ready/evidence_level/user_visible/blocked_reason`；actual summary available=11、data_ready=11、blocked=8。Golden Answer tests 固定 published-observation、interval-not-probability、legacy evidence 不覆蓋 current truth、direct path 存在但 forward-unvalidated、proxy≠target、edge unproven。
 
 ## 可以相信與不能宣稱
 

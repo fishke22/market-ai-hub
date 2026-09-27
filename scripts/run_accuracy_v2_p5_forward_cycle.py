@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 
+from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+
 from market_ai_hub.research.accuracy_v2_p5_engine import (
     p5_forward_evidence_summary,
     preview_p5_origin,
@@ -20,6 +22,7 @@ def main() -> int:
             "status": "DRY_RUN",
             "preview": preview_p5_origin(),
             "evidence": p5_forward_evidence_summary(),
+            "data_continuity": jnu_data_continuity_status(),
             "broker_used": False,
             "credentials_used": False,
             "recorder_touched": False,

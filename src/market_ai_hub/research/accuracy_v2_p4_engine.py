@@ -31,7 +31,7 @@ from market_ai_hub.research.accuracy_v2_p2_engine import (
 )
 from market_ai_hub.research.accuracy_v2_p4 import P4Protocol, load_p4_protocol
 from market_ai_hub.research.future_data_acquisition import future_data_readiness
-from market_ai_hub.services.calendar import next_ose_derivatives_sessions
+from market_ai_hub.services.calendar import next_trading_sessions
 from market_ai_hub.services.jnu_direct import load_direct_micro_settlements
 
 
@@ -507,11 +507,11 @@ def analyze_no_new_forward_outcome(
         }
     quantile["price_quantiles"] = q_prices
 
-    target_dates = next_ose_derivatives_sessions(latest_date, 1)
-    next_session = target_dates[0] if target_dates else None
+    target_dates = next_trading_sessions("^N225", latest_date, 1)
+    next_observation = target_dates[0] if target_dates else None
     label_available = (
-        jpx_report_publication_for_session(next_session).isoformat()
-        if next_session else None
+        jpx_report_publication_for_session(next_observation).isoformat()
+        if next_observation else None
     )
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     result = {
@@ -527,7 +527,7 @@ def analyze_no_new_forward_outcome(
             "exact_contract": meta["quote_code"],
             "contract_month": month,
             "target_measure": p.raw["target_measure"],
-            "next_session_date": next_session,
+            "next_published_observation_date": next_observation,
             "label_available_at": label_available,
         },
         "data": {

@@ -132,11 +132,18 @@ def get_system_info() -> dict:
     gates = _research_gates(cards)
     from market_ai_hub.services.build_info import build_fingerprint
 
+    try:
+        from market_ai_hub.services.capability_registry import capability_registry_snapshot
+        capability_summary = capability_registry_snapshot().get("summary", {})
+    except Exception as exc:
+        capability_summary = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+
     return {
         "python": platform.python_version(),
         "os": platform.platform(),
         **info,
         "project_path": str(project_root()),
+        "capability_summary": capability_summary,
         "models": {
             n: {
                 "model_role": c.role,
@@ -587,6 +594,10 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
     public 模式只回一般使用者看得懂的中文摘要；audit 才回技術欄位。
     價格模型優先使用 JPX/OSE 官方 Micro 實際限月清算價，不用 ^N225 冒充 Micro。
     """
+    from market_ai_hub.services.data_continuity import (
+        jnu_continuity_user_summary,
+        jnu_data_continuity_status,
+    )
     from market_ai_hub.services.jnu_direct import (
         analyze_jnu_direct,
         jnu_user_summary,
@@ -597,11 +608,26 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
         refresh = refresh_jnu_direct_data()
     except Exception as exc:
         refresh = {"status": "REFRESH_FAILED", "error": type(exc).__name__}
+
+    continuity = jnu_data_continuity_status(contract_month=contract_month)
+    if continuity.get("context_only"):
+        if view == "audit":
+            return {
+                "status": "DATA_CONTINUITY_MODE",
+                "data_refresh": refresh,
+                "data_continuity": continuity,
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            }
+        return jnu_continuity_user_summary(continuity)
+
     direct = analyze_jnu_direct(
         horizon=horizon,
         contract_month=contract_month,
         validate_history=True,
     )
+    direct["data_continuity"] = continuity
     if view == "audit":
         direct["data_refresh"] = refresh
         return direct
@@ -614,7 +640,15 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
         }
     except Exception:
         calibration = {"public_calibrated": False, "settled_samples": 0}
-    return jnu_user_summary(direct, calibration_status=calibration)
+    public = jnu_user_summary(direct, calibration_status=calibration)
+    public["資料連續性"] = {
+        "模式": continuity.get("mode"),
+        "新鮮度": continuity.get("freshness_status"),
+        "來源交叉驗證": (continuity.get("source_redundancy") or {}).get("status"),
+        "context_confidence_grade": continuity.get("context_confidence_grade"),
+        "not_probability": True,
+    }
+    return public
 
 
 @mcp.tool()
@@ -686,12 +720,45 @@ def get_data_coverage() -> dict:
         p5_forward = p5_forward_evidence_summary()
     except Exception as exc:
         p5_forward = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+        continuity = jnu_data_continuity_status()
+    except Exception as exc:
+        continuity = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "mode": "DATA_CONTINUITY_STATUS_UNAVAILABLE",
+            "context_only": True,
+            "target_prediction_allowed": False,
+            "proxy_can_replace_target": False,
+        }
     return {
         "factors": [r.model_dump() for r in recs],
         "summary": LiveCoverageAuditor().summary([r for r in recs]),
         "future_data_acquisition": future,
         "accuracy_v2_p5_forward": p5_forward,
+        "data_continuity": continuity,
     }
+
+
+@mcp.tool()
+def get_data_continuity_status() -> dict:
+    """JNU exact-target continuity / staleness / source-redundancy status.
+
+    DATA_CONTINUITY_MODE means context-only: proxies may inform risk but may not
+    replace the exact JNU target or create forward predictive evidence.
+    """
+    from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+
+    return jnu_data_continuity_status()
+
+
+@mcp.tool()
+def get_capability_registry() -> dict:
+    """Machine-readable available/data_ready/evidence/blocked-reason capability map."""
+    from market_ai_hub.services.capability_registry import capability_registry_snapshot
+
+    return capability_registry_snapshot()
 
 
 @mcp.tool()

@@ -29,6 +29,7 @@ async def run() -> int:
                 "health_check", "get_system_info", "get_data_source_status", "get_market_data",
                 "predict_chronos", "predict_timesfm", "predict_ensemble", "get_model_performance",
                 "backtest", "analyze_osaka_nikkei", "analyze_taiwan_stock",
+                "get_data_continuity_status", "get_capability_registry",
             }
             missing = expected - set(names)
             results["missing_tools"] = sorted(missing)

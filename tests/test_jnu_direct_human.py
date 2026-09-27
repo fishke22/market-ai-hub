@@ -264,6 +264,7 @@ def test_jnu_public_summary_prefers_sealed_prequential_holdout():
 
 def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     import market_ai_hub.mcp.server as server
+    import market_ai_hub.services.data_continuity as dc
     import market_ai_hub.services.jnu_direct as d
 
     calls = {"refresh": 0, "validate": None}
@@ -295,6 +296,17 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     monkeypatch.setattr(d, "refresh_jnu_direct_data", fake_refresh)
     monkeypatch.setattr(d, "analyze_jnu_direct", fake_analyze)
     monkeypatch.setattr(
+        dc,
+        "jnu_data_continuity_status",
+        lambda contract_month="": {
+            "mode": "NORMAL_TARGET_DATA",
+            "context_only": False,
+            "freshness_status": "FRESH_UNTIL_NEXT_EXPECTED_PUBLICATION",
+            "source_redundancy": {"status": "DUAL_CHANNEL_MATCH"},
+            "context_confidence_grade": "HIGH",
+        },
+    )
+    monkeypatch.setattr(
         server,
         "get_forward_test_status",
         lambda: {"w32_event_probability_settled": 0},
@@ -303,7 +315,47 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     assert calls == {"refresh": 1, "validate": True}
     assert out["商品"] == "大阪日經225微型期貨（JNU）"
     assert out["直接價格模型"]["可信度"] == "低信心研究參考"
+    assert out["資料連續性"]["模式"] == "NORMAL_TARGET_DATA"
     assert "status" not in out
+
+
+def test_analyze_jnu_mcp_continuity_mode_does_not_call_direct_model(monkeypatch):
+    import market_ai_hub.mcp.server as server
+    import market_ai_hub.services.data_continuity as dc
+    import market_ai_hub.services.jnu_direct as d
+
+    calls = {"direct": 0}
+    monkeypatch.setattr(d, "refresh_jnu_direct_data", lambda: {"status": "OK"})
+
+    def forbidden_direct(**kwargs):
+        calls["direct"] += 1
+        raise AssertionError("direct model must not run in DATA_CONTINUITY_MODE")
+
+    monkeypatch.setattr(d, "analyze_jnu_direct", forbidden_direct)
+    monkeypatch.setattr(
+        dc,
+        "jnu_data_continuity_status",
+        lambda contract_month="": {
+            "mode": "DATA_CONTINUITY_MODE",
+            "context_only": True,
+            "reason": "EXPECTED_PUBLISHED_OBSERVATION_OVERDUE",
+        },
+    )
+    monkeypatch.setattr(
+        dc,
+        "jnu_continuity_user_summary",
+        lambda snapshot: {
+            "商品": "大阪日經225微型期貨（JNU）",
+            "模式": "資料連續性模式（只做情境與風險分析）",
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+        },
+    )
+    out = server.analyze_jnu()
+    assert calls["direct"] == 0
+    assert out["模式"].startswith("資料連續性模式")
+    assert out["PREDICTIVE_GAIN"] is False
 
 def test_analysis_packet_accepts_jnu_alias(monkeypatch):
     import market_ai_hub.packet.builder as builder

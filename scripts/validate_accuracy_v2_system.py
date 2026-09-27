@@ -7,26 +7,55 @@ from market_ai_hub.research.accuracy_v2_p4_engine import analyze_no_new_forward_
 from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary, preview_p5_origin
 from market_ai_hub.research.accuracy_v2_p7_engine import run_p7_acceptance
 from market_ai_hub.services.build_info import build_fingerprint
+from market_ai_hub.services.capability_registry import capability_registry_snapshot
+from market_ai_hub.services.data_continuity import jnu_data_continuity_status
 from market_ai_hub.services.jnu_direct import analyze_jnu_direct
 
 
 def main() -> int:
-    jnu = analyze_jnu_direct("1d", validate_history=False)
+    continuity = jnu_data_continuity_status()
+    jnu = (
+        {"status": "SKIPPED_DATA_CONTINUITY_MODE", "direct_model_available": False}
+        if continuity.get("context_only")
+        else analyze_jnu_direct("1d", validate_history=False)
+    )
     p4 = analyze_no_new_forward_outcome()
     p5_preview = preview_p5_origin()
     p5 = p5_forward_evidence_summary()
     p7 = run_p7_acceptance()
-    analysis_ready = jnu.get("status") == "OK" and p4.get("status") == "OK"
-    governed_prediction_ready = p5_preview.get("status") in {
-        "WAITING_FOR_ORIGIN", "ELIGIBLE", "ALREADY_PRECOMMITTED",
-        "BEFORE_FIRST_ELIGIBLE_ORIGIN", "MISSED_CANONICAL_ORIGIN",
-    }
+    capabilities = capability_registry_snapshot()
+
+    p4_ready = p4.get("status") == "OK"
+    analysis_ready = p4_ready and (
+        jnu.get("status") == "OK" or bool(continuity.get("target_reference_available"))
+    )
+    governed_prediction_ready = (
+        not continuity.get("context_only")
+        and p5_preview.get("status") in {
+            "WAITING_FOR_ORIGIN", "ELIGIBLE", "ALREADY_PRECOMMITTED",
+            "BEFORE_FIRST_ELIGIBLE_ORIGIN", "MISSED_CANONICAL_ORIGIN",
+        }
+    )
+    context_only_ready = bool(
+        continuity.get("context_only")
+        and continuity.get("target_reference_available")
+        and p4_ready
+    )
     p7_ready = p7.get("engineering_status") == "P7_ENGINEERING_PASS"
-    overall = analysis_ready and governed_prediction_ready and p7_ready
+    overall = analysis_ready and (governed_prediction_ready or context_only_ready) and p7_ready
+    readiness_status = (
+        "READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION"
+        if overall and governed_prediction_ready
+        else "READY_FOR_CONTEXT_ANALYSIS_ONLY"
+        if overall and context_only_ready
+        else "NOT_READY"
+    )
     out = {
         "schema_version": "AV2.READINESS.1",
-        "status": "READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION" if overall else "NOT_READY",
+        "status": readiness_status,
         "build": build_fingerprint(),
+        "data_continuity": continuity,
+        "capability_registry_summary": capabilities.get("summary"),
         "analysis": {
             "ready": analysis_ready,
             "jnu_status": jnu.get("status"),
@@ -40,6 +69,7 @@ def main() -> int:
         },
         "forward_monitor": {
             "ready": governed_prediction_ready,
+            "context_only_ready": context_only_ready,
             "preview": p5_preview,
             "expected_origins": p5.get("expected_canonical_origins"),
             "canonical_predictions": p5.get("canonical_prediction_count"),

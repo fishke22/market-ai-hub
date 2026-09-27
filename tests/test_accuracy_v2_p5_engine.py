@@ -297,6 +297,7 @@ def test_missing_forward_origins_trigger_pipeline_downgrade(db):
 
 def test_cycle_attempt_limit_skips_third_collection(monkeypatch, tmp_path, db):
     import market_ai_hub.research.accuracy_v2_p5_engine as engine
+    import market_ai_hub.services.data_continuity as dc
 
     monkeypatch.setattr(engine, "data_root", lambda: tmp_path)
     calls = {"collect": 0}
@@ -320,6 +321,11 @@ def test_cycle_attempt_limit_skips_third_collection(monkeypatch, tmp_path, db):
             "PREDICTIVE_GAIN": False, "CALIBRATED": False, "TRADING_EDGE": False,
         },
     )
+    monkeypatch.setattr(
+        dc,
+        "jnu_data_continuity_status",
+        lambda **kwargs: {"mode": "NORMAL_TARGET_DATA", "context_only": False},
+    )
     now = datetime(2026, 9, 28, 0, 5, tzinfo=UTC)
     one = run_p5_cycle(now=now, db=db)
     two = run_p5_cycle(now=now + timedelta(minutes=1), db=db)
@@ -329,6 +335,59 @@ def test_cycle_attempt_limit_skips_third_collection(monkeypatch, tmp_path, db):
     assert three["status"] == "ATTEMPT_LIMIT"
     assert three["collection"]["status"] == "SKIPPED_ATTEMPT_LIMIT"
     assert calls["collect"] == 2
+
+
+def test_cycle_continuity_mode_settles_pending_but_skips_new_precommit(monkeypatch, tmp_path, db):
+    import market_ai_hub.research.accuracy_v2_p5_engine as engine
+    import market_ai_hub.services.data_continuity as dc
+
+    monkeypatch.setattr(engine, "data_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        engine,
+        "collect_public_sources",
+        lambda: {
+            "status": "OK",
+            "broker_used": False,
+            "credentials_used": False,
+            "recorder_touched": False,
+            "order_action": False,
+        },
+    )
+    calls = {"settle": 0, "precommit": 0}
+
+    def fake_settle(**kwargs):
+        calls["settle"] += 1
+        return [engine.P5CycleResult(status=engine.STATUS_SETTLED, prediction_id="existing")]
+
+    def forbidden_precommit(**kwargs):
+        calls["precommit"] += 1
+        raise AssertionError("new precommit must not run in DATA_CONTINUITY_MODE")
+
+    monkeypatch.setattr(engine, "settle_p5_pending", fake_settle)
+    monkeypatch.setattr(engine, "precommit_p5_forward", forbidden_precommit)
+    monkeypatch.setattr(
+        engine,
+        "p5_forward_evidence_summary",
+        lambda **kwargs: {
+            "PREDICTIVE_GAIN": False, "CALIBRATED": False, "TRADING_EDGE": False,
+        },
+    )
+    monkeypatch.setattr(
+        dc,
+        "jnu_data_continuity_status",
+        lambda **kwargs: {
+            "mode": "DATA_CONTINUITY_MODE",
+            "context_only": True,
+            "reason": "EXPECTED_PUBLISHED_OBSERVATION_OVERDUE",
+        },
+    )
+
+    out = run_p5_cycle(now=datetime(2026, 9, 28, 0, 5, tzinfo=UTC), db=db)
+    assert calls == {"settle": 1, "precommit": 0}
+    assert out["settlements"][0]["status"] == engine.STATUS_SETTLED
+    assert out["precommit"]["status"] == engine.STATUS_DATA_NOT_READY
+    assert out["precommit"]["reason"].startswith("DATA_CONTINUITY_MODE:")
+    assert out["data_continuity"]["context_only"] is True
 
 
 def test_forward_summary_counts_only_p5_and_never_promotes(db):
