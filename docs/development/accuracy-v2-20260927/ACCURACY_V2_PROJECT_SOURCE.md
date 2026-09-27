@@ -1,6 +1,6 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
-版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS，但真實 factor history 仍 DATA_NOT_READY，尚無 covariate 市場增益證據。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得一個 REAL receipt-time-causal P1 DATA_READY packet，但尚未累積足夠獨立 forward origins，因此沒有 covariate 市場增益證據。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 0. P0/P1 實作快照（2026-09-27）
 
@@ -11,7 +11,7 @@
 - P1 target contract 已落地：`decision_time`、`reference_price`/`reference_price_available_at`、`target_start`/`target_end`、`target_measure`、`exact_contract`、`forecast_horizon`、`label_available_at`。full-interval forecast 強制 `decision_time <= target_start < target_end`；reference 必須已可得；label 不得早於 target end。
 - JNU 語義分離：`NEXT_OSE_SESSION_SETTLEMENT` 與 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` 是不同 target。JPX Daily Report 官方說明約於**次營業日 09:00 JST**更新；假日交易統計會與假日前夜盤/後續營業日資料合併，不單獨發布，因此不得把 holiday-session outcome 假裝在前一日 15:45 已知。[R8]
 - 一個跨市場切片已完成：沿用既有 FeatureStore/as-of provenance，固定 exact factor contract，產生 `factor_lagged_return = latest/prior - 1`。packet 保存 event/available/received/provider time、provider/source/frequency、venue/session、relation、contract、snapshot/lineage、age 與 source/value content hash。拒絕 future/late、非 PIT、安全狀態錯誤、stale、proxy relation mismatch、roll、series semantics/contract mismatch、duplicate time、non-finite、缺 bar gap、snapshot 缺失；future revision 不改過去 packet；labels 不進 features。
-- 實際資料只讀盤點：目前 FeatureStore 存在，但 NQ/ES/JY/TMF 候選 representation 沒有合格歷史列可形成本包 packet。因此本包只用 synthetic temporary data root 驗工程，明確輸出 **ENGINEERING PASS / DATA_NOT_READY**；沒有造行情、沒有新增付費來源、沒有 market validation。
+- P0/P1 初始包當時的只讀盤點確實是 NQ/ES/JY/TMF 無合格列，因此當時輸出 **ENGINEERING PASS / DATA_NOT_READY**；這是歷史 checkpoint。P3-B 後續已用官方 TAIFEX TMF exact-contract settlement 與實際 receipt-time provenance 建立 REAL DATA_READY packet；不得把新的資料狀態倒寫成 P0/P1 當時已 ready，也不得把它誤稱模型 market validation。
 - Cache identity 現在包含 target contract、source lineage/snapshot/timestamps/value-content hash、feature version/formula、model revision 與 protocol version；相同日期但內容/revision不同會失效。
 - 驗收：focused package/regression=`66 passed, 44 warnings`；針對首輪 full offline 的 4 個預期整合修正後 fixcheck=`4 passed`；final offline（只排除既有 live recorder owner mutex 測試）=`2024 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。mock/synthetic 僅證明工程。HPQ1 131/48 封存沒有重跑/覆寫/解封；W4 門檻未下降。
 - P2 入口固定為：**先 commit/push 新 protocol**（primary loss、naive delta、chronological splits、trial cap、label-overlap purge/availability、seed、新未曝光 holdout），再做同 origin 的 last-value naive＋既有 linear/classifier 基準＋一個 LightGBM 任務，產生 walk-forward OOF ledger 並只做有限搜尋。沒有新證據則保留 baseline；Chronos-2 past-only covariate ablation 延到 P3。
@@ -40,7 +40,20 @@
 - 安裝版 preprocessing 的直接工程驗證 PASS：同樣的 `{target, past_covariates}` 送進 `Chronos2Dataset`，32點 target + 1 covariate 形成 context shape `(2,32)`；3-step future covariate slots 全為 NaN，證明沒有默默注入 future covariates。這只驗 installed API/schema，不等於實際權重 inference 或市場準確率；`local_verified.covariates` 維持 false。
 - 真實資料只讀盤點仍為：`features.duckdb` 存在，NQ/ES/JY/TMF candidate groups=`0`。因此**沒有**執行真實 univariate-vs-covariate ablation，沒有 PREDICTIVE_GAIN、沒有 CALIBRATED、沒有 TRADING_EDGE；synthetic/fake pipeline 僅驗工程契約。
 - 驗收：P3-A/P1/horizon focused=`33 passed`；加入bridge=`37 passed`；reproducibility/build integration=`47 passed`；full offline（只排除既有 recorder owner-mutex case）=`2047 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。installed Chronos schema validation exit 0。
-- P3-B 入口：先取得/累積**合格 REAL exact-contract factor packets**；資料足夠後才預登記同origin univariate vs past-only covariate ablation（固定primary loss/delta/splits/trial cap/seed/coverage）。在 standalone covariate path 尚未證明因果增益前，不進 residual shrinkage、ensemble weight、regime 或 fine-tune。
+- P3-B 已完成資料入口施工並取得第一個 REAL exact-contract receipt-time-causal packet；下一步改為累積**獨立 forward origins**，數量足夠後才另行預登記同-origin univariate vs past-only covariate ablation（固定 primary loss/delta/splits/trial cap/seed/coverage）。在 standalone covariate path 尚未證明因果增益前，不進 residual shrinkage、ensemble weight、regime 或 fine-tune。
+
+## 0.3 P3-B 官方 TAIFEX exact-contract 資料就緒（2026-09-27）
+
+- P3-B 進場 HEAD=`f8ecfdb069dbb558ed77ed3196aa6212e4c67f7f`；完成 source/config build=`a8fb56c5b7859e90`。沒有啟動/重登 recorder、沒有 broker 帳戶/部位/下單、沒有模型 fine-tune 或 market-performance certification。
+- 先嘗試 CME 官方公開網站路徑，但本機收到 CME 明確 403：其網站 Data Terms 禁止 automated scraping；因此**沒有**做 header/cookie/browser 繞過，也沒有把被禁止的網站頁面當資料源。改用 repo 既有 TAIFEX 官方 provider，資料來源契約原已標 `OFFICIAL_DAILY / EXACT / 台灣期交所公開資料`。
+- 修正 `TaifexProvider`：官方下載區間超過一個月在 network 前 fail-closed；HTML/error page 不再被 pandas 誤讀成資料；CSV schema 必須包含交易日/契約/到期月/close/settlement/session；官方 data row 比 header 多一個 trailing empty field 時只剝除尾端空欄，不允許任意欄位漂移；snapshot ID 以 query+content hash 產生，`received_at` 使用 cache/fetch 實際 receipt time。預設窗口縮成28天，避免舊40天預設違反官方一個月限制。
+- 歷史 publication time 不可從交易日猜。TAIFEX historical CSV 沒有逐列發布時間，所以所有回補 row 的 `available_at` 一律是**本次實際收到時間**，不得回填成13:45/15:00或任何假定公告時間。這使它們只可供 receipt 之後的 origin 使用，不能拿來重寫過去 OOS。
+- Materializer 只接受 `TMF + YYYYMM + 一般交易時段 + finite positive settlement`；exact contract=`TMFYYYYMM`、roll=`NONE`、series=`CONTRACT`、event time 使用既有 TAIFEX session truth（日盤13:45；到期日13:30）、source snapshot 必填，最後仍走既有 FeatureStore `DERIVED_DAILY` gate。calendar spreads (`YYYYMM/YYYYMM`) 不進資料；盤後 rows 不進 settlement feature；zero/missing settlement 明確忽略；同 event/contract 重跑同值 idempotent，不同值/duplicate 則 fail-closed conflict，不覆寫舊 PIT 值。
+- 真實 snapshot=`taifex-daily:49c4bdbfd9b5affa6494f97a70c6f633`、receipt=`2026-09-27T09:41:01.678337Z`。首次 materialize：107 exact monthly rows 成功；官方 TMF202609 2026-09-16 `結算價=0` 一筆忽略；174 spread rows、275 after-hours rows 排除。修正後重跑為107 `ALREADY_MATERIALIZED`、0 blocked。資料庫/行情保持本機 data root，不提交git。
+- JPX 公開 settlement provider 同步只讀取得 2026-09-25 Nikkei 225 Micro Futures；`202610` settlement 的實際 receipt=`2026-09-27T09:45:58.094649Z`。以固定 decision origin=`2026-09-27T09:46:00Z`、exact target=`JNU2610` 建 `NEXT_OSE_SESSION_SETTLEMENT` contract；TMF202610 P1 packet 為 `ENGINEERING PASS / DATA_READY`，feature available=`2026-09-27T09:41:01.678337Z`、source hash=`6129f45e37d7d784c8cca375`、cache identity=`9705080693fb9146c0d6ca0f`。這只證明 REAL/PIT data plumbing，不代表 PREDICTIVE_GAIN、CALIBRATED、TRADING_EDGE 或 clean historical OOS。
+- P1 stale gate 修正：合法 daily previous-session `CLOSED_MARKET_REFERENCE` 不再被字串判定誤殺；真正 stale 仍由 `available_at` age、point-in-time、roll/contract/series/gate 等檢查拒絕。
+- 驗收：P3-B focused=`38 passed`；integration（含factor routing/horizon/reproducibility/build freeze）=`86 passed`；full offline（只排除既有 recorder owner-mutex case）=`2054 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。真實 materialization idempotency PASS。
+- 下一入口：先累積多個獨立 forward receipt-time origins；樣本量達預先固定門檻前不跑 Chronos covariate outcome。屆時先 commit/push ablation protocol，再比較同origin univariate vs past-only covariate；不在同一批結果上反覆調 feature/window/threshold。
 
 ## 1. 結論：保留底座，修改模型策略，不整套推倒
 
@@ -62,7 +75,7 @@
 - HPQ1 131-origin封存有9/18→9/24跳過OSE假日交易的horizon錯配，已BLOCKED；原48筆final已曝光，不可重用。封存ID `3f28cec82268445d7d377356` 保留不變。
 - 既有 V2、2H.4 audit、W3.1、W3.2、W3.2-EP1、W4.1 calibration fitting、W5.1 first-passage 不重建。
 - 本機套件：chronos-forecasting 2.3.2、scikit-learn 1.9.1、LightGBM 4.7.0、XGBoost 3.4.1。
-- `ChronosAdapter.predict` 目前只把單一序列轉成 `[1,1,time]`，未餵跨市場協變數；registry 的 supports_covariates=false 描述本地能力缺口，不能誤讀成上游模型不支援。官方 Chronos-2 支援 multivariate/covariates，但尚待本地 adapter 與 PIT 檢查驗證。[R2]
+- `ChronosAdapter.predict` 現已保留原單序列路徑並新增 P3-A past-only covariate dictionary 路徑；registry 的 `adapter_implemented.past_only_covariates=true`、`future_covariates=false`、`local_verified.covariates=false` 分開描述工程能力與重型 runtime 驗證狀態。官方 Chronos-2 支援 multivariate/covariates，但本地 multivariate/future market covariates 仍未開放。[R2]
 - 已有 logistic regression／random forest／LightGBM／XGBoost **方向分類器**。規劃的 return regression／quantile regression 是新任務，不等於現有分類器已能輸出可靠價格分布。
 - P0 前的缺口是 Chronos loader 未明確傳 registry revision；P0 已改為明示 pinned revision。實際 pinned offline load 曾在120秒逾時、未取得 runtime commit attribute，因此 `local_verified` 仍維持 false，不能拿 cache snapshot presence 當成實載版本證據。
 - bootstrap 中 callback 狀態是歷史 capability 記錄，不是本次登入測試，也不能推出連續多年行情。硬體以目前設定 RTX4060Ti 16GB 為研究預算，實際可用VRAM仍要量測。

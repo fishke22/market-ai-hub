@@ -261,7 +261,10 @@ def build_pit_lagged_return_packet(
         ("FUTURE_AVAILABLE_AT", any(_dt(v) > decision for v in frame["available_at"])),
         ("NOT_AVAILABLE", any(str(v) != "AVAILABLE" for v in frame["availability_status"])),
         ("NOT_PIT_SAFE", any(not bool(v) for v in frame["point_in_time_safe"])),
-        ("STALE", any(str(v) != "FRESH" for v in frame["staleness_status"])),
+        ("STALE", any(
+            str(v) not in {"FRESH", "CLOSED_MARKET_REFERENCE"}
+            for v in frame["staleness_status"]
+        )),
         ("RELATION_MISMATCH", any(str(v) != expected_relation for v in frame["representation_relation"])),
         ("ROLL_MISMATCH", any(str(v) != "NONE" for v in frame["roll_status"])),
         ("SERIES_SEMANTICS_MISMATCH", any(str(v) != "CONTRACT" for v in frame["series_semantics"])),

@@ -115,7 +115,8 @@ FACTOR_REPRESENTATIONS: dict[str, list[FactorRepresentationDefinition]] = {
         _d("TW_INDEX", "MTX_FUTURES", "MTX", "FUTURE", "TAIFEX_DERIVATIVES", "TAIFEX",
            "DERIVATIVE_PROXY", "NOT_AVAILABLE", live_capable=True),
         _d("TW_INDEX", "TMF_FUTURES", "TMF", "FUTURE", "TAIFEX_DERIVATIVES", "TAIFEX",
-           "DERIVATIVE_PROXY", "NOT_AVAILABLE", live_capable=True),
+           "DERIVATIVE_PROXY", "OFFICIAL_SETTLEMENT_DAILY", live_capable=True,
+           data_grade="OFFICIAL_DAILY"),
     ],
     "US_TECH_RISK": [
         _d("US_TECH_RISK", "NASDAQ100_CASH", "NDX", "CASH_INDEX", "XNAS", "XNAS", "CASH_REFERENCE",
