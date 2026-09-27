@@ -4,6 +4,14 @@
 
 ## 1. 先讀這段
 
+### 2026-09-27 最新 JNU same-origin validation + CherryStudio closure
+
+CherryStudio-style stdio 實測發現 PR #69 的 generic tournament paired uncertainty 尚未進入 JNU direct 路徑；追查時又發現既有 `run_ts_oos_validation` 的 forecast-origin 對齊錯誤：模型只看到 `pos-1`，last-price naive 卻看到 `pos`，兩者同時拿 `pos+1` 評分，等於 baseline 多看一根。validation schema v2 已修成 model 與 naive 都只用到同一 origin `pos`，target 才是 `pos+1`，並使舊 cache 自動失效。最後 diff review 再抓到 drift baseline 以已實現 OOS actuals 重建預測的 look-ahead；現在 drift 與 moving-average baseline 都在每個 origin 當下從歷史 context 先凍結，再讀 target 評分。
+
+重新計算 JNU2610 10 個 rolling OOS origins：Chronos MASE=`1.0661`、方向命中=`0.40`、model-minus-naive MAE delta=`+44.77`、95% paired CI=`[-81.78,169.89]`；TimesFM MASE=`1.0721`、方向命中=`0.50`、delta=`+48.85`、CI=`[-109.30,220.70]`。兩者平均誤差目前都沒有優於 last-price naive，但 CI 都跨 0，而且 n=10 仍是 `EXPLORATORY_ONLY`；正確結論是「尚無穩定優勢證據」，不是已證明模型穩定較差。
+
+`analyze_jnu` public 現在直接用白話顯示「模型比較可信度」；JNU 完整模型稽核用 `analyze_jnu(view="audit")` 取得 MASE、common origins、paired delta/CI，不再拿 generic leaderboard 取代 JNU direct validation。CherryStudio QUICK_FORECAST 與 Agent prompt 都已同步這個路由與證據規則。實際 public/audit stdio smoke PASS；source/config build=`95e91d5431d94d7f`。focused OOS/baseline=`114 passed, 7 deselected`；full offline=`1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`。真實 forward event-probability settled samples 仍為 0，CALIBRATED 仍不可用；未重啟或操作 broker owner。
+
 ### 2026-09-27 最新 Jerry robustness comparison
 
 本棒比較本機 `MARKET_AI_HUB` 與 `fishke22/jerry-backtest-lab`（reviewed HEAD=`4df8b3a12a4d781fa950e32b4c86298f672e4c2e`）。Jerry 有 cost stress、CPCV/purge/embargo、PBO、DSR、Holm、second-engine replay 等有用概念，但 reviewed tree 沒有頂層 LICENSE，因此沒有複製程式碼；也沒有加入 `vectorbt` / `nautilus_trader` 依賴。
@@ -12,7 +20,7 @@
 
 Pairwise CI/confidence/replicates/block/status 已存入 tournament DuckDB、CLI compare，並由 MCP `get_model_leaderboard.pairwise_uncertainty` 對主腦公開；SQL NULL→pandas NaN 會重新正規化為 unavailable，不輸出假的 `[nan,nan]`。Jerry 的 row-count purge/embargo、PBO/DSR/Holm、fixed-bps execution engine 暫不搬：前者不如現有 forecast-origin/label-window/available-at governance 嚴格，後兩者需要先有 canonical trial-family ledger / 獨立 economic-value layer。
 
-branch=`codex/jerry-paired-uncertainty`；source commit=`734d42bbc1eda16b41ec02e7f296c3d32291df4e`；source/config build=`41f978ce1c3e4a97`；PR #69 OPEN。Focused offline=`90 passed, 4 deselected`；final offline=`1976 passed, 1 skipped, 35 deselected, 110 warnings in 185.06s`，只排除現場 recorder 持有 global mutex 的 `test_single_instance_lock_releases_after_error`；未停止 recorder。changed-file secret scan=0、diff check PASS。GitHub CI run `36289136004` / #221 在此快照寫入時仍 IN_PROGRESS。ACTUAL_FORWARD_EVIDENCE / ACTUAL_EVENT_PROBABILITY_EVIDENCE 仍 NONE_YET。
+paired-uncertainty source commit=`734d42bbc1eda16b41ec02e7f296c3d32291df4e`、handoff=`52b3d12d1605c93c140363541284ff7625cad0fd`；PR #69 CI #221/#222 PASS，merged main=`4a013e2ff10282485c99c49604e094b2e4db0190`。該包 final offline=`1976 passed, 1 skipped, 35 deselected, 110 warnings in 185.06s`。後續 JNU same-origin 修正見上節。ACTUAL_FORWARD_EVIDENCE / ACTUAL_EVENT_PROBABILITY_EVIDENCE 仍 NONE_YET。
 
 ### 2026-09-27 最新 JNU direct + 白話輸出
 
@@ -20,7 +28,7 @@ source/config build=`858029747b588ac6`，feature commit=`bffa97d`。新增 `anal
 
 JPX 公開 OSE daily-report JSON/ZIP 已實機驗證並接入。只提升 `Nikkei 225 Micro Futures` Auction Market 的實際限月 + 官方清算價，沒有把多組 OHLC 猜成單一 close。8/3 ZIP 多一層目錄的 parser bug 已修並回補。現在 `JNU2610` 有 50 筆 exact-contract 官方清算價，2026-07-13 至 2026-09-25，最新 66,140。`analyze_jnu` 會以 30 分鐘 cache 最佳努力刷新當月 JPX 公開資料，不使用元大帳密/交易 API。
 
-Direct 模型已改用 JNU 本身資料，不再用 ^N225 冒充價格預測；^N225 僅為市場環境輔助。實際 stdio smoke：下一交易日清算價綜合預測約 66,167，方向中性，參考範圍約 64,831-67,393，且 public 明確標低信心。原因：10 個 rolling OOS origins 下 Chronos/TimesFM 都未擊敗 last-price naive/drift，MASE 約 2.20/2.22、方向命中約 20%。同一輸入連跑兩次完全一致。
+Direct 模型已改用 JNU 本身資料，不再用 ^N225 冒充價格預測；^N225 僅為市場環境輔助。實際 stdio smoke：下一交易日清算價綜合預測約 66,167，方向中性，參考範圍約 64,831-67,393，且 public 明確標低信心。原先記錄的 MASE 約 2.20/2.22 後來確認受 forecast-origin 不公平對齊影響；schema v2 重算後為 Chronos~1.066、TimesFM~1.072，方向命中 0.40/0.50，但只有 10 個 common origins 且 paired CI 跨 0，因此仍不能宣稱穩定優勢。
 
 重要：這 50 筆是歷史 PRICE observations，不是 W3.2-EP1 的前向 EVENT_PROBABILITY。真實 settled event sample 仍為 0，因此 W4 不能誠實 fit/public CALIBRATED probability；仍需依序 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS 並通過 acceptance gates。沒有回填或把 retrospective 資料冒充 forward evidence。
 

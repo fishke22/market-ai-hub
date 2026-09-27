@@ -64,3 +64,15 @@ Not added to forecast ranking. MARKET_AI_HUB's tournament is primarily forecast-
 ## Interpretation
 
 This change does **not** make the current JNU models more accurate by itself. It improves the system's ability to judge whether an observed model-vs-baseline difference is robust enough to take seriously. In particular, the current 10-origin JNU historical OOS comparison remains exploratory rather than being promoted because a point estimate happens to favor one model.
+
+## CherryStudio/JNU follow-up validation
+
+A real CherryStudio-style stdio simulation exposed an important integration gap after the first package: generic `get_model_leaderboard` had no JNU direct rows, so the new pairwise uncertainty did not yet reach the main `analyze_jnu` user path. While wiring that evidence into JNU, a pre-existing OOS origin-alignment defect was found in `run_ts_oos_validation`: the model context ended at `pos-1`, while the last-price naive baseline used `pos`, yet both were evaluated against `pos+1`. This gave the baseline one extra bar of information.
+
+The follow-up fixes the exam so both model and baseline use information through the same forecast origin `pos`, with `pos+1` as the target. Validation results are schema-versioned so old cached runs cannot be silently reused. The shared paired block-bootstrap helper is now also used by JNU direct validation, and `analyze_jnu` exposes a plain-Chinese model-comparison confidence statement. CherryStudio skills/prompts route normal JNU analysis to `analyze_jnu`, and JNU model audit to `analyze_jnu(view="audit")` rather than the generic leaderboard.
+
+A second pre-existing baseline defect was found during final diff review: drift baseline evaluation was derived from `actuals[:i+1]`, which included the current realized target. The final implementation now computes drift and moving-average baselines inside each origin loop from that origin's historical context only, then passes those frozen forecasts into the common OOS scorer. A regression model that intentionally reproduces the same drift baseline must now produce identical model/drift MAE, proving the baseline cannot see the target.
+
+Recomputed exact-contract JNU2610 historical OOS (10 origins, latest 2026-09-25): Chronos-2 MASE `1.0661`, direction accuracy `0.40`, model-minus-naive MAE delta `+44.77`, 95% paired CI `[-81.78, 169.89]`; TimesFM-3.0 MASE `1.0721`, direction accuracy `0.50`, delta `+48.85`, CI `[-109.30, 220.70]`. Both average MAEs are currently worse than last-price naive, but both paired intervals cross zero and the sample is `EXPLORATORY_ONLY`; therefore the supported conclusion is **no stable advantage has been demonstrated**, not that the models have been proven stably worse.
+
+Follow-up validation: focused OOS/baseline suite `114 passed, 7 deselected`; full offline `1978 passed, 1 skipped, 35 deselected, 110 warnings in 184.17s`; real stdio public `health_check -> analyze_jnu` PASS; real stdio `analyze_jnu(view="audit")` PASS. Product/source build is `95e91d5431d94d7f`. No broker login/logout/restart/order/account action was performed.

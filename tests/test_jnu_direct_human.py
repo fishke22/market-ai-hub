@@ -174,10 +174,31 @@ def test_jnu_public_summary_downgrades_failed_historical_models(monkeypatch):
         "status": "OK",
         "overall": "HISTORICAL_UNVALIDATED",
         "any_model_beats_last_price_naive": False,
+        "models": {
+            "chronos-2": {
+                "paired_vs_last_price_naive": {
+                    "common_origin_count": 10,
+                    "uncertainty_status": "EXPLORATORY_ONLY",
+                    "delta_ci_lower": -1.0,
+                    "delta_ci_upper": 2.0,
+                }
+            },
+            "timesfm-3.0": {
+                "paired_vs_last_price_naive": {
+                    "common_origin_count": 10,
+                    "uncertainty_status": "EXPLORATORY_ONLY",
+                    "delta_ci_lower": -2.0,
+                    "delta_ci_upper": 3.0,
+                }
+            },
+        },
     }
     summary = d.jnu_user_summary(out, calibration_status={"public_calibrated": False, "settled_samples": 0})
     assert summary["直接價格模型"]["可信度"] == "低信心研究參考"
-    assert "沒有擊敗" in summary["歷史驗證"]
+    assert "平均絕對誤差" in summary["歷史驗證"]
+    assert "不代表已證明" in summary["歷史驗證"]
+    assert "10 個同一批歷史預測樣本" in summary["模型比較可信度"]
+    assert "探索性" in summary["模型比較可信度"]
     assert "單日模型方向" in summary["操作參考"]
 
 

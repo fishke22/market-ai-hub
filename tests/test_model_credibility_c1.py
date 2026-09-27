@@ -96,6 +96,51 @@ def test_pairwise_block_bootstrap_respects_horizon_overlap_and_small_sample_boun
     assert small["delta_ci_lower"] is None and small["delta_ci_upper"] is None
 
 
+def test_ts_oos_validation_uses_same_origin_information_for_model_and_naive():
+    from market_ai_hub.services.validation import run_ts_oos_validation
+
+    class LastSeen:
+        def predict(self, series, horizon=1):
+            last = float(series.iloc[-1])
+            return {"path": {"p10": [last], "p50": [last], "p90": [last]}}
+
+    idx = pd.date_range("2026-01-01", periods=50, freq="D", tz="UTC")
+    closes = pd.Series(np.arange(50, dtype=float) + 100.0, index=idx)
+    result = run_ts_oos_validation(
+        LastSeen(), "last-seen-model", "X", closes, n_origins=10, history_len=20
+    )
+    assert result["validation_schema_version"] == "2"
+    assert result["eval"]["model"]["mase"] == pytest.approx(1.0)
+    pair = result["paired_vs_last_price_naive"]
+    assert pair["common_origin_count"] == 10
+    assert pair["delta_model_minus_naive"] == pytest.approx(0.0)
+    assert pair["delta_ci_lower"] == pytest.approx(0.0)
+    assert pair["delta_ci_upper"] == pytest.approx(0.0)
+    assert pair["uncertainty_status"] == "EXPLORATORY_ONLY"
+
+
+def test_ts_oos_drift_baseline_uses_only_each_origin_context():
+    from market_ai_hub.services.validation import drift_baseline, run_ts_oos_validation
+
+    class SameDrift:
+        def predict(self, series, horizon=1):
+            point = drift_baseline(series, 1)
+            return {"path": {"p10": [point], "p50": [point], "p90": [point]}}
+
+    idx = pd.date_range("2026-01-01", periods=55, freq="D", tz="UTC")
+    closes = pd.Series(
+        100.0 + np.cumsum(np.random.default_rng(17).normal(0.2, 1.3, len(idx))),
+        index=idx,
+    )
+    result = run_ts_oos_validation(
+        SameDrift(), "same-drift-model", "X", closes, n_origins=10, history_len=20
+    )
+    assert result["eval"]["drift_baseline"]["mae"] == pytest.approx(
+        result["eval"]["model"]["mae"]
+    )
+    assert result["eval"]["beats_drift_mae"] is False
+
+
 def test_random_walk_respects_horizon_in_both_baseline_paths():
     from market_ai_hub.research.evaluation import random_walk
     from market_ai_hub.research.tournament.baselines import RandomWalk

@@ -20,6 +20,9 @@ import numpy as np
 import pandas as pd
 
 from market_ai_hub.config.settings import project_root
+from market_ai_hub.research.paired_uncertainty import paired_block_bootstrap_ci
+
+TS_VALIDATION_SCHEMA_VERSION = "2"
 
 # ── deterministic promotion rules（code 內，禁止 LLM 臨時改）──
 PROMOTION_RULES: dict = {
@@ -73,6 +76,8 @@ def evaluate_against_baselines(
     prev_closes: np.ndarray,
     model_forecasts: list[float],
     steps: int,
+    drift_forecasts: list[float] | np.ndarray | None = None,
+    moving_average_forecasts: list[float] | np.ndarray | None = None,
 ) -> dict:
     """對同一批 OOS 樣本比較模型與 naive baselines。"""
     actuals = np.asarray(actuals, dtype=float)
@@ -90,11 +95,19 @@ def evaluate_against_baselines(
     naive_mae, naive_rmse = _err(actuals, prev)
     mase = model_mae / naive_mae if naive_mae > 0 else float("nan")
 
-    drift_preds = np.array([drift_baseline(pd.Series(actuals[: i + 1] if i >= 0 else [prev[0]]), 1) for i in range(n)])
-    drift_mae = float(np.mean(np.abs(actuals - drift_preds))) if n else float("nan")
+    drift_mae = None
+    if drift_forecasts is not None:
+        drift_preds = np.asarray(drift_forecasts, dtype=float)
+        if len(drift_preds) != n:
+            raise ValueError("drift_forecasts must match OOS sample count")
+        drift_mae = float(np.mean(np.abs(actuals - drift_preds)))
 
-    ma20_preds = np.array([moving_average_baseline(pd.Series(np.concatenate([[prev[i]], actuals[:i]])) if i > 0 else pd.Series([prev[i]]), 1, window=min(20, i + 1)) for i in range(n)])
-    ma20_mae = float(np.mean(np.abs(actuals - ma20_preds))) if n else float("nan")
+    ma20_mae = None
+    if moving_average_forecasts is not None:
+        ma20_preds = np.asarray(moving_average_forecasts, dtype=float)
+        if len(ma20_preds) != n:
+            raise ValueError("moving_average_forecasts must match OOS sample count")
+        ma20_mae = float(np.mean(np.abs(actuals - ma20_preds)))
 
     dir_actual = np.sign(actuals - prev)
     dir_pred = np.sign(fc - prev)
@@ -111,7 +124,7 @@ def evaluate_against_baselines(
         "drift_baseline": {"mae": drift_mae},
         "moving_average_baseline": {"mae": ma20_mae},
         "beats_naive_mae": model_mae < naive_mae,
-        "beats_drift_mae": model_mae < drift_mae,
+        "beats_drift_mae": drift_mae is not None and model_mae < drift_mae,
     }
 
 
@@ -132,10 +145,11 @@ def run_ts_oos_validation(
     if n < history_len + n_origins + 2:
         return {"status": "INSUFFICIENT_DATA", "symbol": symbol, "n_bars": n}
 
-    positions = np.linspace(history_len, n - 2, n_origins, dtype=int)
+    positions = np.linspace(history_len - 1, n - 2, n_origins, dtype=int)
     forecasts, actuals, prevs, p10s, p90s = [], [], [], [], []
+    drift_preds, ma20_preds = [], []
     for pos in positions:
-        ctx = closes.iloc[pos - history_len:pos]
+        ctx = closes.iloc[pos - history_len + 1:pos + 1]
         r = adapter.predict(ctx, horizon=1)
         path = r["path"]
         forecasts.append(path["p50"][-1])
@@ -143,8 +157,36 @@ def run_ts_oos_validation(
         p90s.append(path["p90"][-1])
         actuals.append(float(closes.iloc[pos + 1]))
         prevs.append(float(closes.iloc[pos]))
+        drift_preds.append(drift_baseline(ctx, 1))
+        ma20_preds.append(moving_average_baseline(ctx, 1, window=min(20, len(ctx))))
 
-    ev = evaluate_against_baselines(symbol, np.asarray(actuals), np.asarray(prevs), forecasts, steps=1)
+    ev = evaluate_against_baselines(
+        symbol,
+        np.asarray(actuals),
+        np.asarray(prevs),
+        forecasts,
+        steps=1,
+        drift_forecasts=drift_preds,
+        moving_average_forecasts=ma20_preds,
+    )
+    actual_arr = np.asarray(actuals, dtype=float)
+    forecast_arr = np.asarray(forecasts, dtype=float)
+    prev_arr = np.asarray(prevs, dtype=float)
+    paired = paired_block_bootstrap_ci(
+        np.abs(actual_arr - forecast_arr) - np.abs(actual_arr - prev_arr),
+        [int(x) for x in positions],
+        steps=1,
+    )
+    paired.update({
+        "metric": "mae",
+        "common_origin_count": int(len(positions)),
+        "model_metric_common": float(np.mean(np.abs(actual_arr - forecast_arr))),
+        "naive_metric_common": float(np.mean(np.abs(actual_arr - prev_arr))),
+        "delta_model_minus_naive": float(
+            np.mean(np.abs(actual_arr - forecast_arr) - np.abs(actual_arr - prev_arr))
+        ),
+        "delta_semantics": "MODEL_MINUS_NAIVE_LOSS_NEGATIVE_FAVORS_MODEL",
+    })
 
     # interval coverage：nominal p10-p90 = 80% 中央區間
     lo = np.asarray(p10s, dtype=float)
@@ -157,12 +199,14 @@ def run_ts_oos_validation(
 
     result = {
         "status": "OK",
+        "validation_schema_version": TS_VALIDATION_SCHEMA_VERSION,
         "model": model,
         "symbol": symbol,
         "n_origins": int(len(positions)),
         "history_len": history_len,
         "window": {"start": str(closes.index[0].date()), "end": str(closes.index[-1].date())},
         "eval": ev,
+        "paired_vs_last_price_naive": paired,
         "interval": {
             "nominal_level": 0.8,
             "coverage": coverage,

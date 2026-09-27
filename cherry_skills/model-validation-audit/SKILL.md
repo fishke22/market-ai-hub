@@ -6,9 +6,10 @@
 使用者要稽核某個模型的預測能力、驗證狀態、是否值得信任。
 
 ## 工作流程
-1. 呼叫 `get_model_leaderboard(target=..., horizon=...)` 取得模型績效。
-2. 呼叫 `get_forward_test_status()` 取得 forward test 註冊／結算狀態。
-3. 需要資料覆蓋時呼叫 `get_data_coverage()`。
+1. 若標的是 JNU / 大阪日經225微型期貨，先呼叫 `analyze_jnu(view="audit")`，讀 exact-contract historical validation 與 paired baseline uncertainty；不要用 generic leaderboard 代替 JNU direct validation。
+2. 其他標的再呼叫 `get_model_leaderboard(target=..., horizon=...)` 取得 tournament 績效與 pairwise uncertainty。
+3. 呼叫 `get_forward_test_status()` 取得 forward test 註冊／結算狀態。
+4. 需要資料覆蓋時呼叫 `get_data_coverage()`。
 
 ## 稽核欄位
 | 欄位 | 說明 |
@@ -17,6 +18,7 @@
 | target / horizon | 標的與預測期間 |
 | sample size | 樣本數（樣本不足不得宣稱） |
 | MASE | 相對 baseline 誤差 |
+| paired uncertainty | 同一批 forecast origins 的模型-vs-baseline 差異區間與樣本狀態 |
 | baseline | 對比 baseline（BEST_BASELINE） |
 | Forward Test | 是否有 forward paper 證據 |
 | regime evidence | 各 regime 樣本是否足夠（不足→REGIME_EVIDENCE_INSUFFICIENT） |
@@ -26,5 +28,6 @@
 ## 判定規則
 - 打不贏 baseline → 不給正向評分，允許 BASELINE_DOMINANT。
 - 樣本不足（如 <30）→ 不得稱 EDGE_FOUND 或 VALIDATED。
+- paired common-origin 樣本 <30 → 只能稱探索性；即使平均 MAE 較低，也不得稱穩定優勢。
 - 未 forward-validated → 標 `UNVALIDATED_FORWARD`。
 - 不得以「模型新、參數多、架構複雜」當作可信度理由。

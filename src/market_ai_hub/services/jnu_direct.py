@@ -106,6 +106,7 @@ def validate_jnu_direct_history(
     W4 calibrated probability evidence.
     """
     from market_ai_hub.services.validation import (
+        TS_VALIDATION_SCHEMA_VERSION,
         TsValidationStore,
         determine_validation_status,
         run_ts_oos_validation,
@@ -131,6 +132,7 @@ def validate_jnu_direct_history(
         result = (cached or {}).get("result") if cached else None
         current = bool(
             result
+            and result.get("validation_schema_version") == TS_VALIDATION_SCHEMA_VERSION
             and result.get("window", {}).get("end") == meta["latest_date"]
             and int(result.get("history_len", 0)) == DIRECT_VALIDATION_HISTORY_LEN
             and int(result.get("n_origins", 0)) == DIRECT_VALIDATION_ORIGINS
@@ -158,6 +160,7 @@ def validate_jnu_direct_history(
             "direction_accuracy": ev.get("model", {}).get("direction_accuracy"),
             "beats_last_price_naive": bool(ev.get("beats_naive_mae", False)),
             "beats_drift": bool(ev.get("beats_drift_mae", False)),
+            "paired_vs_last_price_naive": (result or {}).get("paired_vs_last_price_naive"),
             "window_end": (result or {}).get("window", {}).get("end"),
             "reasons": reasons,
         }
@@ -428,9 +431,44 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         "INSUFFICIENT_EVIDENCE": "證據不足",
     }.get(result.get("research_stance"), "證據不足")
     historical = result.get("historical_validation") or {}
+    paired_rows = [
+        row.get("paired_vs_last_price_naive") or {}
+        for row in (historical.get("models") or {}).values()
+        if row.get("paired_vs_last_price_naive")
+    ]
+    comparison_note = "目前尚沒有足夠的同一批歷史預測樣本，不能可靠判斷模型相對簡單基準的穩定差異。"
+    if paired_rows:
+        paired_n = min(int(row.get("common_origin_count", 0) or 0) for row in paired_rows)
+        states = {str(row.get("uncertainty_status") or "") for row in paired_rows}
+        if "INSUFFICIENT_PAIRED_SAMPLE" in states:
+            comparison_note = (
+                f"目前只有 {paired_n} 個同一批歷史預測樣本，樣本太少，"
+                "不能可靠判斷模型是否穩定優於簡單基準。"
+            )
+        elif "EXPLORATORY_ONLY" in states:
+            comparison_note = (
+                f"目前有 {paired_n} 個同一批歷史預測樣本，模型與簡單基準的誤差差異仍屬探索性；"
+                "不能把目前的平均誤差勝負當成穩定預測優勢。"
+            )
+        else:
+            crosses_zero = any(
+                row.get("delta_ci_lower") is None
+                or row.get("delta_ci_upper") is None
+                or float(row["delta_ci_lower"]) <= 0.0 <= float(row["delta_ci_upper"])
+                for row in paired_rows
+            )
+            comparison_note = (
+                f"目前有 {paired_n} 個同一批歷史預測樣本；"
+                + (
+                    "模型與簡單基準的誤差差異區間仍包含「沒有差異」，尚不能確認穩定優勢。"
+                    if crosses_zero
+                    else "模型與簡單基準的誤差差異已較穩定，但這仍只是歷史樣本，不是前向交易優勢。"
+                )
+            )
     if historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False):
         validation_note = (
-            "近期的歷史回看中，兩個價格模型都沒有擊敗「直接沿用前一日價格」的簡單基準，"
+            "近期的歷史回看中，就目前平均絕對誤差而言，兩個價格模型都沒有優於"
+            "「直接沿用前一日價格」的簡單基準；但共同樣本仍少，這不代表已證明模型穩定較差。"
             "因此這次價格預測只能當低信心研究參考，不能單獨當成成熟方向訊號。"
         )
         action_note = (
@@ -470,6 +508,7 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
             else "研究用、尚未完成前向驗證",
         },
         "歷史驗證": validation_note,
+        "模型比較可信度": comparison_note,
         "資料說明": (
             f"模型使用大阪微型日經 {data['contract_month']} 限月本身的官方清算價歷史，"
             "不是用日經225現貨指數冒充微型期貨。"
