@@ -1,7 +1,7 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU historical prequential replay SEALED_LOCAL_PASS on product build `03f1971c29d2f394`. Protocol/engine were preregistered and pushed first as commit `49f46ec6abc51723c18fe393ee90659f014c6e30`; the first one-use replay then sealed evidence `3f28cec82268445d7d377356` with 131 pseudo-forward origins (43 development / 40 validation / 48 final holdout). Integration/publication is pending on branch `codex/jnu-historical-prequential`. Real W3.2 forward/event-probability settled samples remain 0 and market calibrated probability remains unavailable.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU historical prequential replay MERGED_POSTMERGE_VERIFIED on product build `03f1971c29d2f394`. Protocol/engine were preregistered and pushed first as commit `49f46ec6abc51723c18fe393ee90659f014c6e30`; the first one-use replay then sealed evidence `3f28cec82268445d7d377356` with 131 pseudo-forward origins (43 development / 40 validation / 48 final holdout). Feature commit `ea5805eb238c4b4d9246092b52c7719ccb600741` passed PR #72 CI #228 (`36294200271`) and merged to main `94d95f3a49521f666c1cc14d0006d13085669de0`; post-merge CherryStudio-style stdio public/audit smoke PASS on the same build and sealed evidence. Real W3.2 forward/event-probability settled samples remain 0 and market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
 
@@ -18,6 +18,8 @@ Evidence grade is deliberately `HISTORICAL_PREQUENTIAL_TRAINING_CUTOFF_UNKNOWN`:
 `analyze_jnu` public/audit now reads the sealed evidence without rerunning models. Real CherryStudio-style stdio on build `03f1971c29d2f394` PASS: public output states 131 replay / final 48 / ensemble MASE about 1.12 / CI crosses zero / pooled risk warning / training cutoff unknown; audit returns the evidence ID, partition counts and numerical final metrics. Agent/skill/FAQ wording now explicitly separates historical pseudo-forward from real forward.
 
 Validation after integration: prereg/build-focused=`52 passed, 3 deselected`; sealed-evidence integration=`46 passed`; Agent/Skill focused=`82 passed, 4 deselected`; full offline excluding only the live-owner mutex case=`1984 passed, 1 skipped, 35 deselected, 110 warnings in 185.43s`, exit 0. No broker login/logout/restart/order/account action occurred.
+
+Publication: feature commit=`ea5805eb238c4b4d9246092b52c7719ccb600741`; PR #72 CI run #228 / `36294200271` PASS; merged main=`94d95f3a49521f666c1cc14d0006d13085669de0`. Post-merge stdio `health_check -> analyze_jnu(public/audit)` reloaded build `03f1971c29d2f394` and returned evidence ID `3f28cec82268445d7d377356`, 131/43/40/48 counts and final ensemble MASE/CI unchanged.
 
 
 ### 2026-09-27 JNU OOS-origin alignment + CherryStudio evidence routing

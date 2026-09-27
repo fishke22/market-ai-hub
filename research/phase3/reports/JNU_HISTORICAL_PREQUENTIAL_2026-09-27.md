@@ -72,3 +72,10 @@ W3.2 real forward remains a separate evidence stream.
 - Full offline: `1984 passed, 1 skipped, 35 deselected, 110 warnings in 185.43s`
 - Real CherryStudio-style stdio public/audit JNU smoke: PASS on build `03f1971c29d2f394`
 - No broker login/logout/restart/order/account action was performed.
+
+## Publication
+
+- Feature commit: `ea5805eb238c4b4d9246092b52c7719ccb600741`
+- PR #72 CI run #228 / `36294200271`: PASS
+- Merged main: `94d95f3a49521f666c1cc14d0006d13085669de0`
+- Post-merge CherryStudio-style stdio public/audit JNU smoke: PASS; build `03f1971c29d2f394`, evidence ID `3f28cec82268445d7d377356`, partition counts and final metrics unchanged.
