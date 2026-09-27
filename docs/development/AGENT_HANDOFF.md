@@ -1,9 +1,21 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-26 research decision-support MERGED_POSTMERGE_VERIFIED on product build `e8dc080886d0b5a2` via PR #65 / CI `36254359610`; CherryStudio stdio MCP smoke PASS; live quote recorder remains on prior build `72c6f533e5ae2341` pending explicit restart/handover authorization. Real forward/event-probability evidence still NONE_YET pending valid OSE sessions.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU direct-research/human-output package LOCAL_PASS at commit `bffa97d`, product build `858029747b588ac6`; real CherryStudio stdio `analyze_jnu` smoke PASS on exact-contract JPX/OSE data. Live quote recorder remains on prior build `72c6f533e5ae2341` pending explicit restart/handover authorization. Real forward/event-probability evidence still NONE_YET, so market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
+
+### 2026-09-27 JNU direct model + human-output closure
+
+The prior Osaka user path still made the LLM decode `XTKS`, enum/status codes, Direct/Proxy jargon and a `^N225` proxy model even when the user asked for JNU. This package adds a dedicated `analyze_jnu` public MCP tool and canonical alias handling: `JNU`, `JNUxxxx`, `JNUPMxxxx`, 大阪微日經/大阪日經微型 all resolve to `OSE_NIKKEI225_MICRO_FUTURES`. Public output is a compact Traditional-Chinese user summary; audit mode retains technical fields.
+
+JPX's public OSE daily-report JSON/ZIP archive was verified live. The parser extracts only the contract month plus official Micro settlement from the `Nikkei 225 Micro Futures` Auction Market section; it deliberately does not guess which of the multiple PDF OHLC blocks should be promoted. A real archive packaging bug on 2026-08-03 (PDF nested under a dated directory) was fixed by basename matching. Current local exact-contract dataset for `JNU2610` is 50 official settlement observations from 2026-07-13 through 2026-09-25, latest settlement 66,140. `analyze_jnu` refreshes the current public JPX month best-effort with a 30-minute process cache and never uses broker credentials.
+
+Direct settlement forecast path now uses the exact JNU contract itself, not `^N225`. Actual same-input reproducibility PASS. Current actual-data smoke: next-session 2026-09-28 settlement ensemble around 66,167, neutral research stance, reference range about 64,831-67,393. This is intentionally low-confidence: rolling historical OOS on 10 origins / 32-bar context gave both Chronos-2 and TimesFM-3.0 UNVALIDATED, MASE about 2.20/2.22, direction accuracy 0.20, neither beating last-price naive or drift. Public output states this in plain Chinese instead of presenting the forecast as a mature edge.
+
+Calibration truth is unchanged. The 50 exact-contract price observations are historical PRICE data and must not be substituted for W3.2-EP1 `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples. W4 public calibration still has zero eligible settled event samples and requires the precommitted 50 CALIBRATION + 50 VALIDATION + 50 one-use FINAL_OOS protocol plus acceptance gates. No retrospective backfill was promoted to CALIBRATED.
+
+Validation: focused JNU/human-output regression=`50 passed, 1 deselected`; build-freeze=`3 passed`; full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings in 194.58s`; live JPX parser smoke PASS; actual CherryStudio stdio `analyze_jnu` public smoke PASS; same-input reproducibility PASS; diff check PASS; changed/untracked secret scan=0. `pypdf>=6,<7` is now an explicit project dependency. Feature commit=`bffa97d`.
 
 ### 2026-09-26 research decision-support correction
 
@@ -284,7 +296,7 @@ Source of truth: `<yeswin>\AGENT\YSTrader\Data\List\M.TFX.TXT` (read-only, `easw
 
 ## Exact next work package
 
-After this research-decision-support package is published and the single live owner is confirmed on the merged build, exact next work is evidence-dependent: let the registered C2.3 close-window task create the first new typed DAILY terminal-close evidence during a valid OSE maintenance window, then let W3.2 POINT + W3.2-EP1 naturally settle/precommit forward samples. W4 fitting must wait for scope-homogeneous real `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples and independent CALIBRATION/VALIDATION/FINAL_OOS windows. Remaining W7 clean-new-Windows/full-install/WinCred/certificate/new-machine-COM cells are deferred external gates, not current analysis blockers.
+After publication of the JNU direct/human-output package, exact next work is evidence-dependent: keep the public JPX exact-contract history fresh through `analyze_jnu`/the offline sync operator, and let the already-registered C2.3 close-window task create real typed DAILY terminal-close evidence on valid OSE sessions so W3.2 POINT + W3.2-EP1 can naturally settle/precommit forward samples. W4 fitting must still wait for homogeneous real `FORWARD_PRECOMMITTED EVENT_PROBABILITY` samples and independent CALIBRATION/VALIDATION/FINAL_OOS windows; the new 50-row historical JNU settlement series is not calibration evidence. Persistent broker-owner handover to build `858029747b588ac6` requires explicit authorization. W7 new-machine cells remain deferred external gates.
 
 ## Truthfulness rules
 

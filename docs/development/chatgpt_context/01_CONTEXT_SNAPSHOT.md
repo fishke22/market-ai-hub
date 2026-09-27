@@ -4,6 +4,18 @@
 
 ## 1. 先讀這段
 
+### 2026-09-27 最新 JNU direct + 白話輸出
+
+source/config build=`858029747b588ac6`，feature commit=`bffa97d`。新增 `analyze_jnu`：JNU/JNUxxxx/JNUPMxxxx/大阪微日經等名稱都會解析成大阪日經225微型期貨；public MCP 回覆只給一般使用者白話中文，`XTKS`、enum/status code、true/false/null、MISSING/NEEDS_CONFIG、Direct/Proxy 等技術字樣不再是 JNU public 主輸出。
+
+JPX 公開 OSE daily-report JSON/ZIP 已實機驗證並接入。只提升 `Nikkei 225 Micro Futures` Auction Market 的實際限月 + 官方清算價，沒有把多組 OHLC 猜成單一 close。8/3 ZIP 多一層目錄的 parser bug 已修並回補。現在 `JNU2610` 有 50 筆 exact-contract 官方清算價，2026-07-13 至 2026-09-25，最新 66,140。`analyze_jnu` 會以 30 分鐘 cache 最佳努力刷新當月 JPX 公開資料，不使用元大帳密/交易 API。
+
+Direct 模型已改用 JNU 本身資料，不再用 ^N225 冒充價格預測；^N225 僅為市場環境輔助。實際 stdio smoke：下一交易日清算價綜合預測約 66,167，方向中性，參考範圍約 64,831-67,393，且 public 明確標低信心。原因：10 個 rolling OOS origins 下 Chronos/TimesFM 都未擊敗 last-price naive/drift，MASE 約 2.20/2.22、方向命中約 20%。同一輸入連跑兩次完全一致。
+
+重要：這 50 筆是歷史 PRICE observations，不是 W3.2-EP1 的前向 EVENT_PROBABILITY。真實 settled event sample 仍為 0，因此 W4 不能誠實 fit/public CALIBRATED probability；仍需依序 50 CALIBRATION + 50 VALIDATION + 50 FINAL_OOS 並通過 acceptance gates。沒有回填或把 retrospective 資料冒充 forward evidence。
+
+驗證：focused=`50 passed, 1 deselected`；build-freeze=`3 passed`；full offline=`1974 passed, 1 skipped, 35 deselected, 110 warnings in 194.58s`；JPX live parser、CherryStudio-style stdio `analyze_jnu`、reproducibility、diff check、secret scan 全 PASS。`pypdf>=6,<7` 已成為正式依賴。Persistent quote recorder 尚未 handover，仍跑 `72c6f533e5ae2341`；未經明確授權不重啟 broker owner。
+
 ### 2026-09-26 最新 research decision-support 修正
 
 新的 source/config build=`e8dc080886d0b5a2`。這一棒修正的是「主腦有資料卻只會拒答」的語義缺口，不是放寬校準/edge gate。formal validated direction、public probability、trading edge 仍照原 gate；另外新增獨立的 `research_decision_support`，允許主腦輸出 research stance（偏多/偏空/中性/混合）與 conditional research action。
