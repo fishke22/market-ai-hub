@@ -4,6 +4,16 @@
 
 ## 1. 先讀這段
 
+### 2026-09-27 最新 JNU historical prequential replay
+
+已把「不用傻等 150 個未來交易日才開始驗證」正式做成獨立證據層。JPX 公開 archive 202601-202606 先回補 106 個交易日（0 parser errors）；HPQ1 protocol `jnu_front_exact_settlement_1d_v1` 先在 commit `49f46ec6abc51723c18fe393ee90659f014c6e30` 預註冊並 push，之後才第一次跑真實模型 replay。規則：history=32；每個交易日最多一個最近未到期 exact contract；不拼接 continuous contract；DEVELOPMENT<=2026-05-15、VALIDATION<=2026-07-10、FINAL_HOLDOUT<=2026-09-18；final holdout one-use。
+
+第一次完整 replay 已封存 evidence ID=`3f28cec82268445d7d377356`：131 個 unique origins = 43 development + 40 validation + 48 final holdout，2026-03-11..2026-09-18。sealed per-origin artifact 留在 gitignored `data/research/`，不上 GitHub。現行等權 ensemble 的 final holdout：MASE=`1.1228`、方向命中=`0.50`、model-minus-naive MAE delta=`+104.16`、paired 95% CI=`[-24.34,229.28]`、p10-p90 coverage=`0.8333`。Chronos final MASE=`1.0907` / CI=`[-30.42,179.62]`；TimesFM final MASE=`1.1590` / CI=`[-31.31,304.60]`。final holdout 全部 CI 都跨 0，所以沒有證明穩定優勢。把 131 筆全池化後 ensemble MASE=`1.0766`、CI=`[11.01,132.44]` 是平均誤差可能比 naive 高的風險警訊，但不能取代預註冊 final holdout 解讀。
+
+這批 evidence grade=`HISTORICAL_PREQUENTIAL_TRAINING_CUTOFF_UNKNOWN`，因 Chronos-2 / TimesFM-3.0 tracked training cutoff 都是 unknown；所以它證明 replay 流程沒有用到 origin 後面的 exact-contract settlement，但不能宣稱 foundation model 的 clean training-OOS。更不能把 131 筆 retrospective replay 冒充 W3.2 `FORWARD_PRECOMMITTED`；真實 settled event-probability sample 仍為 0，W4 的 50 calibration + 50 validation + 50 one-use final OOS 門檻完全不變。
+
+`analyze_jnu` public/audit 已接入 sealed evidence，完全讀取、不重新跑 final holdout。CherryStudio-style stdio build=`03f1971c29d2f394` PASS：public 直接說 131 replay / final 48 / MASE~1.12 / CI 跨 0 / pooled risk / training cutoff unknown；audit 回 evidence ID、partition counts 與數值。Agent/Skill/FAQ 也已加入 historical prequential ≠ real forward 的規則。預註冊 focused=`52 passed, 3 deselected`；integration focused=`46 passed`；Agent/Skill focused=`82 passed, 4 deselected`；full offline=`1984 passed, 1 skipped, 35 deselected, 110 warnings in 185.43s`。GitHub publication 尚待本棒收尾。
+
 ### 2026-09-27 最新 JNU same-origin validation + CherryStudio closure
 
 CherryStudio-style stdio 實測發現 PR #69 的 generic tournament paired uncertainty 尚未進入 JNU direct 路徑；追查時又發現既有 `run_ts_oos_validation` 的 forecast-origin 對齊錯誤：模型只看到 `pos-1`，last-price naive 卻看到 `pos`，兩者同時拿 `pos+1` 評分，等於 baseline 多看一根。validation schema v2 已修成 model 與 naive 都只用到同一 origin `pos`，target 才是 `pos+1`，並使舊 cache 自動失效。最後 diff review 再抓到 drift baseline 以已實現 OOS actuals 重建預測的 look-ahead；現在 drift 與 moving-average baseline 都在每個 origin 當下從歷史 context 先凍結，再讀 target 評分。

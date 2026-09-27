@@ -202,6 +202,49 @@ def test_jnu_public_summary_downgrades_failed_historical_models(monkeypatch):
     assert "單日模型方向" in summary["操作參考"]
 
 
+def test_jnu_public_summary_prefers_sealed_prequential_holdout():
+    import market_ai_hub.services.jnu_direct as d
+
+    out = {
+        "status": "OK",
+        "data": {
+            "contract_month": "202610",
+            "latest_date": "2026-09-25",
+            "latest_settlement": 66140.0,
+        },
+        "ensemble": {"p10": 65000.0, "p50": 66200.0, "p90": 67400.0, "expected_return": 0.001},
+        "research_stance": "NEUTRAL",
+        "historical_validation": {"status": "NOT_RUN"},
+        "historical_prequential": {
+            "status": "OK",
+            "origin_count": 131,
+            "ensemble": {
+                "all": {
+                    "paired_vs_last_price_naive": {"delta_ci_lower": 11.0, "delta_ci_upper": 132.0},
+                },
+                "partitions": {
+                    "HISTORICAL_FINAL_HOLDOUT": {
+                        "n": 48,
+                        "evaluation": {
+                            "model": {"mase": 1.12},
+                            "beats_naive_mae": False,
+                        },
+                        "paired_vs_last_price_naive": {
+                            "delta_ci_lower": -24.0,
+                            "delta_ci_upper": 229.0,
+                        },
+                    }
+                },
+            },
+        },
+    }
+    summary = d.jnu_user_summary(out, calibration_status={"public_calibrated": False, "settled_samples": 0})
+    assert "131 筆逐日歷史重播" in summary["模型比較可信度"]
+    assert "最終區段有 48 筆" in summary["模型比較可信度"]
+    assert "訓練資料截止日" in summary["模型比較可信度"]
+    assert summary["直接價格模型"]["可信度"] == "低信心研究參考"
+
+
 def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     import market_ai_hub.mcp.server as server
     import market_ai_hub.services.jnu_direct as d

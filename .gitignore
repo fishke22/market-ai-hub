@@ -137,6 +137,7 @@ data/backups/
 data/db/
 data/logs/
 data/research_outputs/
+data/research/
 data/diagnostics/
 data/validation_samples/
 

@@ -1,0 +1,23 @@
+schema_version: HPQ1
+
+protocols:
+  jnu_front_exact_settlement_1d_v1:
+    market_family: OSAKA_MICRO
+    product: Nikkei 225 Micro
+    target_field: settlement
+    horizon_steps: 1
+    history_len: 32
+    contract_rule: nearest_unexpired_exact_contract_with_complete_history
+    source_scope: JPX_PUBLIC_OSE_DAILY_REPORT
+    source_availability_semantics: SESSION_ORDER_CAUSAL_NOT_PUBLICATION_TIMESTAMP
+    development_origin_end: "2026-05-15"
+    validation_origin_end: "2026-07-10"
+    final_holdout_origin_end: "2026-09-18"
+    boundary_selection_basis: SAMPLE_COUNT_ONLY_BEFORE_MODEL_REPLAY
+    final_holdout_one_use: true
+    allow_cross_contract_pooling: true
+    cross_contract_pooling_rule: ONE_FRONT_EXACT_CONTRACT_PER_ORIGIN_DATE
+    model_training_cutoff_policy: FAIL_CLOSED_UNKNOWN_IS_NOT_CLEAN_OOS
+    note: >-
+      Historical pseudo-forward replay only. Never upgrades to W3.2 FORWARD_PRECOMMITTED,
+      W4 CALIBRATED, PREDICTIVE_EVIDENCE or TRADING_EDGE.

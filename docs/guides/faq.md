@@ -41,7 +41,11 @@ Forward Shadow 會因為資料過期而**自動跳過**，顯示「資料過期�
 
 ## 多久才能知道模型有沒有用？
 
-需要累積真實 forward 樣本。至少 20 筆（TOO_EARLY 之前）才開始有一點意義；150 筆才算「足夠」。這需要好幾個月的真實交易日。
+不用等 150 個未來交易日才開始判斷。系統可以先用歷史資料做嚴格的 historical prequential replay：在每個歷史交易日只讓模型看到當時以前可用的資料，先封存預測，再揭曉下一日答案。這能更早檢查 look-ahead、baseline 公平性與模型是否穩定勝過簡單基準。
+
+但 historical replay 不是 real forward。正式 W3.2/W4 的機率校準仍只接受答案當時真的尚未發生、且已事先封存的 FORWARD_PRECOMMITTED 樣本。現行 protocol 最低仍是 50 筆 calibration + 50 筆 validation + 50 筆 one-use final OOS，而且滿 150 筆也不代表一定通過。
+
+如果模型的 training cutoff 無法驗證，historical replay 還不能叫「乾淨的模型訓練期外 OOS」；它只能證明評估流程在時間順序上沒有偷看後面的資料。
 
 ## 為什麼不能每天 fine-tune？
 
