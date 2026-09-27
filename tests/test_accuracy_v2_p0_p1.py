@@ -146,7 +146,8 @@ def test_registry_separates_upstream_adapter_and_local_capability():
     inv = model_capability_inventory("chronos-2")
     assert inv["package_version"] == "2.3.2"
     assert inv["upstream_support"]["covariates"] is True
-    assert inv["adapter_implemented"]["past_only_covariates"] is False
+    assert inv["adapter_implemented"]["past_only_covariates"] is True
+    assert inv["adapter_implemented"]["future_covariates"] is False
     assert inv["local_verified"]["covariates"] is False
 
 

@@ -1,12 +1,12 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
-版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2 已完成工程落地；P2 development 的實際結果是 NO_IMPROVEMENT、保留 baseline，P2 新 final 尚未開啟；其餘方法仍是候選。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
+版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS，但真實 factor history 仍 DATA_NOT_READY，尚無 covariate 市場增益證據。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 0. P0/P1 實作快照（2026-09-27）
 
 - 實際施工分支 `codex/vnext-audit-handoff`，本包進場 base HEAD=`fc6bd6830ecfed642c3c268e953ec3385eac08b8`；source/config worktree build=`a11cbb922621e730`。既有 `scripts/register_jpx_micro_sync_task.ps1`、`scripts/run-hidden.vbs` 保持未追蹤且未提交。
 - P0：本機 x64 venv 是 Python 3.12.13、`chronos-forecasting==2.3.2`、`timesfm==3.0.2`。Chronos-2 registry revision=`29ec3766d36d6f73f0696f85560a422f50e8498c`，TimesFM-3.0=`43046b85ec22d584a13f8098c2ed39c889e129c2`；兩個 exact snapshot 都存在本機 cache。loader 現在都明確傳 registry revision，不再以「cache 第一個 snapshot」當 loaded revision。
-- Chronos-2：官方/目前安裝 API 的 `Chronos2Pipeline.predict`/`predict_df` 支援 multivariate、past covariates 與 future covariates；本地 `ChronosAdapter.predict` 仍只餵單一序列，因此 `upstream_support=true`、`adapter_implemented(covariates)=false`、`local_verified(covariates)=false` 分開記。一次 `HF_HUB_OFFLINE=1` 的 pinned CPU actual load 在 120 秒逾時，沒有取得 runtime commit attribute，因此 loaded-revision `local_verified` **維持 false**，不拿 cache presence 代替實載證據。[R2]
+- Chronos-2：官方/目前安裝 API 的 `Chronos2Pipeline.predict`/`predict_df` 支援 multivariate、past covariates 與 future covariates；P3-A 已讓本地 `ChronosAdapter.predict` 支援**有 PIT provenance 的 past-only covariates**，但 future covariates 於本包明確 fail-closed、multivariate 仍未實作。registry 分別記 `upstream_support.covariates=true`、`adapter_implemented.past_only_covariates=true`、`adapter_implemented.future_covariates=false`、`local_verified.covariates=false`。先前 `HF_HUB_OFFLINE=1` pinned CPU actual load 在120秒逾時，P3-A 不以 cache 或 fake pipeline 冒充 runtime weights 驗證。[R2]
 - TimesFM-3.0：官方權重條款明確是 non-commercial / non-production。adapter 預設 purpose=`UNKNOWN` 並 fail-closed；研究 tournament/smoke 必須明示 `RESEARCH`；serving singleton 與 deep health 明示 `SERVING` 而被 gate 阻擋。shallow status 顯示 `RESEARCH_ONLY_AVAILABLE_NOT_LOADED`；權重未刪除，沒有啟動/切換 live service。[R3]
 - P1 target contract 已落地：`decision_time`、`reference_price`/`reference_price_available_at`、`target_start`/`target_end`、`target_measure`、`exact_contract`、`forecast_horizon`、`label_available_at`。full-interval forecast 強制 `decision_time <= target_start < target_end`；reference 必須已可得；label 不得早於 target end。
 - JNU 語義分離：`NEXT_OSE_SESSION_SETTLEMENT` 與 `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` 是不同 target。JPX Daily Report 官方說明約於**次營業日 09:00 JST**更新；假日交易統計會與假日前夜盤/後續營業日資料合併，不單獨發布，因此不得把 holiday-session outcome 假裝在前一日 15:45 已知。[R8]
@@ -29,6 +29,18 @@
 - P2 final **沒有開啟**：新 final origins=0，且 development 已保留 baseline。結果仍是 `DEVELOPMENT_INFORMATION_ONLY`／`not_final_holdout_evidence=true`／`not_calibration_evidence=true`／`not_trading_edge=true`；不得改寫成模型已被 final 證明失敗或成功。
 - P2 驗收：engine/protocol=`10 passed`；focused P2/P1/HPQ1/build=`36 passed`；full offline（只排除既有 recorder owner-mutex 測試）=`2034 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。舊 HPQ1 131/48 沒有重跑、覆寫或當新 final 使用。
 - 下一包 P3-A 只先施工 Chronos-2 past-only covariate adapter＋future-covariate fail-closed＋synthetic/PIT負測試。因 real cross-market factor 尚 DATA_NOT_READY，不能先跑真實 covariate 增益；residual shrinkage／組合等到單一 covariate path 可因果驗證後再做。
+
+## 0.2 P3-A Chronos-2 past-only covariate 工程（2026-09-27）
+
+- 實際進場 HEAD=`2df217af438e6d078cec768f969bab9eb4f0f4bb`、build=`f9e7b0ac3ce7ea69`；P3-A 完成後 source/config build=`2729cb4b2bcd1cb7`。只保留原本兩個未追蹤排程檔，沒有 live runtime handover、recorder restart、下單/帳戶動作或 fine-tune。
+- 依本機 `chronos-forecasting==2.3.2` 實際 API 施工：`Chronos2Pipeline.predict` 接受 list-of-dict，其中 `target` 必填、`past_covariates` 是與 history 等長的 named 1-D arrays、`future_covariates` 是 prediction_length 等長的已知未來欄位。P3-A 直接走 dictionary API；不使用 `predict_df`，因後者要求 regular timestamps，不能為了 JPX/OSE 假日把不存在的日曆 bar 補成規則序列。
+- 新 `ChronosPastCovariate` 強制逐筆 `values / event_time / available_at / source_hashes / feature_version`。adapter 在載權重前驗證：target/covariate 1-D且有限、長度一致、若都是 pandas Series 則 index 完全一致、event time strictly increasing、`event_time <= available_at <= decision_time`、source hash逐筆存在。任何 future-covariate argument（含空dict）一律 `FUTURE_COVARIATES_BLOCKED_P3A`；P3-A 不因上游支援而自動允許 future market covariates。
+- Covariate identity hash 包含值(float32 content)、逐筆 event/available time、source hashes、feature version、decision time與 target index hash；`chronos_forecast.input_data_hash` 會和該 identity 合成，forecast config 也區分 plain vs past-only mode，避免同數值但來源/修訂/時間對齊不同時誤用舊cache。
+- 新 P1→P3-A bridge 不排序、不future-fill、不混contract。只有全部 `engineering_status=PASS + data_status=DATA_READY + evidence_origin=REAL`、同 representation/factor contract/feature version/P1 protocol、packet decision/source event嚴格遞增、feature available不晚於packet decision且packet decision不晚於final decision時，才生成 Chronos covariate。synthetic packet 明確保持 `DATA_NOT_READY`；mixed identity、late/revised/future、reordered packet、duplicate/非單調 target index 都拒絕。
+- 安裝版 preprocessing 的直接工程驗證 PASS：同樣的 `{target, past_covariates}` 送進 `Chronos2Dataset`，32點 target + 1 covariate 形成 context shape `(2,32)`；3-step future covariate slots 全為 NaN，證明沒有默默注入 future covariates。這只驗 installed API/schema，不等於實際權重 inference 或市場準確率；`local_verified.covariates` 維持 false。
+- 真實資料只讀盤點仍為：`features.duckdb` 存在，NQ/ES/JY/TMF candidate groups=`0`。因此**沒有**執行真實 univariate-vs-covariate ablation，沒有 PREDICTIVE_GAIN、沒有 CALIBRATED、沒有 TRADING_EDGE；synthetic/fake pipeline 僅驗工程契約。
+- 驗收：P3-A/P1/horizon focused=`33 passed`；加入bridge=`37 passed`；reproducibility/build integration=`47 passed`；full offline（只排除既有 recorder owner-mutex case）=`2047 passed, 1 skipped, 24 deselected, 132 warnings`，exit 0。installed Chronos schema validation exit 0。
+- P3-B 入口：先取得/累積**合格 REAL exact-contract factor packets**；資料足夠後才預登記同origin univariate vs past-only covariate ablation（固定primary loss/delta/splits/trial cap/seed/coverage）。在 standalone covariate path 尚未證明因果增益前，不進 residual shrinkage、ensemble weight、regime 或 fine-tune。
 
 ## 1. 結論：保留底座，修改模型策略，不整套推倒
 
