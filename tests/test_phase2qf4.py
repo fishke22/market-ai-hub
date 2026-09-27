@@ -106,7 +106,7 @@ def test_2330_golden_payload(monkeypatch):
         b,
         "_taiwan_stock_context",
         lambda symbol, as_of: {
-            "schema_version": "TAIWAN_STOCK_CONTEXT_V1",
+            "schema_version": "TAIWAN_STOCK_CONTEXT_V2",
             "source_semantics_version": "TEST",
             "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
             "predictive_feature_eligible": False,

@@ -36,9 +36,9 @@ def _analysis_summary(symbol="3706.TW", horizon="4d"):
 
 def _context_summary(symbol="3706.TW"):
     return {
-        "schema_version": "TAIWAN_STOCK_CONTEXT_V1",
-        "source_semantics_version": "FINMIND_FREE_TARGET_CONTEXT_ASOF_V1",
-        "freshness_policy_version": "TAIWAN_STOCK_CONTEXT_FRESHNESS_V1",
+        "schema_version": "TAIWAN_STOCK_CONTEXT_V2",
+        "source_semantics_version": "FINMIND_FREE_TARGET_CONTEXT_ASOF_V2",
+        "freshness_policy_version": "TAIWAN_STOCK_CONTEXT_FRESHNESS_V2",
         "symbol": symbol,
         "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
         "predictive_feature_eligible": False,
@@ -174,7 +174,7 @@ def test_taiwan_packet_embeds_same_target_governed_model_result(monkeypatch):
     )
     assert packet["display_policy"]["may_present_as_direct_forecast"] is True
     context = packet["target_context_snapshot"]
-    assert context["schema_version"] == "TAIWAN_STOCK_CONTEXT_V1"
+    assert context["schema_version"] == "TAIWAN_STOCK_CONTEXT_V2"
     assert context["channels"]["valuation"]["values"]["pe_ratio"] == 12.0
     assert context["channels"]["eps"]["pit_usable"] is False
     assert context["channels"]["news"]["status"] == "NOT_AVAILABLE"
