@@ -30,4 +30,7 @@
 - 最終完整離線輪：**1995 passed、1 skipped、35 deselected、110 warnings，exit 0，221.70 秒**。此輪開始前所有 runtime source 已完成修改；之後僅修改交接文件。
 - warnings 為既有 datetime.utcnow 棄用提示，未把它們當作零警告。
 - staged 19 files 的基本 token/private-key pattern 掃描未命中；這只是輔助掃描，不是完整安全認證。
-- 本機修改已驗證，遠端 commit／PR／CI 於發佈後補記。
+- 程式／文件主提交：`97c9ef383fd5c67afe47d3fcf7cc63e7a76c004d`，已推送 `origin/codex/vnext-audit-handoff`。
+- PR：[修復與 vNext 交接 #74](https://github.com/fishke22/market-ai-hub/pull/74)，保持開啟，未合併。
+- GitHub CI 已觸發；本文件寫入時為 pending，不能當作 CI 通過。[即時 CI 狀態](https://github.com/fishke22/market-ai-hub/pull/74/checks)。文件包的 PUBLICATION_STATUS.json 記錄匯出時的最新觀測，不自動等同之後狀態。
+- 主提交後只有發佈資訊文件更新；runtime build 不變。兩個原有 untracked 排程檔仍保留，本次 tracked changes 已提交。
