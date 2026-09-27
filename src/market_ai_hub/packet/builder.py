@@ -570,11 +570,20 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
         "status": "ENVIRONMENT_ONLY",
         "note": "risk_on/trend/vol/rates regime 是市場環境，非 economic edge",
     }
-    packet.economic_edge_summary = {
-        "status": "NO_ECONOMIC_EDGE",
-        "source": "Phase2V-C cost-aware strategy validation",
-        "explanation": "Phase2 cost/slippage strategy validation completed; result NO_ECONOMIC_EDGE.",
-    }
+    if family == "OSAKA_MICRO":
+        packet.economic_edge_summary = {
+            "status": "NO_ECONOMIC_EDGE",
+            "source": "Phase2V-C cost-aware strategy validation",
+            "evidence_scope": "OSAKA_MICRO",
+            "explanation": "Osaka-scoped cost-aware validation result: NO_ECONOMIC_EDGE.",
+        }
+    else:
+        packet.economic_edge_summary = {
+            "status": "ECONOMIC_EDGE_NOT_EVALUATED",
+            "source": f"{family}_TARGET_SCOPED_VALIDATION_TRUTH",
+            "evidence_scope": family,
+            "explanation": "No same-family, same-target cost-aware economic validation is registered.",
+        }
 
     # §12：driver panel 只標 CONTEXT / EXPLANATORY FEATURES，非 formal causal validation
     packet.driver_panel = {
@@ -599,24 +608,33 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
     }
     packet.research_decision_support = {
         "status": "ENABLED_RESEARCH_ONLY",
+        "target_family_scope": family,
         "research_stance_allowed": True,
         "conditional_action_framework_allowed": True,
         "formal_validated_direction_still_gated": True,
         "public_probability_still_gated": True,
         "execution_order_allowed": False,
         "personalized_order_size_allowed": False,
-        "broker_ui_text_translation_allowed": True,
-        "broker_ui_translation_tool": "get_itrader_advisory",
-        "broker_ui_translation_is_order_execution": False,
-        "must_preserve_direct_proxy_scope": True,
-        "settlement_and_trading_path_must_remain_separate": True,
-        "live_news_fusion_status": "DEFERRED_P6",
-        "market_structure_status": "DESCRIPTIVE_ONLY_VIA_TRADING_PATH_TOOL",
-        "instruction": (
-            "Do not stop at WAIT: synthesize a qualitative research stance from same-scope model evidence "
-            "and provide conditional research actions, while keeping execution/orders and probability claims gated."
-        ),
     }
+    if family == "OSAKA_MICRO":
+        packet.research_decision_support.update({
+            "broker_ui_text_translation_allowed": True,
+            "broker_ui_translation_tool": "get_itrader_advisory",
+            "broker_ui_translation_is_order_execution": False,
+            "must_preserve_direct_proxy_scope": True,
+            "settlement_and_trading_path_must_remain_separate": True,
+            "live_news_fusion_status": "DEFERRED_P6",
+            "market_structure_status": "DESCRIPTIVE_ONLY_VIA_TRADING_PATH_TOOL",
+        })
+    elif family == "TAIWAN_STOCK":
+        packet.research_decision_support.update({
+            "broker_ui_text_translation_allowed": False,
+            "corporate_action_integrity_required": True,
+            "model_result_in_packet": False,
+            "model_result_integration_status": "SEPARATE_ANALYZER_NOT_YET_PACKET_INTEGRATED",
+        })
+    else:
+        packet.research_decision_support["broker_ui_text_translation_allowed"] = False
 
     # position-aware research decision support: useful synthesis is allowed; orders remain prohibited.
     from market_ai_hub.services.public_view import position_guidance_policy
@@ -758,30 +776,41 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         packet.data_coverage_summary = _t("feature_coverage_compact", lambda: _coverage_summary_compact(family))
     else:
         packet.data_coverage_summary = _t("feature_coverage", lambda: _coverage_summary(family))
-    try:
-        from market_ai_hub.research.future_data_acquisition import future_data_readiness
-        future_readiness = future_data_readiness()
-    except Exception as exc:
-        future_readiness = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
-    try:
-        from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
-        p5_forward = p5_forward_evidence_summary()
-    except Exception as exc:
-        p5_forward = {
-            "status": "UNAVAILABLE",
-            "reason": type(exc).__name__,
-            "PREDICTIVE_GAIN": False,
-            "CALIBRATED": False,
-            "TRADING_EDGE": False,
-        }
     packet.research_gates = {
         "TRADING_EDGE_GATE": "UNPROVEN",
         "FORWARD_VALIDATION": "NOT_YET",
-        "NO_NEW_FORWARD_OUTCOME_ANALYSIS": "BASELINE_INTERVAL_VOLATILITY_ALLOWED",
         "STRONG_DIRECTION_WITHOUT_PREDICTIVE_GAIN": "BLOCKED",
-        "FUTURE_DATA_ACQUISITION": future_readiness,
-        "ACCURACY_V2_P5_FORWARD": p5_forward,
+        "TARGET_FAMILY_SCOPE": family,
     }
+    if family == "OSAKA_MICRO":
+        try:
+            from market_ai_hub.research.future_data_acquisition import future_data_readiness
+            future_readiness = future_data_readiness()
+        except Exception as exc:
+            future_readiness = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+        try:
+            from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+            p5_forward = p5_forward_evidence_summary()
+        except Exception as exc:
+            p5_forward = {
+                "status": "UNAVAILABLE",
+                "reason": type(exc).__name__,
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            }
+        packet.research_gates.update({
+            "NO_NEW_FORWARD_OUTCOME_ANALYSIS": "BASELINE_INTERVAL_VOLATILITY_ALLOWED",
+            "FUTURE_DATA_ACQUISITION": future_readiness,
+            "ACCURACY_V2_P5_FORWARD": p5_forward,
+        })
+    elif family == "TAIWAN_STOCK":
+        packet.research_gates["TAIWAN_STOCK_VALIDATION"] = {
+            "historical_oos": packet.validation_truth.get("historical_oos", "NOT_YET_VALIDATED"),
+            "forward": packet.validation_truth.get("forward", "NOT_YET_VALIDATED"),
+            "economic": packet.validation_truth.get("economic", "NOT_ESTABLISHED"),
+            "jnu_accuracy_v2_evidence_allowed": False,
+        }
     packet.reanalysis_conditions = [
         "FORECAST_STALE_AFTER_EVENT",
         "major data revision",
@@ -824,9 +853,9 @@ def _coverage_summary_compact(family: str = "OSAKA_MICRO") -> list[dict]:
         ]
     if family == "TAIWAN_STOCK":
         return [
-            {"factor": "target stock data", "status": "ROUTED", "source": "FinMind/TWSE/yfinance"},
+            {"factor": "target stock data", "status": "ROUTED", "source": "FinMind raw / TWSE fallback"},
             {"factor": "TWSE/FinMind status", "status": "ROUTED", "source": "provider registry"},
-            {"factor": "corporate action", "status": "NOT_AVAILABLE", "source": "adjustment not implemented"},
+            {"factor": "corporate action", "status": "IMPLEMENTED_FAIL_CLOSED", "source": "FinMind reference-reset event channels"},
             {"factor": "VIX", "status": "GLOBAL_CONTEXT", "source": "Cboe official"},
         ]
     # TAIWAN_INDEX
@@ -844,12 +873,12 @@ def _archive_packet(packet: AnalysisPacket, family: str = "OSAKA_MICRO") -> str:
     market_name = {"OSAKA_MICRO": "osaka", "TAIWAN_STOCK": "taiwan_stock", "TAIWAN_INDEX": "taiwan_index"}[family]
     dataset_semantics = {
         "OSAKA_MICRO": "jpx-micro-settlement-v1",
-        "TAIWAN_STOCK": "UNVERSIONED",  # 台股 historical dataset 尚未正式 version
+        "TAIWAN_STOCK": "TAIWAN_STOCK_REFERENCE_RESET_CONTINUITY_V1",
         "TAIWAN_INDEX": "UNVERSIONED",  # TAIEX pipeline 未實作
     }[family]
     feature_semantics = {
         "OSAKA_MICRO": "base-v1",
-        "TAIWAN_STOCK": "UNVERSIONED",
+        "TAIWAN_STOCK": "base-v1",
         "TAIWAN_INDEX": "UNVERSIONED",
     }[family]
 

@@ -133,26 +133,52 @@ def live_model_cards() -> dict[str, ModelCard]:
         if has_oos:
             eng = EngineeringStatus.PASS.value
             bal_acc = rec.get("balanced_accuracy")
-            majority_base = rec.get("majority_class_baseline_accuracy")
-            uniform_base = rec.get("uniform_random_baseline_accuracy")
+            majority_bal = rec.get("majority_class_baseline_balanced_accuracy")
+            uniform_bal = rec.get("uniform_random_baseline_balanced_accuracy")
+            baseline_semantics = str(rec.get("baseline_semantics") or "")
+            baseline_is_comparable = baseline_semantics in {
+                "OOS_SAME_ORIGIN_MAJORITY_CLASSIFIER_V2",
+                "FOLD_LOCAL_TRAIN_MAJORITY_SAME_OOS_ORIGINS_V2",
+            }
             beat = False
-            if bal_acc is not None:
-                threshold = max([b for b in (majority_base, uniform_base, 1 / 3) if b is not None])
-                beat = bal_acc > threshold
+            threshold = None
+            if (
+                bal_acc is not None
+                and majority_bal is not None
+                and baseline_is_comparable
+            ):
+                threshold = max(
+                    [b for b in (majority_bal, uniform_bal, 1 / 3) if b is not None]
+                )
+                # New records compute the conservative same-origin multi-metric
+                # comparison during walk-forward.  Do not reconstruct promotion
+                # from a single metric here.
+                beat = rec.get("beats_majority_baseline") is True
             val_status = (
                 PredictiveValidationStatus.EXPERIMENTAL.value
                 if beat
                 else PredictiveValidationStatus.DEGRADED.value
             )
+            if threshold is not None:
+                reason = (
+                    f"OOS multi-metric gate recorded={beat}; "
+                    f"balanced_accuracy={bal_acc} vs paired "
+                    f"balanced baseline={threshold:.4f}"
+                )
+            elif not baseline_is_comparable:
+                reason = "legacy/mixed-scale baseline evidence is not promotion-eligible"
+            else:
+                reason = "OOS record lacks comparable balanced-accuracy baseline"
             cards[name] = ModelCard(
                 name=name, role=ModelRole.BASE_MODEL.value, model_task=ModelTask.DIRECTION_CLASSIFICATION.value,
                 engineering_status=eng,
                 predictive_validation_status=val_status,
-                eligible_for_price_reference=False,  # 分類器不給價格
+                eligible_for_price_reference=False,
                 eligible_for_direction_vote=beat,
-                eligible_for_ensemble_weighting=bool(rec.get("n_samples", 0) > 0),
-                reason=f"OOS record 存在；balanced_accuracy={bal_acc} vs baseline_threshold={threshold:.4f}"
-                if bal_acc is not None else "OOS record 缺少 balanced_accuracy",
+                eligible_for_ensemble_weighting=bool(
+                    rec.get("n_samples", 0) > 0 and baseline_is_comparable
+                ),
+                reason=reason,
                 evidence={"oos_record": rec},
             )
         else:

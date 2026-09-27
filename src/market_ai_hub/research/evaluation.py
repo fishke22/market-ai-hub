@@ -128,18 +128,53 @@ def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray,
     bal = float(balanced_accuracy_score(y_true, y_pred))
     macro_f1 = float(f1_score(y_true, y_pred, average="macro", zero_division=0))
     mcc = float(matthews_corrcoef(y_true, y_pred))
-    # baseline 門檻（不固定 50%）
+    # Baselines must be compared on the same OOS origins and same metric.
     bases = classification_baselines(y_true, train_labels)
     majority_pred = bases["majority_class"]
-    majority_acc = None if majority_pred is None else float((y_true == majority_pred).mean())
-    uniform = 1 / len(np.unique(y_true)) if len(np.unique(y_true)) else 1 / 3
-    threshold = max(majority_acc, uniform) if majority_acc is not None else uniform
+    if majority_pred is None:
+        majority_acc = None
+        majority_bal = None
+        majority_macro_f1 = None
+        train_prevalence = None
+    else:
+        majority_acc = float((y_true == majority_pred).mean())
+        majority_bal = float(balanced_accuracy_score(y_true, majority_pred))
+        majority_macro_f1 = float(
+            f1_score(y_true, majority_pred, average="macro", zero_division=0)
+        )
+        tr = np.asarray(train_labels).astype(int)
+        majority_class = int(majority_pred[0])
+        train_prevalence = float((tr == majority_class).mean())
+    uniform_acc = 1 / 3
+    uniform_bal = 1 / 3
+    threshold = (
+        max(majority_bal, uniform_bal)
+        if majority_bal is not None
+        else None
+    )
     return {
-        "accuracy": acc, "balanced_accuracy": bal, "macro_f1": macro_f1, "mcc": mcc,
+        "accuracy": acc,
+        "balanced_accuracy": bal,
+        "macro_f1": macro_f1,
+        "mcc": mcc,
+        "majority_class_train_prevalence": train_prevalence,
         "majority_class_baseline_accuracy": majority_acc,
-        "uniform_baseline_accuracy": uniform,
+        "majority_class_baseline_balanced_accuracy": majority_bal,
+        "majority_class_baseline_macro_f1": majority_macro_f1,
+        "uniform_baseline_accuracy": uniform_acc,
+        "uniform_baseline_balanced_accuracy": uniform_bal,
+        "baseline_metric": "accuracy+balanced_accuracy+macro_f1",
         "baseline_threshold": threshold,
-        "beats_majority_baseline": None if majority_acc is None else bal > threshold,
+        "baseline_semantics": "OOS_SAME_ORIGIN_MAJORITY_CLASSIFIER_V2",
+        "beats_majority_baseline": (
+            None
+            if threshold is None
+            else bool(
+                acc > majority_acc
+                and bal > threshold
+                and macro_f1 > majority_macro_f1
+            )
+        ),
     }
 
 

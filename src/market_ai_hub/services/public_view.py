@@ -189,6 +189,38 @@ def research_decision_support(payload: dict, *, market: str = "osaka") -> dict:
     The price tilt is computed only inside the model's own forecast scope. For Osaka that scope is
     ^N225 PROXY, so it is never compared with a stale/direct Micro settlement to create a fake return.
     """
+    data_integrity = payload.get("data_integrity") or {}
+    if str(data_integrity.get("status") or "").upper() == "BLOCKED":
+        reason = (
+            data_integrity.get("reason")
+            or data_integrity.get("corporate_action_integrity")
+            or "DATA_INTEGRITY_BLOCKED"
+        )
+        return {
+            "status": "DATA_INTEGRITY_BLOCKED",
+            "research_stance": "DATA_INTEGRITY_BLOCKED",
+            "research_stance_strength": "NONE",
+            "evidence_scope": "MARKET_ANALYSIS_SCOPE",
+            "validated_direction_available": False,
+            "validated_direction": None,
+            "public_probability_available": False,
+            "not_trading_edge": True,
+            "basis": {
+                "data_integrity_status": "BLOCKED",
+                "data_integrity_reason": reason,
+                "price_ensemble_expected_return_research": None,
+                "price_ensemble_tilt": "UNAVAILABLE",
+                "raw_classifier_tilt_research_only": "UNAVAILABLE",
+            },
+            "conditional_action_framework": {
+                "current": "WAIT_AND_REPAIR_DATA_INTEGRITY",
+                "if_data_integrity_restored": "RECOMPUTE_FROM_CLEAN_INPUTS",
+                "if_data_stale_or_missing": "WAIT_AND_REFRESH",
+                "execution_order_authorized": False,
+                "personalized_order_size_authorized": False,
+                "exact_entry_stop_target_authorized": False,
+            },
+        }
     price = payload.get("price_forecast_ensemble") or {}
     expected_return = _finite_float(price.get("expected_return"))
     if expected_return is None:

@@ -25,13 +25,16 @@ from market_ai_hub.ensemble.ensemble import ensemble_equal_weight, independent_v
 from market_ai_hub.models.baseline_ml import BaselineClassifier, baseline_forecast
 from market_ai_hub.models.chronos_model import chronos_forecast
 from market_ai_hub.models.timesfm_model import timesfm_forecast
-from market_ai_hub.providers.finmind import FinMindProvider
-from market_ai_hub.providers.twse import TWSEProvider
 from market_ai_hub.providers.yfinance_provider import YFinanceProvider
 from market_ai_hub.schemas.market_data import ModelRole
 from market_ai_hub.services.build_info import build_fingerprint
 from market_ai_hub.services.horizon import HorizonUnsupportedError, parse_horizon
 from market_ai_hub.services.model_runtime import get_chronos, get_timesfm
+from market_ai_hub.services.taiwan_stock_data import (
+    TaiwanStockDataIntegrityError,
+    load_taiwan_stock_model_data,
+    restore_forecast_to_raw_basis,
+)
 
 log = logging.getLogger(__name__)
 
@@ -294,42 +297,37 @@ def _parse_window(requested_dates: str) -> list[str]:
 
 
 def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
-    """台股分析：優先 FinMind（OFFICIAL_DAILY），fallback TWSE OpenAPI，再 fallback yfinance。"""
+    """台股分析：只接受公司行動校正完成的同一資料契約。"""
     warnings: list[str] = []
-    df: pd.DataFrame | None = None
-    provider_name = ""
     end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     start = (datetime.now(timezone.utc) - timedelta(days=730)).strftime("%Y-%m-%d")
 
-    # 容忍 yfinance 風格後綴（3706.TW → TWSE/FinMind 用 3706）
-    lookup_code = stock.split(".")[0] if stock.upper().endswith(".TW") else stock
-
-    fm = FinMindProvider()
-    if fm.status().status.value in ("ok", "needs_config"):
-        try:
-            df = fm.fetch_price(lookup_code, start, end)
-            provider_name = "finmind"
-        except Exception as e:
-            warnings.append(f"finmind: {e}")
-
-    if df is None:
-        twse = TWSEProvider()
-        try:
-            twse_start = (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y%m%d")
-            df = twse.fetch_symbol_daily(lookup_code, twse_start, end.replace("-", ""))
-            provider_name = "twse"
-        except Exception as e:
-            warnings.append(f"twse: {e}")
-
-    if df is None or df.empty:
+    try:
+        bundle = load_taiwan_stock_model_data(stock, start, end, min_rows=60)
+    except TaiwanStockDataIntegrityError as exc:
         return {
-            "status": "DATA_UNAVAILABLE",
+            "status": "DATA_INTEGRITY_BLOCKED",
             "role": ModelRole.ANALYSIS_WRAPPER.value,
             "symbol": stock,
-            "warnings": warnings,
-            "message": "FinMind 與 TWSE 皆無法取得資料（FinMind 需要 FINMIND_TOKEN）",
+            "horizon": horizon,
+            "data_integrity": {
+                "status": "BLOCKED",
+                "corporate_action_integrity": "CORPORATE_ACTION_ADJUSTMENT_UNAVAILABLE",
+                "reason": exc.reason,
+                "details": exc.details,
+            },
+            "warnings": [f"taiwan_stock_data: {exc.reason}"],
+            "message": "台股價格公司行動校正未通過；禁止用未校正 raw OHLC 產生模型預測。",
             **build_fingerprint(),
         }
+
+    df = bundle.frame
+    data_identity = bundle.metadata
+    provider_name = str(data_identity.get("raw_price_source") or "taiwan_stock")
+    model_data_grade = str(
+        data_identity.get("model_data_grade") or "RESEARCH_PROXY"
+    )
+    warnings.extend(list(data_identity.get("warnings") or []))
 
     closes = _daily_closes(df)
     steps = _horizon_steps_or_none(horizon)
@@ -351,6 +349,27 @@ def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
         "symbol": stock,
         "provider": provider_name,
         "horizon": horizon,
+        "data_integrity": {
+            "status": "PASS",
+            "corporate_action_integrity": data_identity["corporate_action_integrity"],
+            "known_discontinuity": False,
+        },
+        "dataset_semantics": data_identity["dataset_semantics"],
+        "adjustment_semantics": data_identity["adjustment_semantics"],
+        "source_semantics": data_identity["source_semantics"],
+        "feature_version": data_identity["feature_version"],
+        "price_basis": "RAW_CURRENT_BASIS",
+        "model_data_grade": model_data_grade,
+        "corporate_action_events": data_identity["events"],
+        "requested_history": {
+            "start": data_identity["requested_start_date"],
+            "end": data_identity["requested_end_date"],
+        },
+        "actual_history": {
+            "start": data_identity["actual_start_date"],
+            "end": data_identity["actual_end_date"],
+            "rows": data_identity["actual_rows"],
+        },
         "role": ModelRole.ANALYSIS_WRAPPER.value,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "forecast_origin": anchor["forecast_origin"],
@@ -368,20 +387,52 @@ def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
     def _run_base(key: str, fn):
         try:
             fo = fn()
+            fo = restore_forecast_to_raw_basis(
+                fo, bundle.current_adjustment_factor
+            )
             results[key] = fo.model_dump()
             models.append(fo)
         except Exception as e:
             results[key] = {"status": "unavailable", "error": str(e)}
             warnings.append(f"{key}: {e}")
 
-    _run_base("chronos", lambda: chronos_forecast(get_chronos(), stock, closes, horizon=horizon, horizon_steps=steps, data_grade="OFFICIAL_DAILY"))
-    _run_base("timesfm", lambda: timesfm_forecast(get_timesfm(), stock, closes, horizon=horizon, horizon_steps=steps, data_grade="OFFICIAL_DAILY"))
+    _run_base(
+        "chronos",
+        lambda: chronos_forecast(
+            get_chronos(),
+            stock,
+            closes,
+            horizon=horizon,
+            horizon_steps=steps,
+            data_grade=model_data_grade,
+        ),
+    )
+    _run_base(
+        "timesfm",
+        lambda: timesfm_forecast(
+            get_timesfm(),
+            stock,
+            closes,
+            horizon=horizon,
+            horizon_steps=steps,
+            data_grade=model_data_grade,
+        ),
+    )
 
     from market_ai_hub.features.features import build_features
 
     feat = build_features(df)
     for name in ("xgb", "lgbm"):
-        _run_base(name, lambda n=name: baseline_forecast(BaselineClassifier(n), stock, feat, horizon=horizon, data_grade="OFFICIAL_DAILY"))
+        _run_base(
+            name,
+            lambda n=name: baseline_forecast(
+                BaselineClassifier(n),
+                stock,
+                feat,
+                horizon=horizon,
+                data_grade=model_data_grade,
+            ),
+        )
 
     if models:
         ens = ensemble_equal_weight(models, stock, horizon)
@@ -405,14 +456,19 @@ def analyze_taiwan_stock(stock: str, horizon: str = "1d") -> dict:
     vote = independent_vote_summary(models)
     results.update(vote)
 
-    results["used_market_data"] = [f"{provider_name}:{stock}"]
+    results["used_market_data"] = [
+        f"{provider_name}:{stock}",
+        "FinMind:corporate_action_reference_events",
+    ]
     results["used_base_models"] = [f.model for f in models]
     results["used_ensemble"] = bool(models)
     results["cross_asset_inputs"] = []
     results["rule_inputs"] = RULE_INPUTS
     results["confidence_inputs"] = _confidence_inputs(df, models, horizon)
+    results["confidence_inputs"]["corporate_action_integrity"] = "PASS"
+    results["confidence_inputs"]["dataset_semantics"] = data_identity["dataset_semantics"]
     results["status"] = "OK"
-    results["data_grade"] = "OFFICIAL_DAILY"
+    results["data_grade"] = model_data_grade
     results["warnings"] = warnings
     results.update(build_fingerprint())
     return results

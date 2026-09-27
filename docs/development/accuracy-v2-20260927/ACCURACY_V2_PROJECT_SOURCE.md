@@ -2,6 +2,18 @@
 
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4 已完成工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析，但沒有把 development interval 或 quantile challenger 冒充預測增益／校準機率。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
+## 0.TW Taiwan-stock P0 correctness audit（2026-09-28）
+
+- 這是 correctness / semantic / architecture 修復，不是新的模型挑選或精度證據。source/config build=`c0f52deac6ba33d8`。JNU P2/HPQ1/P5 證據邊界完全不變。
+- 新共用資料契約：`TAIWAN_STOCK_REFERENCE_RESET_CONTINUITY_V1` + `FORWARD_EFFECTIVE_DATE_REFERENCE_RESET_V1`。Taiwan inference、classification backtest、TS validation 都走同一 corporate-action normalizer；future action 只從 effective date 向後生效，不回寫 prior features。必要 reference-reset channel 缺失、同日 factor 衝突、或無事件解釋的 >12% raw jump 都 fail closed。
+- 事件來源使用 FinMind 免費 reference tables：`TaiwanStockDividendResult`、`TaiwanStockCapitalReductionReferencePrice`、`TaiwanStockSplitPrice`、`TaiwanStockParValueChange`；事件本身不進 predictive features。FinMind raw price 明標 `RESEARCH_PROXY`，只有 direct TWSE `STOCK_DAY` raw data 才標 `OFFICIAL_DAILY`。模型在 continuity basis 運算後，絕對價格輸出再映回 current raw basis。
+- 真實 3706 audit：483 rows，2024-09-30..2026-09-24；2026-09-09 reference reset before=91.3 / reference=80.27 / announcement=2026-08-24T11:11:58。raw 91.3->81.8 的機械落差經 continuity 轉為 101.4444->103.3780。這只證明資料校正契約工作正常。
+- Backtest 任務語義拆分：classification 指標與 numeric-return regression 指標分開；classification 的 MAE/RMSE/pinball=`null`。majority comparator 由每個 fold 的 train 決定，再在同一 OOS origins 計 accuracy / balanced accuracy / macro-F1；promotion 要三項都勝過 comparator，balanced accuracy 另須高於 uniform 1/3。train majority prevalence 只作描述，不再和 balanced accuracy 混比。
+- Gross strategy diagnostics 使用 `position * realized_next_bar_return`，明標 `GROSS_REALIZED_RETURN_DIAGNOSTIC_NO_COSTS`、`transaction_costs_included=false`。因此 Sharpe / PF / DD 不是含成本 EDGE。舊 mixed-scale persisted evidence 不得取得 direction-vote 或 ensemble-weight promotion eligibility；PerformanceStore additive migration 並把 DB NULL/NaN 還原為 JSON-safe `None`。
+- Taiwan AnalysisPacket 與 JNU evidence 隔離：Taiwan 不再掛 `ACCURACY_V2_P5_FORWARD`、JPX/TMF、iTRADER 或 Osaka Phase2V-C economic conclusion；Taiwan economic status=`ECONOMIC_EDGE_NOT_EVALUATED`。目前仍明確標 `model_result_in_packet=false` / `SEPARATE_ANALYZER_NOT_YET_PACKET_INTEGRATED`，下一包才做 numeric analyzer integration。
+- 3706 isolated backtest smoke 只驗工程路徑：n=160、accuracy=0.3875、balanced accuracy=0.360236、macro-F1=0.351233、`beats_majority_baseline=false`、`DEGRADED`、direction-vote eligible=false；不構成 predictive-gain evidence。
+- 驗收：focused=`61 passed, 28 warnings`；build/integration=`49 passed, 2 deselected`；full offline（僅排除既有 recorder owner-mutex）=`2147 passed, 1 skipped, 24 deselected, 149 warnings`，exit 0。`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`；無 scheduler/recorder/runtime/broker/account/order/model-tuning 動作。
+- 下一個 bounded Taiwan package：先把已治理的 analyzer/model result 接入 AnalysisPacket，再版本化 target-specific freshness / fundamental / flow，並在任何新 predictive experiment 前對 PE/PBR/EPS/月營收/news coverage 做同 cutoff、同 source-semantics 對帳。
 ## 0. P0/P1 實作快照（2026-09-27）
 
 - 實際施工分支 `codex/vnext-audit-handoff`，本包進場 base HEAD=`fc6bd6830ecfed642c3c268e953ec3385eac08b8`；source/config worktree build=`a11cbb922621e730`。既有 `scripts/register_jpx_micro_sync_task.ps1`、`scripts/run-hidden.vbs` 保持未追蹤且未提交。

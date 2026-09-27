@@ -3,7 +3,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from market_ai_hub.backtest.walk_forward import compute_metrics, walk_forward_splits
+from market_ai_hub.backtest.walk_forward import (
+    compute_metrics,
+    strategy_metrics,
+    walk_forward_splits,
+)
 from market_ai_hub.features.features import build_features
 
 
@@ -66,3 +70,17 @@ def test_compute_metrics_sane():
     assert 0 <= m["directional_accuracy"] <= 1
     assert m["mae"] >= 0 and m["rmse"] >= 0
     assert m["n_samples"] == 4
+
+
+def test_strategy_metrics_use_real_realized_returns_not_label_proxy():
+    realized = np.array([0.02, -0.03, 0.01])
+    directions = ["up", "down", "flat"]
+    m = strategy_metrics(realized, directions)
+
+    # Gross strategy returns are +2%, +3%, 0%, not a fixed +/-0.5% proxy.
+    assert m["average_return"] == pytest.approx((0.02 + 0.03) / 3)
+    assert m["expectancy"] == pytest.approx(0.025)
+    assert m["hit_rate"] == pytest.approx(1.0)
+    assert m["profit_factor"] is None
+    assert m["economic_metrics_status"] == "GROSS_REALIZED_RETURN_DIAGNOSTIC_NO_COSTS"
+    assert m["transaction_costs_included"] is False

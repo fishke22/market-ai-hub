@@ -129,6 +129,38 @@ def test_analyze_taiwan_public_safe():
     assert "direction" not in out["xgb"]
 
 
+def test_taiwan_public_stance_is_blocked_when_data_integrity_fails():
+    from market_ai_hub.services.public_view import sanitize_analysis_output
+
+    raw = {
+        "symbol": "3706.TW",
+        "data_integrity": {
+            "status": "BLOCKED",
+            "corporate_action_integrity": "CORPORATE_ACTION_ADJUSTMENT_UNAVAILABLE",
+            "reason": "CORPORATE_ACTION_REFERENCE_CHANNEL_INCOMPLETE",
+        },
+        "price_forecast_ensemble": {
+            "status": "OK",
+            "expected_return": 0.08,
+        },
+        "direction_classification_ensemble": {
+            "raw_direction_research": {
+                "raw_argmax": {"xgboost": "up", "lightgbm": "up"},
+            },
+        },
+    }
+    out = sanitize_analysis_output(raw, market="taiwan")
+    ds = out["research_decision_support"]
+
+    assert ds["status"] == "DATA_INTEGRITY_BLOCKED"
+    assert ds["research_stance"] == "DATA_INTEGRITY_BLOCKED"
+    assert ds["research_stance_strength"] == "NONE"
+    assert ds["validated_direction_available"] is False
+    assert ds["public_probability_available"] is False
+    assert ds["conditional_action_framework"]["current"] == "WAIT_AND_REPAIR_DATA_INTEGRITY"
+    assert ds["conditional_action_framework"]["execution_order_authorized"] is False
+
+
 # ── §17：macro context not causal ──
 
 def test_macro_context_not_causal():

@@ -17,8 +17,12 @@ def test_classification_metrics_and_baselines():
     assert cm["balanced_accuracy"] > 0.8
     assert cm["uniform_random_baseline_accuracy"] == pytest.approx(1 / 3, abs=1e-3)
     assert cm["majority_class_baseline_accuracy"] == pytest.approx(0.6, abs=0.05)
-    assert cm["baseline_threshold"] == pytest.approx(0.6, abs=0.05)
-    # 90% 正確的模型必須被判為超越 baseline
+    assert cm["majority_class_train_prevalence"] == pytest.approx(0.6, abs=0.05)
+    assert cm["majority_class_baseline_balanced_accuracy"] == pytest.approx(1 / 3)
+    assert cm["baseline_threshold"] == pytest.approx(1 / 3)
+    assert cm["baseline_metric"] == "accuracy+balanced_accuracy+macro_f1"
+    assert cm["baseline_semantics"] == "OOS_SAME_ORIGIN_MAJORITY_CLASSIFIER_V2"
+    # 90% 正確的模型必須被判為超越同尺度 baseline
     assert cm["beats_majority_baseline"] is True
 
 
@@ -31,6 +35,23 @@ def test_weak_model_not_eligible():
     train = rng.choice([-1, 0, 1], size=1000, p=[0.2, 0.6, 0.2])
     cm = classification_metrics(y_true, y_pred, train)
     assert cm["beats_majority_baseline"] is False
+
+
+def test_balanced_accuracy_is_not_compared_to_train_prevalence():
+    from market_ai_hub.backtest.walk_forward import classification_metrics
+
+    # Train majority prevalence is 80%, but a majority classifier has only 1/3
+    # balanced accuracy when all three classes appear in OOS.
+    train = np.array([1] * 80 + [0] * 10 + [-1] * 10)
+    y_true = np.array([1, 1, 0, 0, -1, -1])
+    y_pred = np.array([1, 1, 0, 0, -1, 1])
+    cm = classification_metrics(y_true, y_pred, train)
+
+    assert cm["majority_class_train_prevalence"] == pytest.approx(0.8)
+    assert cm["majority_class_baseline_accuracy"] == pytest.approx(1 / 3)
+    assert cm["majority_class_baseline_balanced_accuracy"] == pytest.approx(1 / 3)
+    assert cm["balanced_accuracy"] > cm["majority_class_baseline_balanced_accuracy"]
+    assert cm["beats_majority_baseline"] is True
 
 
 def test_dual_status_independent():
@@ -71,6 +92,31 @@ def test_classifier_vote_rule_respects_baseline(monkeypatch):
     cards = model_catalog.live_model_cards()
     assert cards["xgboost"].eligible_for_direction_vote is False
     assert cards["xgboost"].predictive_validation_status == "DEGRADED"
+
+
+@pytest.mark.integration
+def test_catalog_rejects_legacy_mixed_scale_baseline_even_if_numbers_look_good(monkeypatch):
+    from market_ai_hub.services import model_catalog
+    import market_ai_hub.storage.performance as perf_mod
+
+    class FakeStore:
+        def latest_by_model(self):
+            return {
+                "xgboost": {
+                    "balanced_accuracy": 0.70,
+                    "majority_class_baseline_accuracy": 0.60,
+                    "uniform_random_baseline_accuracy": 1 / 3,
+                    "n_samples": 100,
+                    # No V2 baseline_semantics / balanced comparator.
+                },
+            }
+
+    monkeypatch.setattr(perf_mod, "PerformanceStore", FakeStore)
+    cards = model_catalog.live_model_cards()
+    assert cards["xgboost"].eligible_for_direction_vote is False
+    assert cards["xgboost"].predictive_validation_status == "DEGRADED"
+    assert "legacy/mixed-scale" in cards["xgboost"].reason
+    assert cards["xgboost"].eligible_for_ensemble_weighting is False
 
 
 @pytest.mark.integration
