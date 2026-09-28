@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-28 P5 first canonical-origin operational miss / hotfix
+
+- 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.
+- Manual recovery at 08:17 stayed within the <=15m lateness window but exposed a runner clock bug: `as_of` was frozen before `collect_public_sources()`, while the refreshed JPX settlement parquet mtime became the receipt timestamp after collection. Precommit therefore failed closed as `DATA_NOT_READY / REFERENCE_RECEIVED_AFTER_ORIGIN`. The next retry was blocked by `MAX_ATTEMPTS_PER_LOCAL_DATE`. The 2026-09-28 origin is intentionally left missing; no backdated artifact, state reset, or gate bypass was performed.
+- Fix: production `run_p5_cycle()` re-anchors actual decision time after public-source collection; explicit `now=` remains deterministic/pinned. This preserves receipt-time causality and all existing preregistered gates rather than relaxing them. Current source/config build=`426583a3e6f2f27e`.
+- 07:45 JNU intraday data capture succeeded through the already-running single-owner Yuanta quote recorder, including true `SubscribeStockTick` DealPrice/DealVol and FiveTick callbacks. It is `CONTEXT_ONLY_NOT_P5_FEATURE`, predictive_feature_allowed=false, p5_forward_eligible=false, and was not mixed into the failed P5 origin.
+- Evidence claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`, no broker/account/order action, no HPQ1 replay, no attempt-cap override.
+- Validation: focused P5 regression=`12 passed`; final targeted P5/protocol/build-freeze regression=`67 passed, 2 deselected`; `git diff --check` PASS; changed-file high-risk secret scan=0 hits.
+
 ## 2026-09-28 Accuracy v2 system engineering closeout
 
 - State: **ENGINEERING_COMPLETE_WAITING_FOR_EXTERNAL_EVIDENCE / READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION**. Source/config build=`2647d9da4e9b73ac`.

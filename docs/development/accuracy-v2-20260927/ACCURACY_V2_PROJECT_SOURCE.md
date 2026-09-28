@@ -2,6 +2,15 @@
 
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
+## 2026-09-28 P5 first-origin operational evidence + clock hotfix
+
+- First canonical window 2026-09-28 08:05 Asia/Taipei did **not** produce a canonical artifact. One-shot automation had a run record at 08:08, but later audit remained canonical_prediction_count=0. Manual recovery at 08:17 was still inside the frozen <=15m lateness gate.
+- Root cause: `run_p5_cycle()` froze `as_of` before public-source collection. The collector then rewrote the current official JPX settlement parquet, whose file mtime is the observed receipt timestamp; that receipt therefore became a few seconds later than the frozen origin and correctly failed PIT validation as `REFERENCE_RECEIVED_AFTER_ORIGIN`. A further retry was blocked by the existing two-attempt daily cap. No state reset, backdating, manual ledger insertion or gate bypass is allowed; 2026-09-28 remains a genuine missing canonical origin.
+- Hotfix re-anchors production actual decision time after collection while preserving explicit `now=` for deterministic replay/tests. Nominal publication+5m origin, <=15m lateness, receipt-before-actual-origin, append-only audit, max attempts and no-backfill semantics are unchanged. source/config build=`426583a3e6f2f27e`.
+- The separately authorized 07:45 JNU intraday StockTick/FiveTick trial succeeded using the existing healthy single-owner recorder; it is receipt-time `CONTEXT_ONLY_NOT_P5_FEATURE`, not a preregistered P5 feature and not forward evidence.
+- `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false` remain frozen. This hotfix repairs operational causality only; it does not manufacture the missed sample.
+- Validation：focused P5=`12 passed`；final targeted P5/protocol/build-freeze=`67 passed, 2 deselected`；diff-check PASS；changed-file secret scan=0 hits。
+
 ## 2026-09-28 System engineering closeout
 
 - 新增 `AV2.SYSTEM_COMPLETION.1` / `accuracy_v2_engineering_closeout_v1`，由 `config/accuracy_v2_system_completion.yaml` + `system_completion_snapshot()` 固定「目前可施工工程」的完成定義。它不把 future canonical outcomes、Taiwan 新 observation periods、外部 provider 設定、未授權 runtime/order execution、sealed final 或 P6 conditional research 冒充工程缺口。

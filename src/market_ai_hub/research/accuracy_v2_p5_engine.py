@@ -872,19 +872,19 @@ def run_p5_cycle(
     protocol: P5Protocol | None = None,
 ) -> dict[str, Any]:
     p = protocol or load_p5_protocol()
-    as_of = _aware(now or _now_utc())
-    allowed, attempt_count, local_date = _next_attempt(as_of, p)
+    attempt_as_of = _aware(now or _now_utc())
+    allowed, attempt_count, local_date = _next_attempt(attempt_as_of, p)
     if not allowed:
         payload = {
             "schema_version": "AV2P5RUN.1",
-            "as_of": as_of.isoformat(),
+            "as_of": attempt_as_of.isoformat(),
             "local_date": local_date,
             "attempt_count": attempt_count,
             "status": "ATTEMPT_LIMIT",
             "collection": {"status": "SKIPPED_ATTEMPT_LIMIT"},
             "settlements": [],
             "precommit": P5CycleResult(status=STATUS_BLOCKED, reason="MAX_ATTEMPTS_PER_LOCAL_DATE").model_dump(),
-            "evidence": p5_forward_evidence_summary(now=as_of, db=db, protocol=p),
+            "evidence": p5_forward_evidence_summary(now=attempt_as_of, db=db, protocol=p),
             "broker_used": False,
             "credentials_used": False,
             "recorder_touched": False,
@@ -899,6 +899,11 @@ def run_p5_cycle(
         "recorder_touched": False,
         "order_action": False,
     }
+    # The forecast origin is the decision time after source collection. Otherwise
+    # a freshly persisted receipt can appear later than a frozen pre-collection
+    # origin and self-invalidate an otherwise causal P5 cycle. Explicit caller
+    # time stays pinned for deterministic tests/replays; production re-anchors.
+    as_of = attempt_as_of if now is not None else _aware(_now_utc())
     audit = db or PA.PredictionAuditDB()
     settled = settle_p5_pending(now=as_of, db=audit)
 

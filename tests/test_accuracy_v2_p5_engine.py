@@ -337,6 +337,60 @@ def test_cycle_attempt_limit_skips_third_collection(monkeypatch, tmp_path, db):
     assert calls["collect"] == 2
 
 
+def test_cycle_reanchors_decision_time_after_collection(monkeypatch, tmp_path, db):
+    import market_ai_hub.research.accuracy_v2_p5_engine as engine
+    import market_ai_hub.services.data_continuity as dc
+
+    monkeypatch.setattr(engine, "data_root", lambda: tmp_path)
+    started = datetime(2026, 9, 28, 0, 5, 0, tzinfo=UTC)
+    decided = datetime(2026, 9, 28, 0, 5, 10, tzinfo=UTC)
+    clocks = iter([started, decided])
+    monkeypatch.setattr(engine, "_now_utc", lambda: next(clocks))
+
+    order = []
+
+    def fake_collect():
+        order.append("collect")
+        return {
+            "status": "OK", "broker_used": False, "credentials_used": False,
+            "recorder_touched": False, "order_action": False,
+        }
+
+    def fake_settle(**kwargs):
+        order.append(("settle", kwargs["now"]))
+        return []
+
+    def fake_precommit(**kwargs):
+        order.append(("precommit", kwargs["now"]))
+        return engine.P5CycleResult(status=engine.STATUS_WAITING)
+
+    def fake_continuity(**kwargs):
+        order.append(("continuity", kwargs["now"]))
+        return {"mode": "NORMAL_TARGET_DATA", "context_only": False}
+
+    monkeypatch.setattr(engine, "collect_public_sources", fake_collect)
+    monkeypatch.setattr(engine, "settle_p5_pending", fake_settle)
+    monkeypatch.setattr(engine, "precommit_p5_forward", fake_precommit)
+    monkeypatch.setattr(
+        engine,
+        "p5_forward_evidence_summary",
+        lambda **kwargs: {
+            "PREDICTIVE_GAIN": False, "CALIBRATED": False, "TRADING_EDGE": False,
+        },
+    )
+    monkeypatch.setattr(dc, "jnu_data_continuity_status", fake_continuity)
+
+    out = run_p5_cycle(db=db)
+    assert out["as_of"] == decided.isoformat()
+    assert order == [
+        "collect",
+        ("settle", decided),
+        ("continuity", decided),
+        ("precommit", decided),
+    ]
+
+
+
 def test_cycle_continuity_mode_settles_pending_but_skips_new_precommit(monkeypatch, tmp_path, db):
     import market_ai_hub.research.accuracy_v2_p5_engine as engine
     import market_ai_hub.services.data_continuity as dc
