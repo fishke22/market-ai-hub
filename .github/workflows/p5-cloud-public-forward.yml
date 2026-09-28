@@ -41,12 +41,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      MARKET_AI_DATA_ROOT: ${{ runner.temp }}/market-ai-p5-data
       PYTHONPATH: ${{ github.workspace }}/src
       P5_CLOUD_ARTIFACT_NAME: p5-cloud-state
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Configure ephemeral P5 data root
+        shell: bash
+        run: echo "MARKET_AI_DATA_ROOT=$RUNNER_TEMP/market-ai-p5-data" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v7
