@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+import math
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -101,8 +102,14 @@ def validate_quantiles(q: dict[str, float | None]) -> tuple[bool, str]:
     if not q:
         return True, "empty"
     for k in ("p10", "p50", "p90"):
-        if q.get(k) is None:
-            return True, "NOT_AVAILABLE (missing quantiles)"
+        if q.get(k) is not None:
+            try:
+                if not math.isfinite(float(q[k])):
+                    return False, "non-finite quantile value"
+            except (TypeError, ValueError):
+                return False, "non-numeric quantile value"
+    if any(q.get(k) is None for k in ("p10", "p50", "p90")):
+        return True, "NOT_AVAILABLE (missing quantiles)"
     try:
         p10, p50, p90 = float(q["p10"]), float(q["p50"]), float(q["p90"])  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -110,6 +117,17 @@ def validate_quantiles(q: dict[str, float | None]) -> tuple[bool, str]:
     if not (p10 <= p50 <= p90):
         return False, f"monotonicity violated: p10={p10} p50={p50} p90={p90}"
     return True, "valid"
+
+
+def validate_price_path(path: dict, steps: int) -> None:
+    """Reject malformed positive-price paths before research metrics or blending."""
+    if steps < 1 or any(len(path.get(k, [])) != steps for k in ("p10", "p50", "p90")):
+        raise ValueError("model returned mismatched forecast horizon")
+    for i in range(steps):
+        q = {k: path[k][i] for k in ("p10", "p50", "p90")}
+        valid, reason = validate_quantiles(q)
+        if not valid or any(v is None or float(v) <= 0 for v in q.values()):
+            raise ValueError(f"invalid price path: {reason}")
 
 
 class ForecastOutput(BaseModel):

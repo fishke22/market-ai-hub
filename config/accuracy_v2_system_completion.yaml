@@ -1,0 +1,123 @@
+schema_version: AV2.SYSTEM_COMPLETION.1
+
+completion:
+  protocol_id: accuracy_v2_engineering_closeout_v1
+  scope: CURRENTLY_ACTIONABLE_ENGINEERING_ONLY
+
+  required_engineering:
+    p1_data_contract:
+      path: src/market_ai_hub/research/accuracy_v2_p1.py
+    p2_selection_protocol:
+      path: config/accuracy_v2_p2_protocol.yaml
+      expected_schema: AV2P2.1
+    p3a_past_only_covariates:
+      path: src/market_ai_hub/research/accuracy_v2_p3a.py
+    p3b_receipt_time_cross_market:
+      path: src/market_ai_hub/research/accuracy_v2_p3b_taifex.py
+    p4_no_future_analysis:
+      path: config/accuracy_v2_p4_protocol.yaml
+      expected_schema: AV2P4.1
+    p5_forward_monitor:
+      path: config/accuracy_v2_p5_protocol.yaml
+      expected_schema: AV2P5.1
+    p7_independent_engine:
+      path: config/accuracy_v2_p7_protocol.yaml
+      expected_schema: AV2P7.1
+    data_continuity:
+      path: src/market_ai_hub/services/data_continuity.py
+    capability_registry:
+      path: src/market_ai_hub/services/capability_registry.py
+    analysis_packet_audit:
+      path: src/market_ai_hub/packet/builder.py
+    taiex_official_daily:
+      path: src/market_ai_hub/providers/twse.py
+      expected_marker: "def fetch_taiex_daily("
+    jpx_investor_flow:
+      path: src/market_ai_hub/targets/jpx_investor_flow.py
+      expected_marker: "AVAILABLE_OFFICIAL_WEEKLY_RECEIPT_TIME"
+    taiwan_forward_receipts:
+      path: config/taiwan_context_forward_protocol.yaml
+      expected_schema: TWCTXFORWARD.1
+    timesfm_personal_research:
+      path: src/market_ai_hub/services/model_governance.py
+    system_readiness:
+      path: scripts/validate_accuracy_v2_system.py
+    system_manifest_consistency:
+      path: config/system_manifest.yaml
+      expected_marker: "tool_count: 27"
+    static_capability_consistency:
+      path: config/capabilities.yaml
+      expected_marker: "jpx_micro_investor_flow:"
+
+  conditional_packages:
+    P6:
+      status: CONDITIONAL_NOT_REQUIRED
+      trigger: DATA_RUNTIME_AND_INDEPENDENT_GAIN_PREREQUISITES
+      engineering_completion_blocker: false
+      automatic_activation: false
+      automatic_model_promotion: false
+
+  deferred_non_blocking:
+    p6_research_extensions:
+      status: DEFERRED_CONDITIONAL
+      components:
+        - CUSUM
+        - PAGE_HINKLEY
+        - BOCPD
+        - STATE_TRANSITION_PROBABILITY
+        - FINE_TUNING_EXTENSION_ADAPTERS
+      trigger: DATA_RUNTIME_AND_INDEPENDENT_GAIN_PREREQUISITES
+      engineering_completion_blocker: false
+    broker_order_execution:
+      status: PROHIBITED_NO_AUTHORIZATION
+      engineering_completion_blocker: false
+      quote_only: true
+    optional_external_macro_sources:
+      status: EXTERNAL_CONFIG_OR_SOURCE_DEPENDENT
+      examples: [BEA, eStat, EDINET, EIA, CFTC]
+      engineering_completion_blocker: false
+
+  external_dependencies:
+    p5_forward_outcomes:
+      dependency: FUTURE_CANONICAL_SETTLED_ORIGINS
+      engineering_completion_blocker: false
+      historical_backfill_allowed: false
+    taiwan_forward_observation_periods:
+      dependency: FUTURE_INDEPENDENT_RECEIPT_TIME_OBSERVATIONS
+      engineering_completion_blocker: false
+      repeated_retrieval_counts_as_new_observation: false
+    taiwan_eps_publication_semantics:
+      dependency: VERIFIED_EXACT_PUBLICATION_TIMESTAMP_AND_DEFINITION
+      engineering_completion_blocker: false
+    taiwan_target_news_source:
+      dependency: VERIFIED_REPRODUCIBLE_TARGET_SPECIFIC_FREE_SOURCE
+      engineering_completion_blocker: false
+
+  authorization_boundaries:
+    p5_scheduler_install:
+      authorized: false
+      engineering_completion_blocker: false
+    recorder_runtime_handover:
+      authorized: false
+      engineering_completion_blocker: false
+    live_trading:
+      authorized: false
+      engineering_completion_blocker: false
+      quote_only: true
+
+  sealed_evidence:
+    hpq1_old_final:
+      status: BLOCKED_HORIZON_MISMATCH
+      rerun_allowed: false
+      overwrite_allowed: false
+      engineering_completion_blocker: false
+    p2_final:
+      status: NOT_OPENED_WAITING_NEW_FORWARD_ONLY
+      minimum_new_forward_origins: 20
+      engineering_completion_blocker: false
+
+  claims:
+    PREDICTIVE_GAIN: false
+    CALIBRATED: false
+    TRADING_EDGE: false
+    live_execution_enabled: false

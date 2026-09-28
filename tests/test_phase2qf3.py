@@ -93,28 +93,34 @@ def test_taiwan_yfinance_timezone():
     assert _local_tz_for("^N225") == "Asia/Tokyo"
 
 
-# ── HIGH-3：no trading advice in skills/prompt ──
+# ── HIGH-3：no autonomous trading advice/action in skills/prompt ──
 
-def test_no_trading_advice_in_skills_and_prompt():
+def test_no_autonomous_trading_advice_or_action_in_skills_and_prompt():
     osaka = (ROOT / "skills" / "osaka-micro-analysis" / "SKILL.md").read_text(encoding="utf-8")
     taiwan = (ROOT / "skills" / "taiwan-stock-v28" / "SKILL.md").read_text(encoding="utf-8")
     prompt = (ROOT / "docs" / "prompts" / "SYSTEM_PROMPT_V4_1_COMPACT.md").read_text(encoding="utf-8")
 
-    # skills 明寫禁止交易建議 + support/resistance NOT_AVAILABLE
+    # skills 保持 research-only + support/resistance NOT_AVAILABLE
     assert "不得輸出" in osaka
     assert "research reference only" in osaka or "research reference only" in taiwan
     assert "NO_VALIDATED_MODEL_CONSENSUS" in osaka
     assert "NO_VALIDATED_MODEL_CONSENSUS" in taiwan
     assert "NOT_AVAILABLE" in osaka
-    # prompt 明寫不得交易建議 + quantile 不當 support
-    assert "不得輸出任何交易建議" in prompt
+
+    # prompt 禁止替使用者決定交易/口數與任何 broker action。
+    # 唯一新增能力是：使用者本次已明確給定條件後，做 UI 純文字轉譯。
+    assert "不得替使用者決定進場/買點/停損/多空/口數" in prompt
+    assert "也不得下單" in prompt
+    assert "get_itrader_advisory" in prompt
+    assert "純文字轉譯" in prompt
+    assert "不得觸發任何 broker action" in prompt
 
 
 def test_direct_micro_forecast_status_in_packet():
     from market_ai_hub.packet.builder import build_analysis_packet
 
     p = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
-    assert p["target_semantics"]["direct_micro_forecast_status"] == "NOT_AVAILABLE"
+    assert p["target_semantics"]["direct_micro_forecast_status"] == "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
 
 
 def test_training_review_no_auto_retrain():

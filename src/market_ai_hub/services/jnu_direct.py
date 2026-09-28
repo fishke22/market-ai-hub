@@ -1,19 +1,22 @@
 """Direct Osaka Nikkei 225 Micro settlement research path.
 
-Uses official JPX/OSE Micro contract settlements only. The forecast target is the
-next-session settlement for the current exact contract, not an intraday trade price.
+Uses official JPX/OSE Micro contract settlements only. The Accuracy v2 forecast
+target is the next published settlement observation for the current exact contract,
+not an intraday trade price and not necessarily the next OSE holiday session.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import time
+import math
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 from market_ai_hub.automation.data_lake import default_data_root
-from market_ai_hub.services.calendar import next_ose_derivatives_sessions
+from market_ai_hub.schemas.market_data import validate_price_path
+from market_ai_hub.services.calendar import next_ose_derivatives_sessions, next_trading_sessions
 from market_ai_hub.services.horizon import parse_horizon
 from market_ai_hub.services.model_runtime import get_chronos, get_timesfm
 from market_ai_hub.targets.jpx_daily import JPXOSEDailyReportProvider, public_daily_report_months
@@ -211,8 +214,34 @@ def _current_settlement_frame() -> pd.DataFrame:
         df["date"] = df["date"].map(_date_text)
         df["settlement"] = pd.to_numeric(df["settlement_price"], errors="coerce")
         df["_priority"] = 2
-        frames.append(df[["contract_month", "date", "settlement", "source_url", "source_hash", "_priority"]])
+        df["_received_at"] = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+        df["_source_path"] = str(p)
+        frames.append(df[[
+            "contract_month", "date", "settlement", "source_url", "source_hash",
+            "_priority", "_received_at", "_source_path",
+        ]])
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def load_current_micro_settlement_receipts(contract_month: str = "") -> pd.DataFrame:
+    """Load official JPX settlement-CSV rows carrying observed local receipt time.
+
+    Archive rows without an observed local receipt timestamp are intentionally excluded:
+    P5 uses this narrow view to prove prediction-before-outcome causality.
+    """
+    frame = _current_settlement_frame()
+    if frame.empty:
+        return frame
+    frame = frame.copy()
+    frame["contract_month"] = frame["contract_month"].astype(str)
+    frame["date"] = frame["date"].map(_date_text)
+    frame["settlement"] = pd.to_numeric(frame["settlement"], errors="coerce")
+    frame["_received_at"] = pd.to_datetime(frame["_received_at"], utc=True, errors="coerce")
+    frame = frame.dropna(subset=["settlement", "_received_at"])
+    frame = frame[frame["settlement"].map(math.isfinite) & (frame["settlement"] > 0)]
+    if contract_month:
+        frame = frame[frame["contract_month"].eq(str(contract_month))]
+    return frame.sort_values(["date", "_received_at", "source_hash"]).reset_index(drop=True)
 
 
 def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, dict[str, Any]]:
@@ -224,7 +253,12 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
         d["date"] = d["date"].map(_date_text)
         d["settlement"] = pd.to_numeric(d["settlement"], errors="coerce")
         d["_priority"] = 1
-        keep = ["contract_month", "date", "settlement", "source_url", "source_hash", "_priority"]
+        d["_received_at"] = pd.NaT
+        d["_source_path"] = ""
+        keep = [
+            "contract_month", "date", "settlement", "source_url", "source_hash",
+            "_priority", "_received_at", "_source_path",
+        ]
         frames.append(d[keep])
     current = _current_settlement_frame()
     if not current.empty:
@@ -238,7 +272,7 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
     df = pd.concat(frames, ignore_index=True)
     df["contract_month"] = df["contract_month"].astype(str)
     df = df.dropna(subset=["settlement"])
-    df = df[df["settlement"] > 0]
+    df = df[df["settlement"].map(math.isfinite) & (df["settlement"] > 0)]
     df = df.sort_values(["date", "_priority"]).drop_duplicates(
         subset=["date", "contract_month"], keep="last"
     )
@@ -274,6 +308,12 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
         "source": "JPX/OSE 官方每日報告與清算價",
         "series_semantics": "EXACT_CONTRACT",
         "price_semantics": "SETTLEMENT",
+        "latest_source_hash": str(exact["source_hash"].iloc[-1] or ""),
+        "latest_source_url": str(exact["source_url"].iloc[-1] or ""),
+        "latest_received_at": (
+            pd.Timestamp(exact["_received_at"].iloc[-1]).isoformat()
+            if pd.notna(exact["_received_at"].iloc[-1]) else None
+        ),
     }
     return series, meta
 
@@ -281,6 +321,7 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
 def _model_result(adapter, name: str, series: pd.Series, steps: int, target_dates: list[str]) -> dict:
     raw = adapter.predict(series, horizon=steps)
     path = raw.get("path") or {}
+    validate_price_path(path, steps)
     p10 = list(path.get("p10") or [])
     p50 = list(path.get("p50") or [])
     p90 = list(path.get("p90") or [])
@@ -309,6 +350,23 @@ def _stance(expected_return: float | None) -> str:
     return "NEUTRAL"
 
 
+def next_published_settlement_observation_dates(
+    reference_date: str,
+    steps: int,
+) -> list[str]:
+    """Expected dates for the next published daily settlement observations.
+
+    Accuracy v2 evaluates the next row in the official published-settlement series,
+    not every OSE holiday-trading session.  JPX report availability is governed
+    conservatively by the XTKS cash-business publication calendar, so the expected
+    observation dates follow those business dates as well.  This prevents the
+    2026-09-18 -> 2026-09-21 holiday-session mismatch from reappearing.
+    """
+    if int(steps) < 1:
+        return []
+    return next_trading_sessions("^N225", reference_date, int(steps))
+
+
 def analyze_jnu_direct(
     horizon: str = "1d",
     contract_month: str = "",
@@ -323,6 +381,17 @@ def analyze_jnu_direct(
     series, meta = load_direct_micro_settlements(contract_month)
     if meta.get("status") != "OK":
         return {"status": meta.get("status"), "data": meta, "direct_model_available": False}
+    try:
+        from market_ai_hub.research.accuracy_v2_p4_engine import analyze_no_new_forward_outcome
+        robust_analysis = analyze_no_new_forward_outcome(
+            current_series=series,
+            current_meta=meta,
+        )
+    except Exception as exc:
+        robust_analysis = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+        }
     if len(series) < MIN_DIRECT_SAMPLES:
         return {
             "status": "INSUFFICIENT_DIRECT_HISTORY",
@@ -334,7 +403,10 @@ def analyze_jnu_direct(
     from market_ai_hub.integrations.yuanta.resolver import ose_last_trading_date
     month = str(meta["contract_month"])
     expiry = ose_last_trading_date(int(month[:4]), int(month[4:]))
-    target_dates = next_ose_derivatives_sessions(meta["latest_date"], steps)
+    target_dates = next_published_settlement_observation_dates(
+        str(meta["latest_date"]),
+        steps,
+    )
     if not target_dates or any(pd.Timestamp(d).date() > expiry for d in target_dates):
         return {
             "status": "ROLL_BOUNDARY_BLOCKED",
@@ -346,16 +418,59 @@ def analyze_jnu_direct(
 
     models = []
     errors = []
+    model_availability = []
     for name, factory in (("Chronos-2", get_chronos), ("TimesFM-3.0", get_timesfm)):
         try:
             models.append(_model_result(factory(), name, series, steps, target_dates))
+            model_availability.append({"model": name, "status": "AVAILABLE"})
         except Exception as exc:
-            errors.append(f"{name}:{type(exc).__name__}")
+            reason = type(exc).__name__
+            errors.append(f"{name}:{reason}")
+            model_availability.append({"model": name, "status": "UNAVAILABLE", "reason": reason})
     if not models:
+        if robust_analysis.get("status") == "OK":
+            reference = float(meta["latest_settlement"])
+            interval = robust_analysis.get("empirical_interval") or {}
+            return {
+                "status": "OK",
+                "direct_model_available": False,
+                "scope": DIRECT_MODEL_SCOPE,
+                "target": "OSE_NIKKEI225_MICRO_FUTURES",
+                "product_name": "大阪日經225微型期貨（JNU）",
+                "contract_month": meta["contract_month"],
+                "quote_code": meta["quote_code"],
+                "forecast_price_type": "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
+                "horizon": horizon,
+                "target_dates": target_dates,
+                "data": meta,
+                "models": [],
+                "model_availability": model_availability,
+                "ensemble": {
+                    "p10": interval.get("lower_price"),
+                    "p50": reference,
+                    "p90": interval.get("upper_price"),
+                    "expected_return": 0.0,
+                    "method": "zero_return_naive_with_development_interval",
+                    "ensemble_mode": "BASELINE_ONLY",
+                    "available_model_count": 0,
+                    "available_models": [],
+                },
+                "research_stance": "NEUTRAL",
+                "research_stance_strength": "BASELINE_ONLY_NO_PREDICTIVE_GAIN",
+                "historical_validation": {"status": "NOT_RUN"},
+                "historical_prequential": {"status": "NOT_RUN"},
+                "robust_analysis": robust_analysis,
+                "calibrated_probability_available": False,
+                "not_trading_edge": True,
+                "errors": errors,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
         return {
             "status": "DIRECT_MODELS_UNAVAILABLE",
             "direct_model_available": False,
             "data": meta,
+            "robust_analysis": robust_analysis,
+            "model_availability": model_availability,
             "errors": errors,
         }
 
@@ -363,12 +478,20 @@ def analyze_jnu_direct(
         vals = [float(m[field]) for m in models if m.get(field) is not None]
         return sum(vals) / len(vals) if vals else None
 
+    ensemble_mode = (
+        "MULTI_MODEL_AVAILABLE_ENSEMBLE"
+        if len(models) >= 2
+        else "SINGLE_MODEL_DEGRADED"
+    )
     ensemble = {
         "p10": avg("p10"),
         "p50": avg("p50"),
         "p90": avg("p90"),
         "expected_return": avg("expected_return"),
         "method": "equal_weight_available_price_models",
+        "ensemble_mode": ensemble_mode,
+        "available_model_count": len(models),
+        "available_models": [str(m.get("model")) for m in models],
     }
     stance = _stance(ensemble["expected_return"])
     historical_validation = (
@@ -406,16 +529,18 @@ def analyze_jnu_direct(
         "product_name": "大阪日經225微型期貨（JNU）",
         "contract_month": meta["contract_month"],
         "quote_code": meta["quote_code"],
-        "forecast_price_type": "NEXT_SESSION_SETTLEMENT",
+        "forecast_price_type": "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
         "horizon": horizon,
         "target_dates": target_dates,
         "data": meta,
         "models": models,
+        "model_availability": model_availability,
         "ensemble": ensemble,
         "research_stance": stance,
         "research_stance_strength": stance_strength,
         "historical_validation": historical_validation,
         "historical_prequential": historical_prequential,
+        "robust_analysis": robust_analysis,
         "calibrated_probability_available": False,
         "not_trading_edge": True,
         "errors": errors,
@@ -457,7 +582,10 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         if row.get("paired_vs_last_price_naive")
     ]
     comparison_note = "目前尚沒有足夠的同一批歷史預測樣本，不能可靠判斷模型相對簡單基準的穩定差異。"
-    if prequential.get("status") == "OK" and preq_final.get("n"):
+    preq_blocked = prequential.get("status", "").startswith("BLOCKED")
+    if preq_blocked:
+        comparison_note = "歷史重播包含與預測交易日期不一致的樣本，已停止引用該批績效，等待新規格重新驗證。"
+    elif prequential.get("status") == "OK" and preq_final.get("n"):
         final_pair = preq_final.get("paired_vs_last_price_naive") or {}
         final_eval = preq_final.get("evaluation") or {}
         final_model = final_eval.get("model") or {}
@@ -516,7 +644,10 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
         and preq_final.get("n")
         and not (preq_final.get("evaluation") or {}).get("beats_naive_mae", False)
     )
-    if preq_low_confidence:
+    if preq_blocked:
+        validation_note = "歷史證據的預測期間檢查未通過；目前只提供未驗證的研究價格參考。"
+        action_note = "先修正資料與交易日對齊，使用新預先登記的評估區段；不重開已使用的最終留出樣本。"
+    elif preq_low_confidence:
         validation_note = (
             "較大規模的逐日歷史重播已完成；預先留出的最終區段中，現行等權價格模型平均誤差"
             "沒有優於直接沿用前一日價格的簡單基準，而且差異區間仍包含沒有差異。"
@@ -552,11 +683,47 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
     if calibration_status and calibration_status.get("public_calibrated"):
         probability_note = "已有通過獨立驗證的校準機率，可使用系統正式機率輸出。"
 
+    robust = result.get("robust_analysis") or {}
+    robust_interval = robust.get("empirical_interval") or {}
+    robust_vol = robust.get("volatility") or {}
+    quantile = robust.get("lightgbm_quantile_challenger") or {}
+    q_prices = quantile.get("price_quantiles") or {}
+    robust_summary = {
+        "基準價格": (
+            f"{float((robust.get('point_reference') or {}).get('price')):,.0f} 點"
+            if (robust.get("point_reference") or {}).get("price") is not None
+            else "目前無法提供"
+        ),
+        "EWMA日報酬波動": (
+            f"{float(robust_vol.get('ewma_return_volatility')) * 100:.2f}%"
+            if robust_vol.get("ewma_return_volatility") is not None else "目前無法提供"
+        ),
+        "波動狀態": {
+            "LOW_VOLATILITY": "相對低波動",
+            "HIGH_VOLATILITY": "相對高波動",
+        }.get(str(robust_vol.get("regime")), "未知"),
+        "開發期經驗區間": (
+            f"{float(robust_interval.get('lower_price')):,.0f} ～ "
+            f"{float(robust_interval.get('upper_price')):,.0f} 點"
+            if robust_interval.get("lower_price") is not None and robust_interval.get("upper_price") is not None
+            else "目前無法提供"
+        ),
+        "固定LightGBM分位挑戰模型": (
+            f"{float(q_prices.get('q10')):,.0f} / {float(q_prices.get('q50')):,.0f} / {float(q_prices.get('q90')):,.0f} 點"
+            if all(q_prices.get(k) is not None for k in ("q10", "q50", "q90"))
+            else "未通過可用性檢查或資料不足"
+        ),
+        "證據限制": (
+            "這些波動與區間只使用開發期規則與目前已知資料；"
+            "沒有新的真實前向結果時，不升級為預測增益、校準機率或交易優勢。"
+        ),
+    }
+
     return {
         "商品": "大阪日經225微型期貨（JNU）",
         "目前合約": data["contract_month"],
         "最新官方資料": f"{data['latest_date']} 清算價 {data['latest_settlement']:,.0f} 點",
-        "預測目標": "下一交易日的官方清算價",
+        "預測目標": "下一筆官方發布的清算價觀測（不一定等於下一個 OSE 假日交易時段）",
         "直接價格模型": {
             "綜合預測": f"{ens['p50']:,.0f} 點" if ens.get("p50") is not None else "目前無法提供",
             "研究方向": stance_text,
@@ -565,11 +732,25 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
                 f"{ens['p10']:,.0f} ～ {ens['p90']:,.0f} 點"
                 if ens.get("p10") is not None and ens.get("p90") is not None else "目前無法提供"
             ),
-            "可信度": "低信心研究參考" if preq_low_confidence or (
+            "可信度": "低信心研究參考" if preq_blocked or preq_low_confidence or (
                 historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False)
             )
             else "研究用、尚未完成前向驗證",
         },
+        "模型組成": (
+            (
+                f"多模型可用：{', '.join(str(x) for x in ens.get('available_models', []))}；"
+                "目前只是研究用等權組合，不代表模型共識已被驗證。"
+            )
+            if ens.get("ensemble_mode") == "MULTI_MODEL_AVAILABLE_ENSEMBLE"
+            else (
+                f"單模型可用：{', '.join(str(x) for x in ens.get('available_models', []))}；"
+                "ensemble 已降級，這不是多模型一致預測。"
+            )
+            if ens.get("ensemble_mode") == "SINGLE_MODEL_DEGRADED"
+            else "目前沒有可用 foundation price model，使用 baseline fallback。"
+        ),
+        "無新前向資料時的穩健分析": robust_summary,
         "歷史驗證": validation_note,
         "模型比較可信度": comparison_note,
         "資料說明": (

@@ -1,0 +1,90 @@
+schema_version: AV2P7.1
+
+protocols:
+  independent_engine_acceptance_v1:
+    purpose: INDEPENDENT_ENGINE_PAPER_MIGRATION_ACCEPTANCE
+    engine:
+      adapter: nautilus_trader
+      release: "1.231.0"
+      commit: "27a8e54"
+      license: "LGPL-3.0"
+      integration_mode: ISOLATED_SUBPROCESS_FILE_CONTRACT
+      core_venv_install_allowed: false
+      live_execution_allowed: false
+      serving_dependency_allowed: false
+      prerelease_allowed: false
+      canonical_relative_python: "lab/nautilus_trader_1_231_0/.venv/Scripts/python.exe"
+
+    parity:
+      mode: DETERMINISTIC_OFFLINE_BACKTEST_SMOKE
+      input: SYNTHETIC_NORMALIZED_BARS
+      bar_count: 64
+      seed: 20260927
+      starting_price: 100.0
+      deterministic_repeats: 2
+      required:
+        exact_engine_version: true
+        monotonic_event_time: true
+        processed_bar_count_equals_input: true
+        minimum_fill_count: 2
+        ending_position_flat: true
+        repeated_result_digest_equal: true
+        finite_account_values: true
+        no_network_market_data: true
+        no_live_adapter: true
+        no_external_order_action: true
+      predictive_performance_claim_allowed: false
+      trading_edge_claim_allowed: false
+
+    cost_diagnostic:
+      source: EXISTING_COST_PRESETS
+      presets: [ZERO_COST, BASE_COST, STRESS_COST]
+      report:
+        - per_side_cost_fraction
+        - round_trip_cost_fraction
+        - round_trip_cost_bps
+      actual_execution_cost_claim_allowed: false
+      edge_claim_allowed: false
+
+    paper_acceptance:
+      required:
+        isolated_engine_import: true
+        backtest_engine_constructed: true
+        simulated_venue_only: true
+        deterministic_order_smoke: true
+        no_broker_credentials: true
+        no_live_execution: true
+      live_paper_broker_session_allowed: false
+
+    migration_acceptance:
+      required_paths:
+        - project_root
+        - data_root
+        - core_python
+        - p5_forward_runner
+        - p5_task_plan
+        - open_source_manifest
+        - p7_protocol
+      require_data_root_outside_git: true
+      require_isolated_engine_outside_core_venv: true
+      require_runtime_rebuild_recipe: true
+      copy_secrets_allowed: false
+      runtime_handover_allowed: false
+      active_recorder_restart_allowed: false
+
+    completion:
+      engineering_complete_when:
+        - PROTOCOL_VALID
+        - ISOLATED_ENGINE_VERSION_VERIFIED
+        - PARITY_PASS
+        - COST_DIAGNOSTIC_PASS
+        - PAPER_ACCEPTANCE_PASS
+        - MIGRATION_ACCEPTANCE_PASS
+        - CORE_FULL_OFFLINE_PASS
+        - CI_PASS
+      does_not_require:
+        - NEW_FORWARD_OUTCOMES
+        - PREDICTIVE_GAIN
+        - CALIBRATION
+        - TRADING_EDGE
+        - P6_CONDITIONAL_FEATURE

@@ -35,7 +35,7 @@ AUDIT_FACTORS = [
 
 # 誠實預設 status（依「可取得性」標注，非全部 authoritative）
 DEFAULT_FACTOR_STATUS = {
-    "Micro": MISSING,            # JPX provider 尚未接實網（本棒 parser + downloader）
+    "Micro": MISSING,            # legacy coarse default; use LiveCoverageAuditor/runtime status
     "Mini": MISSING,
     "Large": MISSING,
     "Nikkei spot": RESEARCH_PROXY,
@@ -121,7 +121,7 @@ class LiveCoverageAuditor(DataCoverageAuditor):
             "Large": ("JPX settlement CSV", "daily", "FUT_225"),
             "Nikkei spot": ("JPX/Nikkei", "daily", "spot"),
             "TOPIX": ("JPX", "daily", "index"),
-            "JPX investor flow": ("JPX Trading by Investor", "weekly", "official CSV"),
+            "JPX investor flow": ("JPX Trading by Type of Investor", "weekly", "official CSV; receipt-time availability"),
             "SGX Nikkei": ("SGX", "daily", "external"),
             "CME Nikkei": ("CME", "daily", "external"),
             "NQ": ("CME", "daily", "external proxy"),
@@ -148,7 +148,7 @@ class LiveCoverageAuditor(DataCoverageAuditor):
         default_status = {
             "Micro OHLC": CONTRACT_ONLY, "Micro settlement": CONTRACT_ONLY, "Mini": CONTRACT_ONLY,
             "Large": CONTRACT_ONLY, "Nikkei spot": PROXY, "TOPIX": PROXY,
-            "JPX investor flow": CONTRACT_ONLY, "SGX Nikkei": MISSING, "CME Nikkei": MISSING,
+            "JPX investor flow": SOURCE_VERIFIED, "SGX Nikkei": MISSING, "CME Nikkei": MISSING,
             "NQ": PROXY, "ES": PROXY, "SOX": PROXY, "USDJPY": PROXY,
             "VIX": PROXY, "US2Y": PROXY, "US5Y": PROXY, "US10Y": PROXY, "US30Y": PROXY,
             "Gold": PROXY, "WTI": PROXY, "BTC": PROXY,

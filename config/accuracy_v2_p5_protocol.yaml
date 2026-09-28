@@ -1,0 +1,135 @@
+schema_version: AV2P5.1
+
+protocols:
+  jnu_forward_publication_monitor_v1:
+    purpose: REAL_FORWARD_PUBLICATION_MONITOR
+    instrument: JNU
+    product: Nikkei 225 Micro Futures
+    upstream_p2_protocol_id: jnu_next_published_settlement_return_1obs_v1
+    upstream_p4_protocol_id: jnu_no_future_analysis_v1
+
+    target:
+      measure: NEXT_PUBLISHED_SETTLEMENT_OBSERVATION
+      exact_contract_required: true
+      target_session_rule: NEXT_OSE_SESSION_AFTER_REFERENCE_SESSION
+      label_availability_rule: JPX_NEXT_BUSINESS_PUBLICATION
+      full_session_forecast_claim_allowed: false
+      publication_nowcast_label: true
+
+    origin:
+      first_eligible_publication_date: "2026-09-28"
+      nominal_rule: REFERENCE_SESSION_PUBLICATION_PLUS_5_MINUTES
+      canonical_max_lateness_minutes: 15
+      reference_receipt_must_precede_forecast_origin: true
+      reference_source: JPX_OFFICIAL_SETTLEMENT_CSV
+      source_snapshot_required: true
+      backdated_forecast_origin_allowed: false
+      missed_origin_action: COLLECT_DATA_BUT_DO_NOT_CREATE_CANONICAL_SAMPLE
+
+    artifacts:
+      point:
+        enabled: true
+        method: ZERO_RETURN_NAIVE_LAST_AVAILABLE_SETTLEMENT
+        artifact_type: POINT
+        label_type: PUBLISHED_SETTLEMENT_PRICE
+        calibration_domain: PRICE
+      interval:
+        enabled: true
+        method: P4_DEVELOPMENT_EMPIRICAL_ABSOLUTE_RESIDUAL
+        nominal_coverage: 0.90
+        artifact_type: INTERVAL
+        label_type: PUBLISHED_SETTLEMENT_PRICE
+        calibration_domain: PRICE
+        missing_action: OMIT_INTERVAL_KEEP_POINT
+        never_implies_probability: true
+      quantile_challenger:
+        enabled: true
+        source: P4_FIXED_LIGHTGBM_QUANTILE_CHALLENGER
+        levels: [0.10, 0.50, 0.90]
+        artifact_type: QUANTILE
+        label_type: PUBLISHED_SETTLEMENT_PRICE
+        calibration_domain: PRICE
+        require_non_crossing: true
+        missing_or_crossing_action: OMIT_QUANTILES_KEEP_POINT
+        may_replace_point_champion: false
+
+    immutable_ledger:
+      store: PREDICTION_AUDIT_DB
+      sample_origin: FORWARD_PRECOMMITTED
+      append_only: true
+      one_prediction_per_target_contract_origin: true
+      prediction_before_outcome_required: true
+      outcome_binding_per_artifact_required: true
+      overwrite_allowed: false
+      delete_allowed: false
+
+    forward_evaluation:
+      minimum_settled_canonical_origins: 20
+      point_metric: MAE_RETURN
+      interval_metrics:
+        - EMPIRICAL_COVERAGE
+        - MEAN_WIDTH_RETURN
+        - INTERVAL_SCORE
+      quantile_metrics:
+        - PINBALL_Q10
+        - PINBALL_Q50
+        - PINBALL_Q90
+        - Q10_Q90_COVERAGE
+        - QUANTILE_CROSSING_RATE
+      same_origin_q50_vs_point: true
+      missing_artifact_counts_as_missing_coverage: true
+      quarantine_or_historical_replay_counts_as_forward: false
+      automatic_model_promotion: false
+      requires_separate_preregistered_promotion_protocol: true
+
+    downgrade:
+      current_reference_max_age_minutes: 30
+      interval:
+        minimum_settled_before_check: 20
+        rolling_window_origins: 20
+        minimum_acceptable_coverage: 0.75
+        failure_action: INTERVAL_UNRELIABLE_BASELINE_ONLY
+      point_error:
+        minimum_settled_before_check: 10
+        rolling_window_origins: 10
+        compare_to_development_mae_multiplier: 1.50
+        failure_action: HIGH_ERROR_BASELINE_ONLY
+      origin_coverage:
+        minimum_expected_origins_before_check: 5
+        minimum_canonical_origin_coverage: 0.80
+        failure_action: DATA_PIPELINE_DEGRADED
+      exact_contract_failure_action: ABSTAIN
+      stale_reference_action: ABSTAIN
+      collector_failure_action: DATA_NOT_READY
+      strong_direction_allowed: false
+      calibrated_probability_allowed: false
+      trading_edge_allowed: false
+
+    collector:
+      timezone: Asia/Taipei
+      planned_weekday_times: ["08:05", "08:15"]
+      public_sources_only: true
+      broker_used: false
+      credentials_used: false
+      recorder_restart_allowed: false
+      order_action_allowed: false
+      state_file: automation/p5_forward_state.json
+      max_attempts_per_local_date: 2
+
+    publication:
+      public_summary_must_include:
+        - exact_contract
+        - reference_date
+        - forecast_origin
+        - target_session_date
+        - label_available_at
+        - evidence_grade
+        - settled_forward_count
+        - canonical_origin_coverage
+        - downgrade_state
+      never_implies:
+        - PREDICTIVE_GAIN
+        - CALIBRATED
+        - TRADING_EDGE
+        - FIXED_WIN_RATE
+        - PRODUCTION_SERVING

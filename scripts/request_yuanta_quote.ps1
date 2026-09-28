@@ -9,8 +9,16 @@ $PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
 $PreflightRaw = & $PreflightScript
 if ($LASTEXITCODE -ne 0) { throw "YUANTA_LIVE_PREFLIGHT_FAILED" }
 $Preflight = ($PreflightRaw -join [Environment]::NewLine) | ConvertFrom-Json
+$HealthReasonCount = 0
+if ($null -ne $Preflight.health_reasons) {
+  if ($Preflight.health_reasons -is [System.Management.Automation.PSCustomObject]) {
+    $HealthReasonCount = @($Preflight.health_reasons.PSObject.Properties).Count
+  } else {
+    $HealthReasonCount = @($Preflight.health_reasons).Count
+  }
+}
 if ($Preflight.classification -notin @("SAFE_DEFAULT_OWNER_HEALTHY", "MAINTENANCE_OWNER_RUNNING") -or
-    $Preflight.status -ne "RUNNING" -or @($Preflight.health_reasons).Count -ne 0) {
+    $Preflight.status -ne "RUNNING" -or $HealthReasonCount -ne 0) {
   throw "YUANTA_QUOTE_REQUEST_BLOCKED_$($Preflight.classification)"
 }
 $Inbox = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root, _load_config, CONFIG_PATH, _within; print(_within(recorder_root(), _load_config(CONFIG_PATH)['dynamic_requests'].get('inbox', 'control/inbox')))"

@@ -99,7 +99,8 @@ def live_model_cards() -> dict[str, ModelCard]:
         evidence={"smoke": "PASS" if chronos_ok else "FAIL", **chronos_ev},
     )
 
-    tsfm_ok = shallow_status("timesfm") == "AVAILABLE_NOT_LOADED"
+    tsfm_status = shallow_status("timesfm")
+    tsfm_ok = tsfm_status in {"AVAILABLE_NOT_LOADED", "RESEARCH_ONLY_AVAILABLE_NOT_LOADED"}
     tsfm_val, tsfm_ev = _ts_validation_status("timesfm-3.0")
     cards["timesfm-3.0"] = ModelCard(
         name="timesfm-3.0", role=ModelRole.BASE_MODEL.value, model_task=ModelTask.PRICE_FORECAST.value,
@@ -108,8 +109,8 @@ def live_model_cards() -> dict[str, ModelCard]:
         eligible_for_price_reference=tsfm_ok,
         eligible_for_direction_vote=tsfm_val == PredictiveValidationStatus.VALIDATED.value,
         eligible_for_ensemble_weighting=tsfm_ok,
-        reason="research price forecast；direction vote 需 VALIDATED" if tsfm_ok else "load failed",
-        evidence={"smoke": "PASS" if tsfm_ok else "FAIL", "license": "TIMESFM3_NON_COMMERCIAL_ONLY", **tsfm_ev},
+        reason="research-only price forecast；serving 由用途 gate 阻擋；direction vote 需 VALIDATED" if tsfm_ok else "load failed",
+        evidence={"smoke": "PASS" if tsfm_ok else "FAIL", "runtime_status": tsfm_status, "license": "TIMESFM3_NON_COMMERCIAL_ONLY", "serving_allowed": False, **tsfm_ev},
     )
 
     from market_ai_hub.models.fincast_model import FinCastAdapter
@@ -132,26 +133,52 @@ def live_model_cards() -> dict[str, ModelCard]:
         if has_oos:
             eng = EngineeringStatus.PASS.value
             bal_acc = rec.get("balanced_accuracy")
-            majority_base = rec.get("majority_class_baseline_accuracy")
-            uniform_base = rec.get("uniform_random_baseline_accuracy")
+            majority_bal = rec.get("majority_class_baseline_balanced_accuracy")
+            uniform_bal = rec.get("uniform_random_baseline_balanced_accuracy")
+            baseline_semantics = str(rec.get("baseline_semantics") or "")
+            baseline_is_comparable = baseline_semantics in {
+                "OOS_SAME_ORIGIN_MAJORITY_CLASSIFIER_V2",
+                "FOLD_LOCAL_TRAIN_MAJORITY_SAME_OOS_ORIGINS_V2",
+            }
             beat = False
-            if bal_acc is not None:
-                threshold = max([b for b in (majority_base, uniform_base, 1 / 3) if b is not None])
-                beat = bal_acc > threshold
+            threshold = None
+            if (
+                bal_acc is not None
+                and majority_bal is not None
+                and baseline_is_comparable
+            ):
+                threshold = max(
+                    [b for b in (majority_bal, uniform_bal, 1 / 3) if b is not None]
+                )
+                # New records compute the conservative same-origin multi-metric
+                # comparison during walk-forward.  Do not reconstruct promotion
+                # from a single metric here.
+                beat = rec.get("beats_majority_baseline") is True
             val_status = (
                 PredictiveValidationStatus.EXPERIMENTAL.value
                 if beat
                 else PredictiveValidationStatus.DEGRADED.value
             )
+            if threshold is not None:
+                reason = (
+                    f"OOS multi-metric gate recorded={beat}; "
+                    f"balanced_accuracy={bal_acc} vs paired "
+                    f"balanced baseline={threshold:.4f}"
+                )
+            elif not baseline_is_comparable:
+                reason = "legacy/mixed-scale baseline evidence is not promotion-eligible"
+            else:
+                reason = "OOS record lacks comparable balanced-accuracy baseline"
             cards[name] = ModelCard(
                 name=name, role=ModelRole.BASE_MODEL.value, model_task=ModelTask.DIRECTION_CLASSIFICATION.value,
                 engineering_status=eng,
                 predictive_validation_status=val_status,
-                eligible_for_price_reference=False,  # 分類器不給價格
+                eligible_for_price_reference=False,
                 eligible_for_direction_vote=beat,
-                eligible_for_ensemble_weighting=bool(rec.get("n_samples", 0) > 0),
-                reason=f"OOS record 存在；balanced_accuracy={bal_acc} vs baseline_threshold={threshold:.4f}"
-                if bal_acc is not None else "OOS record 缺少 balanced_accuracy",
+                eligible_for_ensemble_weighting=bool(
+                    rec.get("n_samples", 0) > 0 and baseline_is_comparable
+                ),
+                reason=reason,
                 evidence={"oos_record": rec},
             )
         else:

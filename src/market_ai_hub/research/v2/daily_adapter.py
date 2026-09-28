@@ -6,7 +6,9 @@ Dataset truth (from V2 AUDIT, verified on-disk):
 - OSAKA_MICRO: data/normalized/ose_micro/ose_micro_daily_bar_v1.parquet → full OHLC, NO contract id / roll.
 - TAIWAN_STOCK: data/cache/twse/*.json → Opening/Highest/Lowest/ClosingPrice (full OHLC), no roll.
 - ^N225: feature store → close-only (NO OHLC) → Touch NOT possible.
-- TAIWAN_INDEX / TAIEX: no local managed OHLC → NOT_AVAILABLE_LOCAL_DATASET.
+- TAIWAN_INDEX / TAIEX: official TWSE daily OHLC is available remotely via
+  MI_5MINS_HIST, but this local managed-dataset adapter has no materialized
+  TAIEX dataset yet → NOT_AVAILABLE_LOCAL_DATASET here.
 """
 from __future__ import annotations
 

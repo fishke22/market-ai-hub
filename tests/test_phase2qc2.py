@@ -34,13 +34,64 @@ def _sentinel_micro():
 
 def _build(market, target, monkeypatch, micro=None, stock=None, index=None):
     import market_ai_hub.packet.builder as b
+    monkeypatch.setattr(
+        b,
+        "_taiwan_stock_context",
+        lambda symbol, as_of: {
+            "schema_version": "TAIWAN_STOCK_CONTEXT_V3",
+            "source_semantics_version": "TEST",
+            "role": "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE",
+            "predictive_feature_eligible": False,
+            "historical_revision_safe": False,
+            "coverage": {
+                "status": "PARTIAL",
+                "context_data_ready": False,
+                "predictive_experiment_data_ready": False,
+            },
+            "channels": {"news": {"status": "NOT_AVAILABLE"}},
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            },
+        },
+    )
 
     if micro is not None:
         monkeypatch.setattr(b, "_load_latest_micro_settlement", lambda: micro)
     if stock is not None:
-        monkeypatch.setattr(b, "_taiwan_stock_reference", lambda symbol: stock)
+        monkeypatch.setattr(
+            b,
+            "_taiwan_stock_analysis",
+            lambda symbol, horizon: {
+                "status": "OK",
+                "target_family": "TAIWAN_STOCK",
+                "symbol": symbol,
+                "horizon": horizon,
+                "data_integrity": {
+                    "status": "PASS",
+                    "corporate_action_integrity": "CORPORATE_ACTION_NORMALIZED",
+                },
+                "reference_price": stock["price"],
+                "reference_price_type": stock["price_type"],
+                "reference_price_timestamp": "2026-09-18T05:30:00+00:00",
+                "reference_price_source": stock["source"],
+                "reference_data_grade": stock["data_grade"],
+                "validation_claims": {
+                    "PREDICTIVE_GAIN": False,
+                    "CALIBRATED": False,
+                    "TRADING_EDGE": False,
+                },
+                "models": {},
+                "price_forecast_ensemble": {},
+            },
+        )
     if index is not None:
-        monkeypatch.setattr(b, "_index_proxy_reference", lambda: index)
+        if index.get("price_type") == "CLOSE":
+            monkeypatch.setattr(b, "_index_direct_reference", lambda: index)
+        else:
+            monkeypatch.setattr(b, "_index_direct_reference", lambda: None)
+            monkeypatch.setattr(b, "_index_proxy_reference", lambda: index)
     return b.build_analysis_packet(market=market, target=target, detail_level="compact", save_analysis=False)
 
 
@@ -88,6 +139,32 @@ def test_taiwan_index_never_uses_micro_settlement(monkeypatch):
                index={"price": 20000.0, "price_type": "PROXY", "price_timestamp": "2026-09-18"})
     assert p["reference_price"] == 20000.0
     assert p["reference_price"] != 999999.0
+
+
+def test_taiwan_index_prefers_official_twse_close(monkeypatch):
+    p = _build(
+        "taiwan_index",
+        "TAIEX",
+        monkeypatch,
+        index={
+            "price": 48024.60,
+            "price_type": "CLOSE",
+            "price_timestamp": "2026-09-24",
+            "source": "TWSE:MI_5MINS_HIST",
+            "data_grade": "OFFICIAL_DAILY",
+            "reference_trading_date": "2026-09-24",
+        },
+    )
+    assert p["reference_price"] == 48024.60
+    assert p["reference_price_type"] == "CLOSE"
+    assert p["target_data_status"] == "REFERENCE_AVAILABLE"
+    assert p["target_price_source"] == "TWSE:MI_5MINS_HIST"
+    assert "twse:MI_5MINS_HIST" in p["data_fetched"]
+    assert p["target_semantics"]["target_reference_role"] == "DAILY_REFERENCE"
+    assert (
+        p["target_semantics"]["target_data_freshness"]["availability_semantics"]
+        == "DATED_OFFICIAL_REFERENCE"
+    )
 
 
 def test_taiwan_index_no_ose_contract(monkeypatch):

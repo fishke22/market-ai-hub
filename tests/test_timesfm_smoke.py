@@ -14,7 +14,7 @@ def adapter():
 
     from market_ai_hub.models.timesfm_model import TimesFM3Adapter
 
-    a = TimesFM3Adapter(device="cuda" if torch.cuda.is_available() else "cpu")
+    a = TimesFM3Adapter(device="cuda" if torch.cuda.is_available() else "cpu", purpose="RESEARCH")
     a.load()
     return a
 

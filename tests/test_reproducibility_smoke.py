@@ -15,7 +15,7 @@ def _closes():
 
 @pytest.mark.parametrize("builder,adapter_factory", [
     pytest.param("chronos", lambda: __import__("market_ai_hub.models.chronos_model", fromlist=["ChronosAdapter"]).ChronosAdapter(), id="chronos-2"),
-    pytest.param("timesfm", lambda: __import__("market_ai_hub.models.timesfm_model", fromlist=["TimesFM3Adapter"]).TimesFM3Adapter(), id="timesfm-3.0"),
+    pytest.param("timesfm", lambda: __import__("market_ai_hub.models.timesfm_model", fromlist=["TimesFM3Adapter"]).TimesFM3Adapter(purpose="RESEARCH"), id="timesfm-3.0"),
 ])
 def test_real_model_reproducible_10x(builder, adapter_factory):
     if builder == "chronos":

@@ -13,7 +13,13 @@ import pytest
 
 sys.path.insert(0, "src")
 
-from market_ai_hub.targets.coverage import LiveCoverageAuditor, LIVE_VERIFIED, CONTRACT_ONLY, NEEDS_CONFIG
+from market_ai_hub.targets.coverage import (
+    LiveCoverageAuditor,
+    LIVE_VERIFIED,
+    CONTRACT_ONLY,
+    NEEDS_CONFIG,
+    SOURCE_VERIFIED,
+)
 from market_ai_hub.targets.events import OfficialEvent, event_visible, official_event_providers
 from market_ai_hub.targets.jpx_investor_flow import parse_investor_flow_csv
 from market_ai_hub.targets.jpx_market_data import parse_open_interest, parse_whole_day_volumes
@@ -189,6 +195,9 @@ def test_coverage_live_status():
     recs = LiveCoverageAuditor().audit_osaka()
     statuses = {r.status for r in recs}
     assert LIVE_VERIFIED in statuses or CONTRACT_ONLY in statuses
+    flow = next(r for r in recs if r.factor == "JPX investor flow")
+    assert flow.status == SOURCE_VERIFIED
+    assert flow.coverage == "weekly"
     # 至少部分缺口被真實標記
     assert any(r.status in (CONTRACT_ONLY, NEEDS_CONFIG, "MISSING") for r in recs)
 

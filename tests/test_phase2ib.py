@@ -34,7 +34,8 @@ def test_system_manifest_valid():
     assert set(d["target_families"]) == {"OSAKA_MICRO", "TAIWAN_STOCK", "TAIWAN_INDEX"}
     assert d["safety"]["live_trading"] is False
     assert d["automation"]["auto_promote_champion"] is False
-    assert d["mcp"]["tool_count"] == 21
+    assert d["mcp"]["tool_count"] == 27
+    assert "official TAIEX daily OHLC" in d["first_class_targets"]["TAIWAN_INDEX"]["maturity"]
 
 
 def test_capabilities_manifest_valid():
@@ -43,6 +44,8 @@ def test_capabilities_manifest_valid():
     assert d["yuanta_realtime"]["status"] == "DISABLED"
     assert d["tradingview_bridge"]["status"] == "OPTIONAL_NOT_INSTALLED"
     assert d["osaka_micro_research"]["status"] == "AVAILABLE"
+    assert d["taiwan_index_research"]["status"] == "AVAILABLE"
+    assert d["jpx_micro_investor_flow"]["status"] == "AVAILABLE_RECEIPT_TIME_ONLY"
 
 
 def test_w7_portability_matrix_keeps_external_gates_unverified():

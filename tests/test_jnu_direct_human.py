@@ -131,8 +131,45 @@ def test_direct_micro_service_forecasts_exact_contract(monkeypatch):
     assert out["target"] == EXECUTION_TARGET
     assert out["contract_month"] == "202610"
     assert out["scope"] == "DIRECT_MICRO_SETTLEMENT_RESEARCH"
+    assert out["forecast_price_type"] == "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION"
+    # 2026-09-21..23 are OSE holiday sessions but the next official published
+    # settlement observation after the 9/18 row is on the cash-business cadence.
+    assert out["target_dates"] == ["2026-09-24"]
     assert out["ensemble"]["p50"] == pytest.approx(_series_and_meta()[0].iloc[-1] + 400.0)
     assert out["calibrated_probability_available"] is False
+    assert out["ensemble"]["ensemble_mode"] == "MULTI_MODEL_AVAILABLE_ENSEMBLE"
+    assert out["ensemble"]["available_model_count"] == 2
+
+
+def test_direct_micro_single_model_is_explicitly_degraded(monkeypatch):
+    import market_ai_hub.services.jnu_direct as d
+
+    monkeypatch.setattr(d, "load_direct_micro_settlements", lambda contract_month="": _series_and_meta())
+    monkeypatch.setattr(d, "get_chronos", lambda: _DummyAdapter(300.0))
+
+    def blocked_timesfm():
+        raise RuntimeError("research purpose blocked in this runtime")
+
+    monkeypatch.setattr(d, "get_timesfm", blocked_timesfm)
+    out = d.analyze_jnu_direct("1d")
+    assert out["status"] == "OK"
+    assert out["ensemble"]["ensemble_mode"] == "SINGLE_MODEL_DEGRADED"
+    assert out["ensemble"]["available_model_count"] == 1
+    assert out["ensemble"]["available_models"] == ["Chronos-2"]
+    summary = d.jnu_user_summary(out, calibration_status={"public_calibrated": False})
+    assert "單模型可用" in summary["模型組成"]
+    assert "不是多模型一致預測" in summary["模型組成"]
+
+
+def test_next_published_observation_skips_ose_holiday_only_sessions():
+    import market_ai_hub.services.jnu_direct as d
+
+    assert d.next_published_settlement_observation_dates("2026-09-18", 1) == ["2026-09-24"]
+    assert d.next_published_settlement_observation_dates("2026-09-18", 3) == [
+        "2026-09-24",
+        "2026-09-25",
+        "2026-09-28",
+    ]
 
 
 def test_jnu_public_summary_is_plain_chinese(monkeypatch):
@@ -157,6 +194,8 @@ def test_jnu_public_summary_is_plain_chinese(monkeypatch):
         assert forbidden not in text
     assert "大阪日經225微型期貨（JNU）" in text
     assert "官方清算價" in text
+    assert "下一筆官方發布的清算價觀測" in text
+    assert "下一交易日的官方清算價" not in text
     assert "目前已有 0 筆合格的真實前向機率樣本" in text
     assert "至少要依時間累積 50 筆校準、50 筆驗證、50 筆最終留出樣本" in text
 
@@ -247,6 +286,7 @@ def test_jnu_public_summary_prefers_sealed_prequential_holdout():
 
 def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     import market_ai_hub.mcp.server as server
+    import market_ai_hub.services.data_continuity as dc
     import market_ai_hub.services.jnu_direct as d
 
     calls = {"refresh": 0, "validate": None}
@@ -278,6 +318,17 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     monkeypatch.setattr(d, "refresh_jnu_direct_data", fake_refresh)
     monkeypatch.setattr(d, "analyze_jnu_direct", fake_analyze)
     monkeypatch.setattr(
+        dc,
+        "jnu_data_continuity_status",
+        lambda contract_month="": {
+            "mode": "NORMAL_TARGET_DATA",
+            "context_only": False,
+            "freshness_status": "FRESH_UNTIL_NEXT_EXPECTED_PUBLICATION",
+            "source_redundancy": {"status": "DUAL_CHANNEL_MATCH"},
+            "context_confidence_grade": "HIGH",
+        },
+    )
+    monkeypatch.setattr(
         server,
         "get_forward_test_status",
         lambda: {"w32_event_probability_settled": 0},
@@ -286,7 +337,49 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     assert calls == {"refresh": 1, "validate": True}
     assert out["商品"] == "大阪日經225微型期貨（JNU）"
     assert out["直接價格模型"]["可信度"] == "低信心研究參考"
+    assert out["資料連續性"]["模式"] == "NORMAL_TARGET_DATA"
+    assert "Settlement Forecast" in out["產品分層"]["本工具"]
+    assert "analyze_jnu_trading_path" in out["產品分層"]["交易路徑"]
     assert "status" not in out
+
+
+def test_analyze_jnu_mcp_continuity_mode_does_not_call_direct_model(monkeypatch):
+    import market_ai_hub.mcp.server as server
+    import market_ai_hub.services.data_continuity as dc
+    import market_ai_hub.services.jnu_direct as d
+
+    calls = {"direct": 0}
+    monkeypatch.setattr(d, "refresh_jnu_direct_data", lambda: {"status": "OK"})
+
+    def forbidden_direct(**kwargs):
+        calls["direct"] += 1
+        raise AssertionError("direct model must not run in DATA_CONTINUITY_MODE")
+
+    monkeypatch.setattr(d, "analyze_jnu_direct", forbidden_direct)
+    monkeypatch.setattr(
+        dc,
+        "jnu_data_continuity_status",
+        lambda contract_month="": {
+            "mode": "DATA_CONTINUITY_MODE",
+            "context_only": True,
+            "reason": "EXPECTED_PUBLISHED_OBSERVATION_OVERDUE",
+        },
+    )
+    monkeypatch.setattr(
+        dc,
+        "jnu_continuity_user_summary",
+        lambda snapshot: {
+            "商品": "大阪日經225微型期貨（JNU）",
+            "模式": "資料連續性模式（只做情境與風險分析）",
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+        },
+    )
+    out = server.analyze_jnu()
+    assert calls["direct"] == 0
+    assert out["模式"].startswith("資料連續性模式")
+    assert out["PREDICTIVE_GAIN"] is False
 
 def test_analysis_packet_accepts_jnu_alias(monkeypatch):
     import market_ai_hub.packet.builder as builder

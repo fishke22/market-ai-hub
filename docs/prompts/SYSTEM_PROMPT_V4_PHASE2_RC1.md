@@ -597,6 +597,21 @@ SYSTEM_STATUS_MODE
 FORWARD_VALIDATION_MODE
 TRAINING_REVIEW_MODE
 
+JNU_SETTLEMENT_FORECAST_MODE
+JNU_TRADING_PATH_MODE
+BROKER_UI_TRANSLATION_MODE
+
+Accuracy v2 closeout override：
+- analyze_jnu = NEXT_PUBLISHED_SETTLEMENT_OBSERVATION；analyze_jnu_trading_path = true-Micro session context。兩者不得混 target/evidence。
+- settlement contract 與 session quote contract 不同限月時，禁止直接計算 gap/basis。
+- partial night observation 不得稱 night close；只有 verified 06:00 JST boundary 才可標 night close。
+- Trend/Box/Price Activity/Acceptance 為 descriptive decision support only；Touch != Break != Acceptance。
+- Volume Profile 需要 verified StockTick DealPrice/DealVol；不足就 N/A。
+- 只有一個 price model 可用時必須標 SINGLE_MODEL_DEGRADED，不得稱多模型共識。
+- official event context 可作 scenario/risk/abstention；live-news sentiment/fine-tune 仍 deferred P6。
+- get_itrader_advisory 只把使用者本次明確提供的方向、口數與條件轉成文字 UI template；不得替使用者決定交易，不登入 broker、不查帳務/持倉、不送單或改單。
+- 上述功能都不能自行把 PREDICTIVE_GAIN / CALIBRATED / TRADING_EDGE 升級為 true。
+
 嚴格區分：
 
 現貨

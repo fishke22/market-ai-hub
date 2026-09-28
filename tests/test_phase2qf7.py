@@ -40,8 +40,9 @@ def test_osaka_keeps_own_evidence():
     from market_ai_hub.services.research_truth import evidence_for
 
     ev = evidence_for("OSAKA_MICRO", "OSE_NIKKEI225_MICRO_FUTURES")
-    assert "STATISTICAL_FORECAST_EVIDENCE" in ev["direct_micro_historical"]
-    assert ev["causal"] == "NON_EXECUTABLE_FORECAST_EDGE"
+    assert ev["direct_micro_historical"] == "BLOCKED_HORIZON_MISMATCH"
+    assert ev["direct_micro_development"] == "NO_IMPROVEMENT_BASELINE_RETAINED"
+    assert ev["causal"] == "NOT_ESTABLISHED_CURRENT_ACCURACY_V2"
 
 
 def test_packet_validation_truth_target_scoped():
@@ -53,7 +54,8 @@ def test_packet_validation_truth_target_scoped():
         assert m not in s, f"TAIEX packet contaminated with {m}"
 
     osaka = build_analysis_packet(market="osaka", detail_level="compact", save_analysis=False)
-    assert "STATISTICAL_FORECAST_EVIDENCE" in str(osaka["validation_truth"])
+    assert osaka["validation_truth"]["direct_micro_historical"] == "BLOCKED_HORIZON_MISMATCH"
+    assert "VAR(1)" not in str(osaka["validation_truth"])
 
 
 def test_unknown_family_not_contaminated():

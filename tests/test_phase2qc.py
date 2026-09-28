@@ -163,8 +163,9 @@ def test_target_family_isolated():
     osaka = by["OSAKA_MICRO"]["OSE_NIKKEI225_MICRO_FUTURES"]
     taiwan_stock = by["TAIWAN_STOCK"]["TAIWAN_INDIVIDUAL_STOCK"]
     taiwan_index = by["TAIWAN_INDEX"]["TAIEX"]
-    # Osaka 有 STATISTICAL_FORECAST_EVIDENCE，Taiwan 仍是 NOT_YET_VALIDATED（隔離）
-    assert "STATISTICAL_FORECAST_EVIDENCE" in osaka["direct_micro_historical"]
+    # Osaka current truth is blocked/no-improvement; Taiwan remains isolated/unvalidated.
+    assert osaka["direct_micro_historical"] == "BLOCKED_HORIZON_MISMATCH"
+    assert osaka["direct_micro_development"] == "NO_IMPROVEMENT_BASELINE_RETAINED"
     assert taiwan_stock["direct_historical"] == "NOT_YET_VALIDATED"
     assert taiwan_index["direct_historical"] == "NOT_YET_VALIDATED"
     # 不得用 Osaka 替 Taiwan 背書

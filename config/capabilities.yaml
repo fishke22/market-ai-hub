@@ -9,6 +9,11 @@ taiwan_stock_research:
   status: AVAILABLE
   gate: PHASE2A_PASS
 
+taiwan_index_research:
+  status: AVAILABLE
+  gate: OFFICIAL_TAIEX_DAILY_REFERENCE_READY
+  note: "TWSE MI_5MINS_HIST official daily OHLC/reference；TX/MTX/TMF execution validation remains separate and unproven"
+
 analysis_packet:
   status: AVAILABLE
   gate: PHASE2H_PASS
@@ -36,7 +41,13 @@ automated_research_loop:
 official_data_live:
   status: PARTIAL
   gate: PHASE2G2_PASS
-  note: "JPX settlement/volume/OI + BLS/Cboe/EDGAR/BOJ LIVE; OHLC CONTRACT_ONLY"
+  note: "JPX settlement/volume/OI + weekly Micro investor-flow receipt-time context + TWSE TAIEX daily OHLC + BLS/Cboe/EDGAR/BOJ public sources; exact historical PIT depends on each source availability contract"
+
+jpx_micro_investor_flow:
+  status: AVAILABLE_RECEIPT_TIME_ONLY
+  source_schema: JPX_INVESTOR_FLOW_20260423_V1
+  product_code: "331"
+  note: "official weekly CSV; exact publication timestamp unverified, so available_at = retrieval time and no historical backfill"
 
 fine_tuning_extension:
   status: INTERFACE_ONLY

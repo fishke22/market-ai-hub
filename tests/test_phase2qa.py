@@ -142,9 +142,10 @@ def test_phase2_oos_truth_not_missing():
     from market_ai_hub.services.research_truth import validation_truth
 
     vt = validation_truth()
-    assert "STATISTICAL_FORECAST_EVIDENCE" in vt["direct_micro_historical"]
+    assert vt["direct_micro_historical"] == "BLOCKED_HORIZON_MISMATCH"
+    assert vt["direct_micro_development"] == "NO_IMPROVEMENT_BASELINE_RETAINED"
     assert vt["proxy_historical"] == "NO_EVIDENCE"
-    assert vt["causal"] == "NON_EXECUTABLE_FORECAST_EDGE"
+    assert vt["causal"] == "NOT_ESTABLISHED_CURRENT_ACCURACY_V2"
 
 
 def test_economic_truth_no_edge_not_missing_cost_test():

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 
 from market_ai_hub.config.settings import project_root
 from market_ai_hub.schemas.backtest import BacktestRecord
@@ -22,7 +23,35 @@ V2_COLUMNS = [
     "baseline_threshold", "beats_majority_baseline",
     "engineering_status", "predictive_validation_status", "eligible_for_direction_vote",
     "baseline_results", "sample_size", "date_range",
+    "majority_class", "majority_class_train_prevalence",
+    "uniform_random_baseline_balanced_accuracy",
+    "majority_class_baseline_balanced_accuracy",
+    "majority_class_baseline_macro_f1", "baseline_metric", "baseline_semantics",
+    "economic_metrics_status", "economic_return_semantics",
+    "transaction_costs_included", "n_active_trades",
+    "dataset_semantics", "adjustment_semantics", "source_semantics",
 ]
+
+
+def _decode_record(row: dict) -> dict:
+    """Convert DuckDB/pandas null sentinels back to JSON-safe Python None."""
+    rec = dict(row)
+    for key, value in list(rec.items()):
+        if isinstance(value, (str, bytes, dict, list)):
+            continue
+        try:
+            if bool(pd.isna(value)):
+                rec[key] = None
+        except (TypeError, ValueError):
+            pass
+    for key in ("class_distribution", "baseline_results", "date_range", "classes"):
+        value = rec.get(key)
+        if value and isinstance(value, str):
+            try:
+                rec[key] = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+    return rec
 
 
 class PerformanceStore:
@@ -59,15 +88,45 @@ class PerformanceStore:
                     baseline_threshold DOUBLE, beats_majority_baseline BOOLEAN,
                     engineering_status VARCHAR, predictive_validation_status VARCHAR,
                     eligible_for_direction_vote BOOLEAN,
-                    baseline_results VARCHAR, sample_size BIGINT, date_range VARCHAR
+                    baseline_results VARCHAR, sample_size BIGINT, date_range VARCHAR,
+                    majority_class INTEGER, majority_class_train_prevalence DOUBLE,
+                    uniform_random_baseline_balanced_accuracy DOUBLE,
+                    majority_class_baseline_balanced_accuracy DOUBLE,
+                    majority_class_baseline_macro_f1 DOUBLE,
+                    baseline_metric VARCHAR, baseline_semantics VARCHAR,
+                    economic_metrics_status VARCHAR, economic_return_semantics VARCHAR,
+                    transaction_costs_included BOOLEAN, n_active_trades BIGINT,
+                    dataset_semantics VARCHAR, adjustment_semantics VARCHAR,
+                    source_semantics VARCHAR
                 )
                 """
             )
+            migrations = {
+                "majority_class": "INTEGER",
+                "majority_class_train_prevalence": "DOUBLE",
+                "uniform_random_baseline_balanced_accuracy": "DOUBLE",
+                "majority_class_baseline_balanced_accuracy": "DOUBLE",
+                "majority_class_baseline_macro_f1": "DOUBLE",
+                "baseline_metric": "VARCHAR",
+                "baseline_semantics": "VARCHAR",
+                "economic_metrics_status": "VARCHAR",
+                "economic_return_semantics": "VARCHAR",
+                "transaction_costs_included": "BOOLEAN",
+                "n_active_trades": "BIGINT",
+                "dataset_semantics": "VARCHAR",
+                "adjustment_semantics": "VARCHAR",
+                "source_semantics": "VARCHAR",
+            }
+            for column, sql_type in migrations.items():
+                con.execute(
+                    f"ALTER TABLE backtests_v2 ADD COLUMN IF NOT EXISTS {column} {sql_type}"
+                )
 
     def save(self, rec: BacktestRecord) -> None:
         self.init()
         data = rec.model_dump()
         placeholders = ",".join(["?"] * len(V2_COLUMNS))
+        columns_sql = ",".join(V2_COLUMNS)
         values = []
         for c in V2_COLUMNS:
             v = data.get(c)
@@ -75,7 +134,10 @@ class PerformanceStore:
                 v = json.dumps(v, ensure_ascii=False, default=str)
             values.append(v)
         with self._conn() as con:
-            con.execute(f"INSERT INTO backtests_v2 VALUES ({placeholders})", values)
+            con.execute(
+                f"INSERT INTO backtests_v2 ({columns_sql}) VALUES ({placeholders})",
+                values,
+            )
 
     def latest_by_model(self) -> dict[str, dict]:
         """各 model 最近一次 v2 績效（ensemble weighting / eligibility 用）。"""
@@ -90,14 +152,8 @@ class PerformanceStore:
                 """
             ).df()
         out = {}
-        for r in df.to_dict("records"):
-            rec = dict(r)
-            for k in ("class_distribution", "baseline_results", "date_range", "classes"):
-                if rec.get(k) and isinstance(rec[k], str):
-                    try:
-                        rec[k] = json.loads(rec[k])
-                    except json.JSONDecodeError:
-                        pass
+        for row in df.to_dict("records"):
+            rec = _decode_record(row)
             out[rec["model"]] = rec
         return out
 
@@ -111,15 +167,8 @@ class PerformanceStore:
                 "SELECT * FROM backtests_v2 WHERE model = ? ORDER BY timestamp DESC LIMIT ?", [model, limit]
             ).df()
         rows = []
-        for r in df.to_dict("records"):
-            rec = dict(r)
-            for k in ("class_distribution", "baseline_results", "date_range", "classes"):
-                if rec.get(k) and isinstance(rec[k], str):
-                    try:
-                        rec[k] = json.loads(rec[k])
-                    except json.JSONDecodeError:
-                        pass
-            rows.append(rec)
+        for row in df.to_dict("records"):
+            rows.append(_decode_record(row))
         if rows:
             return rows[:limit]
         # fallback：v1 舊表（僅 legacy 欄位）
@@ -131,7 +180,9 @@ class PerformanceStore:
                     df1 = con.execute("SELECT * FROM backtests WHERE model = ? ORDER BY timestamp DESC LIMIT ?", [model, limit]).df()
             out = []
             for r in df1.to_dict("records"):
-                rec = {c: (r.get(c) if c in r else None) for c in V2_COLUMNS}
+                rec = _decode_record(
+                    {c: (r.get(c) if c in r else None) for c in V2_COLUMNS}
+                )
                 rec["schema_version"] = "v1_legacy"
                 out.append(rec)
             return out

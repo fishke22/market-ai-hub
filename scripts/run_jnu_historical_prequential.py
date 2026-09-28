@@ -2,11 +2,24 @@ from __future__ import annotations
 
 import json
 
-from market_ai_hub.research.historical_prequential import run_replay, save_one_use_evidence
+from market_ai_hub.research.historical_prequential import (
+    compact_evidence_summary, evidence_dir, load_sealed_evidence,
+    run_replay, save_one_use_evidence,
+)
 from market_ai_hub.services.model_runtime import get_chronos, get_timesfm
 
 
 def main() -> int:
+    existing = load_sealed_evidence()
+    if existing is not None:
+        print(json.dumps(compact_evidence_summary(existing), ensure_ascii=False, indent=2))
+        return 0
+    directory = evidence_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    # Reserve BEFORE loading models. A failed attempt requires an explicit audit;
+    # deleting this marker automatically would permit another final-holdout opening.
+    with (directory / "FINAL_HOLDOUT_ATTEMPTED").open("x", encoding="utf-8") as marker:
+        marker.write("Final-holdout replay reserved; do not automatically retry.\n")
     result = run_replay(
         {
             "chronos-2": get_chronos(),

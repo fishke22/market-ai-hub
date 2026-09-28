@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_ROOT_FILES = {
     "README.md", "LICENSE", "SECURITY.md", "DISCLAIMER.md", "THIRD_PARTY_NOTICES.md",
     "CHANGELOG.md", "CONTRIBUTING.md", "pyproject.toml", "AGENTS.md",
-    "requirements-runtime.txt", "requirements-dev.txt", "requirements-lock-windows-x64.txt",
+    "requirements-runtime.txt", "requirements-dev.txt", "requirements-p5-cloud.txt",
+    "requirements-lock-windows-x64.txt",
     ".env.example", ".gitattributes", ".gitignore",
 }
 

@@ -16,8 +16,8 @@ import pandas as pd
 
 from market_ai_hub.packet.schema import (
     ENSEMBLE_RESEARCH_QUANTILE_SUMMARY,
+    PRICE_TYPE_CLOSE,
     PRICE_TYPE_PROXY,
-    PRICE_TYPE_REFERENCE,
     PRICE_TYPE_SETTLEMENT,
     RESEARCH_ENSEMBLE,
     UNVALIDATED_FORWARD,
@@ -129,66 +129,173 @@ def _index_proxy_reference() -> dict | None:
         return None
 
 
-def _taiwan_stock_reference(symbol: str) -> dict | None:
-    """台股個股 reference price（FinMind → TWSE → yfinance fallback）。
-
-    只回該股票本身的價，不得 fallback 到 OSE Micro / TAIEX / 其他股票。
-    """
-    from datetime import timedelta
-
-    lookup = symbol.split(".")[0] if symbol.upper().endswith(".TW") else symbol
-    end = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    start = (datetime.now(timezone.utc) - timedelta(days=730)).strftime("%Y-%m-%d")
-
-    # 1. FinMind（OFFICIAL_DAILY）
+def _index_direct_reference() -> dict | None:
+    """Official TWSE TAIEX cash-index close; never an executable futures price."""
     try:
-        from market_ai_hub.providers.finmind import FinMindProvider
+        from datetime import timedelta
+        from zoneinfo import ZoneInfo
 
-        fm = FinMindProvider()
-        if fm.status().status.value in ("ok", "needs_config"):
-            df = fm.fetch_price(lookup, start, end)
-            if df is not None and not df.empty:
-                last = df.sort_values("timestamp_utc").iloc[-1]
-                return {"price": float(last["close"]), "price_type": PRICE_TYPE_REFERENCE,
-                        "price_timestamp": str(last["timestamp_utc"]), "source": "finmind",
-                        "data_grade": "OFFICIAL_DAILY"}
-    except Exception:
-        pass
-
-    # 2. TWSE OpenAPI
-    try:
         from market_ai_hub.providers.twse import TWSEProvider
 
-        twse = TWSEProvider()
-        ts_start = (datetime.now(timezone.utc) - timedelta(days=180)).strftime("%Y%m%d")
-        df = twse.fetch_symbol_daily(lookup, ts_start, end.replace("-", ""))
-        if df is not None and not df.empty:
-            last = df.sort_values("timestamp_utc").iloc[-1]
-            return {"price": float(last["close"]), "price_type": PRICE_TYPE_REFERENCE,
-                    "price_timestamp": str(last["timestamp_utc"]), "source": "twse",
-                    "data_grade": "OFFICIAL_DAILY"}
+        now_tw = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Taipei"))
+        end = now_tw.strftime("%Y%m%d")
+        start = (now_tw.date() - timedelta(days=45)).strftime("%Y%m%d")
+        df = TWSEProvider().fetch_taiex_daily(start, end)
+        if df.empty:
+            return None
+        last = df.sort_values("timestamp_utc").iloc[-1]
+        trading_date = str(last["timestamp_local"])[:10]
+        return {
+            "price": float(last["close"]),
+            "price_type": PRICE_TYPE_CLOSE,
+            "price_timestamp": trading_date,
+            "reference_trading_date": trading_date,
+            "reference_session_valid": True,
+            "source": "TWSE:MI_5MINS_HIST",
+            "data_grade": "OFFICIAL_DAILY",
+            "exact_publication_timestamp_known": False,
+            "cash_index_executable": False,
+        }
     except Exception:
-        pass
+        return None
 
-    # 3. yfinance fallback（RESEARCH_PROXY）
+
+def _taiwan_stock_analysis(symbol: str, horizon: str) -> dict:
+    """Run the governed Taiwan analyzer once and return a packet-safe summary.
+
+    The analyzer owns corporate-action normalization and same-target model input.
+    Packet construction must not fall back to a separate unadjusted/yfinance
+    reference path when that integrity contract is unavailable.
+    """
+    from market_ai_hub.services.analysis import analyze_taiwan_stock
+    from market_ai_hub.services.public_view import packet_target_model_analysis
+
     try:
-        from market_ai_hub.providers.yfinance_provider import YFinanceProvider
-        from market_ai_hub.services.calendar import sanitize_daily_exchange_sessions
+        raw = analyze_taiwan_stock(symbol, horizon)
+        return packet_target_model_analysis(raw, market="taiwan")
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "UNAVAILABLE",
+            "target_family": "TAIWAN_STOCK",
+            "symbol": symbol,
+            "horizon": horizon,
+            "data_integrity": {"status": "UNKNOWN"},
+            "reason": type(exc).__name__,
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+                "result_role": "RESEARCH_ANALYZER_OUTPUT",
+            },
+            "models": {},
+            "price_forecast_ensemble": {},
+        }
 
-        df = YFinanceProvider().fetch(symbol, period="6mo")
-        if df is not None and not df.empty:
-            df = sanitize_daily_exchange_sessions(df, symbol)
-        if df is not None and not df.empty:
-            last = df.sort_values("timestamp_utc").iloc[-1]
-            return {"price": float(last["close"]), "price_type": PRICE_TYPE_PROXY,
-                    "price_timestamp": str(last["timestamp_utc"]), "source": "yfinance",
-                    "data_grade": "RESEARCH_PROXY",
-                    "reference_trading_date": str(last["timestamp_local"])[:10],
-                    "reference_session_valid": True}
-    except Exception:
-        pass
 
-    return None
+def _taiwan_stock_context(symbol: str, as_of: datetime) -> dict:
+    """Build optional same-target context without changing forecast/model gates."""
+    from market_ai_hub.services.taiwan_stock_context import (
+        CONTEXT_ROLE,
+        CONTEXT_SCHEMA_VERSION,
+        build_taiwan_stock_context,
+    )
+    from market_ai_hub.services.taiwan_context_receipts import (
+        RECEIPT_POLICY_VERSION,
+        RECEIPT_SCHEMA_VERSION,
+        TaiwanContextReceiptStore,
+    )
+
+    try:
+        context = build_taiwan_stock_context(
+            symbol,
+            as_of=as_of,
+            include_twse_official=True,
+        )
+        try:
+            receipt = TaiwanContextReceiptStore().capture(context)
+        except Exception as exc:  # noqa: BLE001
+            receipt = {
+                "status": "CAPTURE_FAILED",
+                "receipt_schema_version": RECEIPT_SCHEMA_VERSION,
+                "receipt_policy_version": RECEIPT_POLICY_VERSION,
+                "receipt_id": None,
+                "append_only": True,
+                "content_addressed": True,
+                "predictive_feature_allowed": False,
+                "reason": type(exc).__name__,
+            }
+        context["receipt"] = receipt
+        context["receipt_store"] = {
+            "receipt_schema_version": RECEIPT_SCHEMA_VERSION,
+            "receipt_policy_version": RECEIPT_POLICY_VERSION,
+            "append_only": True,
+            "content_addressed": True,
+            "selection_policy": "LATEST_PREEXISTING_RECEIPT_AT_OR_BEFORE_DECISION",
+            "retroactive_backfill_allowed": False,
+            "predictive_feature_allowed": False,
+        }
+        try:
+            from market_ai_hub.research.taiwan_context_forward import (
+                summarize_taiwan_context_receipts,
+            )
+
+            inventory = summarize_taiwan_context_receipts(
+                context["stock_id"],
+                decision_time=datetime.now(timezone.utc),
+            )
+            context["forward_receipt_inventory"] = {
+                key: inventory.get(key)
+                for key in (
+                    "schema_version",
+                    "protocol_id",
+                    "protocol_hash",
+                    "status",
+                    "receipt_count_total",
+                    "receipt_count_as_of_decision",
+                    "tracked_factor_count",
+                    "factors_with_observation_as_of_decision",
+                    "blocked_channels",
+                    "predictive_feature_allowed",
+                    "predictive_experiment_data_ready",
+                    "validation_claims",
+                )
+            }
+        except Exception as exc:  # noqa: BLE001
+            context["forward_receipt_inventory"] = {
+                "status": "UNAVAILABLE",
+                "reason": type(exc).__name__,
+                "predictive_feature_allowed": False,
+                "predictive_experiment_data_ready": False,
+            }
+        return context
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "schema_version": CONTEXT_SCHEMA_VERSION,
+            "symbol": symbol,
+            "as_of": pd.Timestamp(as_of).isoformat(),
+            "role": CONTEXT_ROLE,
+            "status": "UNAVAILABLE",
+            "predictive_feature_eligible": False,
+            "predictive_feature_allowed": False,
+            "historical_revision_safe": False,
+            "receipt": {
+                "status": "NOT_CAPTURED_CONTEXT_BUILD_FAILED",
+                "receipt_id": None,
+            },
+            "coverage": {
+                "status": "UNAVAILABLE",
+                "context_data_ready": False,
+                "predictive_experiment_data_ready": False,
+            },
+            "channels": {},
+            "validation_claims": {
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+                "result_role": CONTEXT_ROLE,
+            },
+            "reason": type(exc).__name__,
+        }
 
 
 # 可用 yfinance symbols（避免 404 的 US10Y/US2Y）→ regime 引擎欄位名
@@ -397,11 +504,19 @@ def _fill_target_session_truth(packet: "AnalysisPacket", family: str) -> None:
         packet.target_semantics["target_data_freshness"] = {
             "freshness_status": fs, "quote_age_seconds": age, "age_days": round(age / 86400.0, 2),
             "reference_timestamp": ref_ts.isoformat(), "timestamp_precision": "SESSION_DATE_ONLY",
-            "availability_semantics": ("DATED_OFFICIAL_REFERENCE"
-                                       if packet.target_price_source == "settlement"
-                                       else "DATED_PROXY_REFERENCE"),
+            "availability_semantics": (
+                "DATED_OFFICIAL_REFERENCE"
+                if packet.target_price_source
+                in ("settlement", "finmind", "twse", "TWSE:MI_5MINS_HIST")
+                else "DATED_PROXY_REFERENCE"
+            ),
         }
-    if packet.target_price_source in ("settlement", "finmind", "twse"):
+    if packet.target_price_source in (
+        "settlement",
+        "finmind",
+        "twse",
+        "TWSE:MI_5MINS_HIST",
+    ):
         packet.target_semantics["target_reference_role"] = "DAILY_REFERENCE"
     elif packet.target_price_source in ("proxy", "proxy_index"):
         packet.target_semantics["target_reference_role"] = "RESEARCH_PROXY_REFERENCE"
@@ -484,7 +599,9 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
         }
         direct_contract = "N/A"  # cash equity / cash index 無 contract_month
 
+    session_truth = dict(packet.target_semantics)
     packet.target_semantics = {
+        **session_truth,
         "direct_target": direct_target,
         "direct_market_fact": direct_market_fact,
         "direct_contract_if_applicable": direct_contract,
@@ -503,13 +620,53 @@ def _fill_target_semantics(packet: AnalysisPacket, market: str, target: str) -> 
             "execution_instruments": ["TX", "MTX", "TMF"],
             "note": "TAIEX index points are NOT executable; strategy execution must pick TX/MTX/TMF explicitly",
         }
-
-    # §13：direct Micro 目前無真正 direct 5d model path
-    if family == "OSAKA_MICRO":
-        packet.target_semantics["direct_micro_forecast_status"] = "NOT_AVAILABLE"
-        packet.target_semantics["direct_micro_forecast_note"] = (
-            "no true Direct Micro model path; ^N225 forecast is PROXY_MODEL_REFERENCE only"
+    elif family == "TAIWAN_STOCK":
+        model_status = str((packet.target_model_analysis or {}).get("status") or "UNAVAILABLE")
+        packet.target_semantics["direct_stock_forecast_status"] = (
+            "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
+            if model_status == "OK"
+            else model_status
         )
+        packet.target_semantics["direct_stock_forecast_note"] = (
+            "same-target Taiwan analyzer is embedded from the corporate-action-governed "
+            "data path; engineering availability is not predictive gain or trading edge"
+        )
+        context = packet.target_context_snapshot or {}
+        receipt = dict(context.get("receipt") or {})
+        receipt_store = dict(context.get("receipt_store") or {})
+        packet.target_semantics["target_context_contract"] = {
+            "schema_version": context.get("schema_version"),
+            "source_semantics_version": context.get("source_semantics_version"),
+            "role": context.get("role"),
+            "predictive_feature_eligible": False,
+            "historical_revision_safe": bool(context.get("historical_revision_safe", False)),
+            "immutable_receipt_status": receipt.get("status", "NOT_CAPTURED"),
+            "immutable_receipt_id": receipt.get("receipt_id"),
+            "receipt_policy_version": receipt_store.get("receipt_policy_version"),
+            "retroactive_backfill_allowed": False,
+        }
+
+    # Accuracy v2: an exact-contract JNU research path exists, but it is not
+    # forward-validated and must not be relabelled as predictive gain/trading edge.
+    if family == "OSAKA_MICRO":
+        packet.target_semantics["direct_micro_forecast_status"] = (
+            "RESEARCH_AVAILABLE_FORWARD_UNVALIDATED"
+        )
+        packet.target_semantics["direct_micro_forecast_note"] = (
+            "exact-contract JNU research forecast path is available; "
+            "ZERO_RETURN_NAIVE remains the governed point baseline until "
+            "new forward evidence establishes incremental predictive gain"
+        )
+        packet.target_semantics["settlement_forecast_product"] = {
+            "target": "NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
+            "evidence": "ACCURACY_V2_GOVERNED",
+        }
+        packet.target_semantics["trading_path_product"] = {
+            "status": "AVAILABLE_SEPARATE_PRODUCT",
+            "tool": "analyze_jnu_trading_path",
+            "evidence": "DESCRIPTIVE_DECISION_SUPPORT_ONLY",
+            "must_not_merge_with_settlement_target": True,
+        }
 
     # §7/§12：direct 與 proxy 各別 session/bar，輸出 machine-readable dates（HIGH-1 fix）
     try:
@@ -555,11 +712,20 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
         "status": "ENVIRONMENT_ONLY",
         "note": "risk_on/trend/vol/rates regime 是市場環境，非 economic edge",
     }
-    packet.economic_edge_summary = {
-        "status": "NO_ECONOMIC_EDGE",
-        "source": "Phase2V-C cost-aware strategy validation",
-        "explanation": "Phase2 cost/slippage strategy validation completed; result NO_ECONOMIC_EDGE.",
-    }
+    if family == "OSAKA_MICRO":
+        packet.economic_edge_summary = {
+            "status": "NO_ECONOMIC_EDGE",
+            "source": "Phase2V-C cost-aware strategy validation",
+            "evidence_scope": "OSAKA_MICRO",
+            "explanation": "Osaka-scoped cost-aware validation result: NO_ECONOMIC_EDGE.",
+        }
+    else:
+        packet.economic_edge_summary = {
+            "status": "ECONOMIC_EDGE_NOT_EVALUATED",
+            "source": f"{family}_TARGET_SCOPED_VALIDATION_TRUTH",
+            "evidence_scope": family,
+            "explanation": "No same-family, same-target cost-aware economic validation is registered.",
+        }
 
     # §12：driver panel 只標 CONTEXT / EXPLANATORY FEATURES，非 formal causal validation
     packet.driver_panel = {
@@ -584,18 +750,67 @@ def _fill_research_truth(packet: AnalysisPacket, family: str = "OSAKA_MICRO", ta
     }
     packet.research_decision_support = {
         "status": "ENABLED_RESEARCH_ONLY",
+        "target_family_scope": family,
         "research_stance_allowed": True,
         "conditional_action_framework_allowed": True,
         "formal_validated_direction_still_gated": True,
         "public_probability_still_gated": True,
         "execution_order_allowed": False,
         "personalized_order_size_allowed": False,
-        "must_preserve_direct_proxy_scope": True,
-        "instruction": (
-            "Do not stop at WAIT: synthesize a qualitative research stance from same-scope model evidence "
-            "and provide conditional research actions, while keeping execution/orders and probability claims gated."
-        ),
     }
+    if family == "OSAKA_MICRO":
+        packet.research_decision_support.update({
+            "broker_ui_text_translation_allowed": True,
+            "broker_ui_translation_tool": "get_itrader_advisory",
+            "broker_ui_translation_is_order_execution": False,
+            "must_preserve_direct_proxy_scope": True,
+            "settlement_and_trading_path_must_remain_separate": True,
+            "live_news_fusion_status": "DEFERRED_P6",
+            "market_structure_status": "DESCRIPTIVE_ONLY_VIA_TRADING_PATH_TOOL",
+        })
+    elif family == "TAIWAN_STOCK":
+        model_status = str((packet.target_model_analysis or {}).get("status") or "UNAVAILABLE")
+        integrity_status = str(
+            ((packet.target_model_analysis or {}).get("data_integrity") or {}).get("status")
+            or "UNKNOWN"
+        ).upper()
+        integrated = bool(packet.target_model_analysis)
+        model_usable = model_status == "OK" and integrity_status == "PASS"
+        packet.display_policy["may_present_as_direct_forecast"] = model_usable
+        packet.display_policy["may_present_research_stance"] = model_usable
+        packet.display_policy["direct_forecast_scope"] = (
+            "TAIWAN_STOCK_SAME_TARGET_RESEARCH_UNVALIDATED"
+        )
+        packet.research_decision_support.update({
+            "broker_ui_text_translation_allowed": False,
+            "corporate_action_integrity_required": True,
+            "research_stance_allowed": model_usable,
+            "model_result_in_packet": integrated,
+            "model_result_status": model_status,
+            "model_result_integrity_status": integrity_status,
+            "model_result_integration_status": (
+                "GOVERNED_TAIWAN_ANALYZER_INTEGRATED"
+                if integrated
+                else "TAIWAN_ANALYZER_NOT_AVAILABLE"
+            ),
+            "target_context_in_packet": bool(packet.target_context_snapshot),
+            "target_context_role": (
+                (packet.target_context_snapshot or {}).get("role")
+                or "TARGET_CONTEXT_ONLY_NOT_PREDICTIVE_FEATURE"
+            ),
+            "target_context_coverage_status": (
+                ((packet.target_context_snapshot or {}).get("coverage") or {}).get("status")
+                or "UNAVAILABLE"
+            ),
+            "target_context_predictive_feature_eligible": False,
+            "target_context_news_status": (
+                ((packet.target_context_snapshot or {}).get("channels") or {})
+                .get("news", {})
+                .get("status", "NOT_AVAILABLE")
+            ),
+        })
+    else:
+        packet.research_decision_support["broker_ui_text_translation_allowed"] = False
 
     # position-aware research decision support: useful synthesis is allowed; orders remain prohibited.
     from market_ai_hub.services.public_view import position_guidance_policy
@@ -632,6 +847,7 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
 
     # 2. reference price（target-family routing，§3-§6：不得 cross-market）
     micro = None
+    taiwan_analysis = None
     if family == "OSAKA_MICRO":
         micro = _t("provider_micro_settlement", _load_latest_micro_settlement)
         if profiler is not None and micro is not None:
@@ -657,29 +873,137 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
                 packet.target_price_source = "unavailable"
                 packet.data_missing.append("micro_settlement")
     elif family == "TAIWAN_STOCK":
-        stock_ref = _t("provider_stock_reference", lambda: _taiwan_stock_reference(target))
-        if stock_ref:
-            packet.reference_price = stock_ref["price"]
-            packet.reference_price_type = stock_ref["price_type"]
-            packet.price_timestamp = stock_ref.get("price_timestamp", "")
-            packet.target_data_status = "REFERENCE_AVAILABLE" if stock_ref.get("data_grade") == "OFFICIAL_DAILY" else "RESEARCH_PROXY"
-            packet.target_price_source = stock_ref.get("source", "stock")
+        taiwan_analysis = _t(
+            "taiwan_stock_governed_analysis",
+            lambda: _taiwan_stock_analysis(target, horizon),
+        )
+        packet.target_model_analysis = taiwan_analysis
+        packet.target_context_snapshot = _t(
+            "taiwan_stock_target_context",
+            lambda: _taiwan_stock_context(target, packet.information_cutoff),
+        )
+        context_coverage = dict(
+            (packet.target_context_snapshot or {}).get("coverage") or {}
+        )
+        packet.data_quality["taiwan_stock_target_context"] = {
+            "schema_version": (packet.target_context_snapshot or {}).get("schema_version"),
+            "coverage_status": context_coverage.get("status", "UNKNOWN"),
+            "context_data_ready": bool(context_coverage.get("context_data_ready", False)),
+            "immutable_receipt_status": (
+                ((packet.target_context_snapshot or {}).get("receipt") or {}).get(
+                    "status", "NOT_CAPTURED"
+                )
+            ),
+            "receipt_id": (
+                ((packet.target_context_snapshot or {}).get("receipt") or {}).get("receipt_id")
+            ),
+            "candidate_semantics_status": (
+                (
+                    (packet.target_context_snapshot or {}).get("forward_receipt_inventory")
+                    or {}
+                ).get("status", "UNAVAILABLE")
+            ),
+            "candidate_semantics_protocol_hash": (
+                (
+                    (packet.target_context_snapshot or {}).get("forward_receipt_inventory")
+                    or {}
+                ).get("protocol_hash")
+            ),
+            "predictive_experiment_data_ready": False,
+        }
+        if context_coverage.get("context_data_ready"):
+            packet.data_fetched.append("finmind:taiwan_stock_target_context")
+        official_crosscheck = dict(
+            (packet.target_context_snapshot or {}).get("official_source_crosscheck") or {}
+        )
+        if any(
+            str(channel.get("status") or "").startswith("AVAILABLE")
+            for channel in (official_crosscheck.get("channels") or {}).values()
+        ):
+            packet.data_fetched.append("twse:openapi_context_crosscheck")
+        integrity = dict(taiwan_analysis.get("data_integrity") or {})
+        analysis_status = str(taiwan_analysis.get("status") or "UNAVAILABLE")
+        ref = taiwan_analysis.get("reference_price")
+        try:
+            ref_value = float(ref) if ref is not None else None
+        except (TypeError, ValueError):
+            ref_value = None
+        if (
+            analysis_status == "OK"
+            and str(integrity.get("status") or "").upper() == "PASS"
+            and ref_value is not None
+            and pd.notna(ref_value)
+            and ref_value > 0
+        ):
+            packet.reference_price = ref_value
+            packet.reference_price_type = str(
+                taiwan_analysis.get("reference_price_type") or "CLOSE"
+            )
+            packet.price_timestamp = str(
+                taiwan_analysis.get("reference_price_timestamp") or ""
+            )
+            grade = str(
+                taiwan_analysis.get("reference_data_grade")
+                or taiwan_analysis.get("data_grade")
+                or "RESEARCH_PROXY"
+            )
+            packet.target_data_status = (
+                "REFERENCE_AVAILABLE" if grade == "OFFICIAL_DAILY" else "RESEARCH_PROXY"
+            )
+            packet.target_price_source = str(
+                taiwan_analysis.get("reference_price_source") or "taiwan_stock"
+            )
+            packet.data_reused.append("taiwan_stock_governed_analysis")
+        elif (
+            analysis_status == "DATA_INTEGRITY_BLOCKED"
+            or str(integrity.get("status") or "").upper() == "BLOCKED"
+        ):
+            packet.target_data_status = "DATA_INTEGRITY_BLOCKED"
+            packet.target_price_source = "unavailable"
+            packet.data_missing.append(f"taiwan_stock_integrity:{target}")
+            packet.data_quality["taiwan_stock_data_integrity"] = integrity
         else:
             packet.target_data_status = "MISSING"
             packet.target_price_source = "unavailable"
             packet.data_missing.append(f"taiwan_stock:{target}")
+            packet.data_quality["taiwan_stock_analysis_status"] = analysis_status
     else:  # TAIWAN_INDEX
-        idx_proxy = _t("provider_index_proxy", lambda: _index_proxy_reference())
-        if idx_proxy:
-            packet.reference_price = idx_proxy["price"]
-            packet.reference_price_type = PRICE_TYPE_PROXY
-            packet.price_timestamp = idx_proxy.get("price_timestamp", "")
-            packet.target_data_status = "RESEARCH_PROXY"
-            packet.target_price_source = "proxy_index"
+        idx_direct = _t("provider_taiex_official", lambda: _index_direct_reference())
+        if idx_direct:
+            packet.reference_price = idx_direct["price"]
+            packet.reference_price_type = idx_direct["price_type"]
+            packet.price_timestamp = idx_direct.get("price_timestamp", "")
+            packet.target_data_status = "REFERENCE_AVAILABLE"
+            packet.target_price_source = idx_direct["source"]
+            packet.data_fetched.append("twse:MI_5MINS_HIST")
+            packet.data_quality["taiwan_index_reference"] = {
+                "status": "OFFICIAL_DAILY",
+                "source": idx_direct["source"],
+                "reference_trading_date": idx_direct.get("reference_trading_date"),
+                "exact_publication_timestamp_known": False,
+                "cash_index_executable": False,
+                "historical_oos_validated": False,
+                "execution_validation_established": False,
+            }
         else:
-            packet.target_data_status = "MISSING"
-            packet.target_price_source = "DIRECT_NOT_IMPLEMENTED"
-            packet.data_missing.append("taiwan_index")
+            idx_proxy = _t("provider_index_proxy", lambda: _index_proxy_reference())
+            if idx_proxy:
+                packet.reference_price = idx_proxy["price"]
+                packet.reference_price_type = PRICE_TYPE_PROXY
+                packet.price_timestamp = idx_proxy.get("price_timestamp", "")
+                packet.target_data_status = "RESEARCH_PROXY"
+                packet.target_price_source = "proxy_index"
+                packet.data_quality["taiwan_index_reference"] = {
+                    "status": "OFFICIAL_SOURCE_UNAVAILABLE_PROXY_ONLY",
+                    "source": "yfinance:^TWII",
+                    "cash_index_executable": False,
+                    "historical_oos_validated": False,
+                    "execution_validation_established": False,
+                }
+            else:
+                packet.target_data_status = "MISSING"
+                packet.target_price_source = "unavailable"
+                packet.data_missing.append("taiwan_index")
 
     # 2b. V2-A.2 target/reference session + freshness truth（typed；不得 fabricated live status）
     _fill_target_session_truth(packet, family)
@@ -737,10 +1061,97 @@ def build_analysis_packet(market: str = "osaka", target: str = "OSE_NIKKEI225_MI
         packet.data_coverage_summary = _t("feature_coverage_compact", lambda: _coverage_summary_compact(family))
     else:
         packet.data_coverage_summary = _t("feature_coverage", lambda: _coverage_summary(family))
-    packet.research_gates = {"TRADING_EDGE_GATE": "UNPROVEN",
-                             "FORWARD_VALIDATION": "NOT_YET"}
-    packet.reanalysis_conditions = ["FORECAST_STALE_AFTER_EVENT", "major data revision",
-                                    "new official release after cutoff"]
+    packet.research_gates = {
+        "TRADING_EDGE_GATE": "UNPROVEN",
+        "FORWARD_VALIDATION": "NOT_YET",
+        "STRONG_DIRECTION_WITHOUT_PREDICTIVE_GAIN": "BLOCKED",
+        "TARGET_FAMILY_SCOPE": family,
+    }
+    if family == "OSAKA_MICRO":
+        try:
+            from market_ai_hub.research.future_data_acquisition import future_data_readiness
+            future_readiness = future_data_readiness()
+        except Exception as exc:
+            future_readiness = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+        try:
+            from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+            p5_forward = p5_forward_evidence_summary()
+        except Exception as exc:
+            p5_forward = {
+                "status": "UNAVAILABLE",
+                "reason": type(exc).__name__,
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            }
+        packet.research_gates.update({
+            "NO_NEW_FORWARD_OUTCOME_ANALYSIS": "BASELINE_INTERVAL_VOLATILITY_ALLOWED",
+            "FUTURE_DATA_ACQUISITION": future_readiness,
+            "ACCURACY_V2_P5_FORWARD": p5_forward,
+        })
+    elif family == "TAIWAN_STOCK":
+        packet.research_gates["TAIWAN_STOCK_VALIDATION"] = {
+            "historical_oos": packet.validation_truth.get("historical_oos", "NOT_YET_VALIDATED"),
+            "forward": packet.validation_truth.get("forward", "NOT_YET_VALIDATED"),
+            "economic": packet.validation_truth.get("economic", "NOT_ESTABLISHED"),
+            "jnu_accuracy_v2_evidence_allowed": False,
+        }
+        context = packet.target_context_snapshot or {}
+        context_coverage = dict(context.get("coverage") or {})
+        receipt = dict(context.get("receipt") or {})
+        forward_inventory = dict(context.get("forward_receipt_inventory") or {})
+        receipt_captured = receipt.get("status") in {"CAPTURED", "ALREADY_CAPTURED"}
+        candidate_semantics_ready = (
+            forward_inventory.get("status") == "READY_FOR_FORWARD_RECEIPT_ACCUMULATION"
+        )
+        if not receipt_captured:
+            predictive_feature_use = "BLOCKED_RECEIPT_CAPTURE_UNAVAILABLE"
+        elif not candidate_semantics_ready:
+            predictive_feature_use = "BLOCKED_CANDIDATE_SEMANTICS_CONTRACT"
+        else:
+            predictive_feature_use = "BLOCKED_UNTIL_PREREGISTERED_FEATURE_LABEL_SPLIT_PROTOCOL"
+        packet.research_gates["TAIWAN_TARGET_CONTEXT"] = {
+            "schema_version": context.get("schema_version"),
+            "coverage_status": context_coverage.get("status", "UNAVAILABLE"),
+            "context_data_ready": bool(context_coverage.get("context_data_ready", False)),
+            "historical_revision_safe": bool(context.get("historical_revision_safe", False)),
+            "immutable_receipt_status": receipt.get("status", "NOT_CAPTURED"),
+            "immutable_receipt_id": receipt.get("receipt_id"),
+            "immutable_receipt_captured": receipt_captured,
+            "future_receipt_selection_ready": receipt_captured,
+            "candidate_semantics_protocol_id": forward_inventory.get("protocol_id"),
+            "candidate_semantics_protocol_hash": forward_inventory.get("protocol_hash"),
+            "candidate_semantics_status": forward_inventory.get("status", "UNAVAILABLE"),
+            "candidate_semantics_frozen": candidate_semantics_ready,
+            "forward_receipt_count": forward_inventory.get("receipt_count_total", 0),
+            "forward_receipt_count_as_of_decision": forward_inventory.get(
+                "receipt_count_as_of_decision", 0
+            ),
+            "tracked_candidate_factor_count": forward_inventory.get(
+                "tracked_factor_count", 0
+            ),
+            "candidate_factors_observed_count": forward_inventory.get(
+                "factors_with_observation_as_of_decision", 0
+            ),
+            "independent_observation_counts_are_predictive_samples": False,
+            "blocked_candidate_channels": sorted(
+                (forward_inventory.get("blocked_channels") or {}).keys()
+            ),
+            "predictive_feature_use": predictive_feature_use,
+            "predictive_experiment_data_ready": False,
+            "news_status": (
+                ((context.get("channels") or {}).get("news") or {}).get(
+                    "status", "NOT_AVAILABLE"
+                )
+            ),
+        }
+    packet.reanalysis_conditions = [
+        "FORECAST_STALE_AFTER_EVENT",
+        "major data revision",
+        "new official release after cutoff",
+        "new exact-contract source snapshot received",
+        "new forward outcome becomes available",
+    ]
 
     # 7. archive auto-hook
     if save_analysis:
@@ -776,15 +1187,15 @@ def _coverage_summary_compact(family: str = "OSAKA_MICRO") -> list[dict]:
         ]
     if family == "TAIWAN_STOCK":
         return [
-            {"factor": "target stock data", "status": "ROUTED", "source": "FinMind/TWSE/yfinance"},
+            {"factor": "target stock data", "status": "ROUTED", "source": "FinMind raw / TWSE fallback"},
             {"factor": "TWSE/FinMind status", "status": "ROUTED", "source": "provider registry"},
-            {"factor": "corporate action", "status": "NOT_AVAILABLE", "source": "adjustment not implemented"},
+            {"factor": "corporate action", "status": "IMPLEMENTED_FAIL_CLOSED", "source": "FinMind reference-reset event channels"},
             {"factor": "VIX", "status": "GLOBAL_CONTEXT", "source": "Cboe official"},
         ]
     # TAIWAN_INDEX
     return [
-        {"factor": "TAIEX", "status": "PROXY_ONLY", "source": "yfinance ^TWII (DIRECT_NOT_IMPLEMENTED)"},
-        {"factor": "TAIFEX TX/MTX/TMF", "status": "NOT_IMPLEMENTED", "source": "execution instrument semantics only"},
+        {"factor": "TAIEX", "status": "OFFICIAL_DAILY", "source": "TWSE MI_5MINS_HIST; yfinance ^TWII proxy fallback only"},
+        {"factor": "TAIFEX TX/MTX/TMF", "status": "EXECUTION_VALIDATION_NOT_ESTABLISHED", "source": "execution instrument semantics registered; no edge claim"},
         {"factor": "VIX", "status": "GLOBAL_CONTEXT", "source": "Cboe official"},
     ]
 
@@ -796,13 +1207,13 @@ def _archive_packet(packet: AnalysisPacket, family: str = "OSAKA_MICRO") -> str:
     market_name = {"OSAKA_MICRO": "osaka", "TAIWAN_STOCK": "taiwan_stock", "TAIWAN_INDEX": "taiwan_index"}[family]
     dataset_semantics = {
         "OSAKA_MICRO": "jpx-micro-settlement-v1",
-        "TAIWAN_STOCK": "UNVERSIONED",  # 台股 historical dataset 尚未正式 version
-        "TAIWAN_INDEX": "UNVERSIONED",  # TAIEX pipeline 未實作
+        "TAIWAN_STOCK": "TAIWAN_STOCK_REFERENCE_RESET_CONTINUITY_V1",
+        "TAIWAN_INDEX": "TAIEX_TWSE_MI_5MINS_HIST_V1",
     }[family]
     feature_semantics = {
         "OSAKA_MICRO": "base-v1",
-        "TAIWAN_STOCK": "UNVERSIONED",
-        "TAIWAN_INDEX": "UNVERSIONED",
+        "TAIWAN_STOCK": "base-v1",
+        "TAIWAN_INDEX": "TAIEX_OFFICIAL_DAILY_OHLC_V1",
     }[family]
 
     rec = AnalysisRecord(

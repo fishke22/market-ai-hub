@@ -40,7 +40,7 @@ FEATURE_COLUMNS = [
 
 def _safe_pct(s: pd.Series) -> pd.Series:
     """pct_change 的 denominator=0 安全版：0 → NaN，避免 ±inf。"""
-    return s.replace(0, np.nan).pct_change()
+    return s.replace(0, np.nan).pct_change(fill_method=None)
 
 
 def _safe_log_return(close: pd.Series) -> pd.Series:
@@ -100,11 +100,13 @@ def cross_market_features(market_df: pd.DataFrame) -> pd.DataFrame:
     """cross-market features（spec §20）：input 需含 symbol 欄位的多市場統一資料。"""
     feats = {}
     for sym, grp in market_df.groupby("symbol"):
-        g = grp.sort_values("timestamp_utc")
+        g = grp.sort_values("timestamp_utc").set_index("timestamp_utc")
+        if g.index.has_duplicates:
+            raise ValueError("duplicate symbol/timestamp in cross-market input")
         feats[f"{sym}_return"] = _safe_pct(g["close"]).rename(sym)
         if "volume" in g and g["volume"].notna().any():
             feats[f"{sym}_volume_change"] = _safe_pct(g["volume"]).rename(sym)
-    wide = pd.DataFrame(feats, index=market_df.sort_values("timestamp_utc")["timestamp_utc"])
+    wide = pd.DataFrame(feats).sort_index()
     return sanitize(wide)
 
 

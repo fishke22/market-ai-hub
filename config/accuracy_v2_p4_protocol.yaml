@@ -1,0 +1,119 @@
+schema_version: AV2P4.1
+
+protocols:
+  jnu_no_future_analysis_v1:
+    purpose: RESEARCH_ANALYSIS_WITHOUT_NEW_FORWARD_OUTCOME
+    instrument: JNU
+    product: Nikkei 225 Micro Futures
+    target_measure: NEXT_PUBLISHED_SETTLEMENT_OBSERVATION
+    exact_contract_required: true
+    upstream_p2_protocol_id: jnu_next_published_settlement_return_1obs_v1
+
+    evidence_boundaries:
+      point_champion: ZERO_RETURN_NAIVE
+      p2_development_selection_result: BASELINE_RETAINED
+      exposed_quarantine_use_for_fit: false
+      exposed_quarantine_use_for_selection: false
+      exposed_quarantine_use_for_claim: false
+      final_forward_required_for_predictive_gain: true
+      historical_interval_never_implies_calibrated_probability: true
+      no_future_outcome_never_implies_predictive_gain: true
+      no_future_outcome_never_implies_trading_edge: true
+
+    inference_context:
+      origin_causal_public_history_allowed: true
+      post_development_public_history_allowed_for_features: true
+      post_development_labels_allowed_for_reselection: false
+      future_fill_allowed: false
+      cross_contract_stitching_allowed: false
+      label_columns_allowed_in_features: false
+
+    baseline_analysis:
+      point_method: LAST_AVAILABLE_SETTLEMENT
+      return_forecast: 0.0
+      minimum_history: 20
+
+    volatility:
+      method: EWMA_RETURN_VOLATILITY
+      decay_lambda: 0.94
+      minimum_return_count: 20
+      annualization: NONE
+      role: DESCRIPTIVE_RISK_CONTEXT_ONLY
+
+    quantile_challenger:
+      enabled: true
+      implementation: LIGHTGBM_LGBMREGRESSOR
+      objective: quantile
+      alphas: [0.10, 0.50, 0.90]
+      fit_partition: DEVELOPMENT_ONLY
+      feature_set_from_p2: JNU_P2_SELF_HISTORY_V1
+      setting:
+        n_estimators: 100
+        learning_rate: 0.03
+        max_depth: 3
+        num_leaves: 7
+        min_child_samples: 10
+        reg_lambda: 1.0
+        random_state: 42
+      tuning: NONE
+      may_replace_point_champion: false
+      may_publish_as_calibrated_interval: false
+
+    conformal:
+      enabled: true
+      residual_source: ZERO_RETURN_NAIVE_ONE_STEP_RETURN_ERROR
+      initial_fit_partition: DEVELOPMENT_ONLY
+      minimum_residual_count: 20
+      maximum_residual_buffer: 60
+      nominal_coverages: [0.50, 0.75, 0.90]
+      primary_nominal_coverage: 0.90
+      static_method: EMPIRICAL_ABSOLUTE_RESIDUAL
+      adaptive_challenger:
+        enabled: true
+        initial_alpha: 0.10
+        gamma: 0.01
+        alpha_min: 0.02
+        alpha_max: 0.40
+        update_only_after_outcome_available: true
+        chronological_prequential_evaluation: true
+        evaluation_partition: DEVELOPMENT_ONLY
+      evaluation_metrics:
+        - EMPIRICAL_COVERAGE
+        - MEAN_INTERVAL_WIDTH
+        - INTERVAL_SCORE
+      may_publish_as_conditional_probability: false
+      may_replace_w4_probability_calibration: false
+
+    regime:
+      enabled: true
+      definition: EWMA_VOLATILITY_VS_DEVELOPMENT_MEDIAN
+      states: [LOW_VOLATILITY, HIGH_VOLATILITY]
+      threshold_fit_partition: DEVELOPMENT_ONLY
+      model_switching_allowed: false
+      role: DESCRIPTIVE_DIAGNOSTIC_ONLY
+
+    abstention:
+      strong_direction_requires_predictive_gain: true
+      max_reference_age_hours: 96
+      missing_exact_contract_action: ABSTAIN
+      insufficient_history_action: BASELINE_ONLY_IF_REFERENCE_AVAILABLE
+      data_quality_failure_action: ABSTAIN
+      report_coverage: true
+
+    performance_budget:
+      gpu_required: false
+      maximum_wall_seconds: 30
+      maximum_model_fits_per_analysis: 3
+      parallel_heavy_jobs: false
+
+    promotion:
+      engineering_success_status: ENGINEERING_PASS
+      no_new_forward_status: NO_NEW_FORWARD_OUTCOME
+      point_default_without_gain: ZERO_RETURN_NAIVE
+      requires_separate_preregistered_forward_protocol_for_upgrade: true
+      never_implies:
+        - PREDICTIVE_GAIN
+        - CALIBRATED
+        - TRADING_EDGE
+        - PRODUCTION_SERVING
+        - FIXED_WIN_RATE

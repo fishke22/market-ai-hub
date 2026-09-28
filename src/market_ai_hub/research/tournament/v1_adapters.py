@@ -38,7 +38,7 @@ class TimesFMAdapter(ModelAdapter):
         from market_ai_hub.models.timesfm_model import TimesFM3Adapter as T
 
         closes = _closes(df)
-        r = T().predict(closes, horizon=steps)
+        r = T(purpose="RESEARCH").predict(closes, horizon=steps)
         path = r["path"]
         p10, p50, p90 = path["p10"][-1], path["p50"][-1], path["p90"][-1]
         direction = "up" if p50 > closes.iloc[-1] else ("down" if p50 < closes.iloc[-1] else "flat")

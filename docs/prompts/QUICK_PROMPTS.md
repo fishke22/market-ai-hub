@@ -26,11 +26,11 @@
 ## 2. 快速分析 JNU
 
 ```text
-請使用 market-ai 快速分析 JNU 下一個交易日。
+請使用 market-ai 快速分析 JNU 下一筆官方 published settlement observation。
 先呼叫 analyze_jnu；不要把日經225現貨輔助資料說成 JNU 本身。
 請給我：
 - 目前實際限月與最新官方資料日期
-- 下一交易日模型中心與參考範圍
+- 下一筆官方 published settlement observation 的模型中心與參考範圍
 - 偏多 / 偏空 / 中性 / 訊號混合
 - 模型是否真的比「直接沿用前一日價格」的簡單基準更可信
 - historical prequential replay 有多少筆、final holdout 有多少筆，以及 paired 區間是否支持穩定優勢
@@ -59,6 +59,7 @@
 - Chronos / TimesFM 價格預測
 - XGBoost / LightGBM 方向分類
 - Ensemble 與 Wrapper，但不得重複計票
+- 如果只有一個 foundation price model 可用，必須寫 single-model degraded，不得說多模型一致
 - 模型是否真的優於 baseline
 - Research Gates
 - 重大事件風險
@@ -216,8 +217,10 @@ C. Analysis Wrapper
 
 請先分清楚：
 - ^N225 現貨最後收盤
-- OSE / CME 是否有更晚的價格發現資訊
-- 使用中的模型 Target 到底是哪個商品
+- analyze_jnu 的 official settlement target
+- analyze_jnu_trading_path 的 true JNU Micro day/night session context
+- settlement contract 與 session quote contract 是否同限月；不同限月禁止直接相減
+- OSE / CME 是否有更晚的價格發現資訊（CME 只能 context/proxy）
 - 下一個真正交易時段與交易日曆
 
 如果目前拿不到真正 OSE 最新價格，要明確寫 N/A，不能用 CME 或 ^N225 冒充。
@@ -287,6 +290,50 @@ TRADING_EDGE_GATE
 
 ---
 
+---
+
+## 15. JNU Trading Path / 日夜盤決策支援
+
+```text
+這次不要把「下一筆官方清算價預測」和「交易時段路徑」混在一起。
+請先用 analyze_jnu 取得 Settlement Forecast，再用 analyze_jnu_trading_path 查看真正 JNU Micro 的 day/night session context。
+
+請告訴我：
+- settlement forecast 的 exact contract / official settlement / target date
+- trading-path 使用的 exact Micro quote code / contract month
+- 兩者是否同限月；不同限月時禁止直接算 gap
+- 最新 true-Micro session price 是否真的 live now，還是歷史 session observation
+- 前一個 day close / night close 是否有真正收盤邊界證據；沒有就寫 N/A
+- 最新 session 的 Trend / Box / Mixed 描述
+- Price Activity Profile；不要把它叫成交量分布
+- Volume Profile 只有 verified trade-tick DealVol 才能顯示，否則 N/A
+- 若我另外指定價位，再分析 Touch / Break / Acceptance / false breakout
+- 官方事件只作 context / risk / abstention；live-news sentiment 尚未驗證
+
+不要把這些描述性結構轉成上漲機率、交易勝率或已證明的 trading edge。
+```
+
+---
+
+## 16. 元大 / iTRADER 條件策略文字轉譯
+
+```text
+我只要文字設定參考，不要登入元大、不要查帳務、不要查持倉、不要送單。
+請使用 get_itrader_advisory。
+
+如果我要個人化平倉模板，我會在本次訊息明確提供：
+- LONG 或 SHORT
+- 口數
+- 我自己決定的停利／停損／觸發條件
+
+請把這些條件翻譯成 GENERAL / OCO / TRAILING 的文字欄位參考。
+JNU tick 換算要同時顯示 tick 與點數。
+未提供方向或口數時只回空白模板，不要猜。
+提醒我：多單平倉方向是 SELL、空單平倉方向是 BUY；若手動減碼／平倉，要同步修改或取消原條件策略，避免意外反向新倉。
+最後再次寫明：ADVISORY ONLY / NO ORDER / NO ACCOUNT ACCESS / NO BROKER MUTATION。
+```
+
+---
 # 使用原則
 
 好的 Prompt 通常不需要把所有技術規則重複一遍。

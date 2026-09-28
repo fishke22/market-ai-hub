@@ -63,7 +63,7 @@ def _model_statuses(deep: bool = False) -> dict:
         try:
             from market_ai_hub.models.timesfm_model import TimesFM3Adapter
 
-            out["timesfm"] = TimesFM3Adapter().status()
+            out["timesfm"] = TimesFM3Adapter(purpose="SERVING").status()
         except Exception as e:
             out["timesfm"] = f"unavailable: {e}"
     else:
@@ -132,11 +132,33 @@ def get_system_info() -> dict:
     gates = _research_gates(cards)
     from market_ai_hub.services.build_info import build_fingerprint
 
+    try:
+        from market_ai_hub.services.capability_registry import capability_registry_snapshot
+        capability_summary = capability_registry_snapshot().get("summary", {})
+    except Exception as exc:
+        capability_summary = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.services.system_completion import system_completion_snapshot
+        completion_summary = system_completion_snapshot()
+        completion_summary = {
+            "status": completion_summary.get("status"),
+            "all_currently_actionable_engineering_complete": completion_summary.get(
+                "all_currently_actionable_engineering_complete"
+            ),
+            "actionable_engineering_gap_count": completion_summary.get(
+                "actionable_engineering_gap_count"
+            ),
+        }
+    except Exception as exc:
+        completion_summary = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+
     return {
         "python": platform.python_version(),
         "os": platform.platform(),
         **info,
         "project_path": str(project_root()),
+        "capability_summary": capability_summary,
+        "system_completion": completion_summary,
         "models": {
             n: {
                 "model_role": c.role,
@@ -287,17 +309,39 @@ def predict_chronos(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
 
 
 @mcp.tool()
-def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> dict:
-    """TimesFM-3.0 多步預測（weights 非商業授權）。含 build fingerprint。"""
+def predict_timesfm(
+    symbol: str,
+    period: str = "6mo",
+    horizon: str = "1d",
+    research_usage_ack: str = "",
+) -> dict:
+    """TimesFM-3.0 personal research prediction; non-commercial/non-production only."""
     from market_ai_hub.models.timesfm_model import timesfm_forecast
     from market_ai_hub.providers.yfinance_provider import YFinanceProvider
     from market_ai_hub.services.build_info import build_fingerprint
     from market_ai_hub.services.forecast_cache import forecast_cache_key, get_cached, set_cached
     from market_ai_hub.services.horizon import HorizonUnsupportedError, parse_horizon
-    from market_ai_hub.services.model_runtime import get_timesfm
+    from market_ai_hub.services.model_governance import (
+        TIMESFM3_PERSONAL_RESEARCH_ACK,
+        timesfm3_research_access_gate,
+    )
+    from market_ai_hub.services.model_runtime import get_timesfm_research
     from market_ai_hub.services.perf_trace import trace
 
     with trace("predict_timesfm") as t:
+        access = timesfm3_research_access_gate(research_usage_ack)
+        if not access["allowed"]:
+            return {
+                "status": "RESEARCH_ONLY_BLOCKED",
+                "reason": access["reason"],
+                "usage_mode": access["usage_mode"],
+                "required_ack": TIMESFM3_PERSONAL_RESEARCH_ACK,
+                "weight_license": access["weight_license"],
+                "commercial_use_allowed": False,
+                "production_use_allowed": False,
+                "automatic_download_allowed": False,
+                "build": build_fingerprint(),
+            }
         spec = parse_horizon(horizon, "1d")
         if not spec.supported:
             return {
@@ -310,7 +354,7 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
         df = YFinanceProvider().fetch(symbol, period=period)
         closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
         fp = build_fingerprint()
-        key = forecast_cache_key("timesfm-3.0", symbol, horizon, closes, fp["build_id"])
+        key = forecast_cache_key("timesfm-3.0-research", symbol, horizon, closes, fp["build_id"])
         cached = get_cached(key)
         if cached is not None:
             cached["cache_hit"] = True
@@ -319,7 +363,13 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
             return cached
         try:
             t0 = __import__("time").perf_counter()
-            fo = timesfm_forecast(get_timesfm(), symbol, closes, horizon, spec.effective_horizon_steps)
+            fo = timesfm_forecast(
+                get_timesfm_research(research_usage_ack),
+                symbol,
+                closes,
+                horizon,
+                spec.effective_horizon_steps,
+            )
             if isinstance(t, dict):
                 t["model_inference_ms"] = round((__import__("time").perf_counter() - t0) * 1000, 2)
                 t["cache_hit"] = False
@@ -328,6 +378,7 @@ def predict_timesfm(symbol: str, period: str = "6mo", horizon: str = "1d") -> di
 
             d = sanitize_forecast_dump(d)
             d["build"] = fp
+            d["research_usage"] = access
             d["cache_hit"] = False
             set_cached(key, d)
             return d
@@ -424,7 +475,8 @@ def predict_ensemble(symbol: str, period: str = "6mo", horizon: str = "1d") -> d
 def get_model_performance(model: str = "", limit: int = 20) -> dict:
     """讀取歷史 backtest 績效（model 空白 = 全部）。
 
-    分類指標不再硬用 50% 門檻：baseline_threshold = max(majority_class_baseline, uniform_random_baseline)。
+    分類 promotion 使用同 OOS origins、同 metric 的 fold-local majority classifier；
+    accuracy / balanced_accuracy / macro-F1 必須各自優於對應 baseline。
     沒有資料的欄位回 null（不是 0）。
     """
     from market_ai_hub.storage.performance import PerformanceStore
@@ -432,16 +484,22 @@ def get_model_performance(model: str = "", limit: int = 20) -> dict:
     records = PerformanceStore().list(model=model or None, limit=int(limit))
     return {
         "records": records,
-        "baseline_note": "classification gate threshold = max(majority_class_baseline_accuracy, uniform_random_baseline_accuracy=1/3); 50% 不再是通用門檻",
+        "baseline_note": (
+            "classification eligibility requires same-origin accuracy, balanced_accuracy "
+            "and macro_f1 to beat the fold-local train-majority classifier; balanced_accuracy "
+            "must also exceed uniform 1/3"
+        ),
     }
 
 
 @mcp.tool()
 def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model: str = "lgbm") -> dict:
-    """walk-forward backtest（yfinance 資料 + baseline 分類器）。
+    """Walk-forward direction-classifier diagnostic.
 
-    輸出含分類指標（accuracy/balanced_accuracy/macro_f1/mcc）與 baselines
-    （uniform_random=1/3、majority_class_baseline、naive direction baseline）。
+    Taiwan stocks use the same corporate-action normalization contract as
+    production analysis. Other symbols keep the research yfinance path.
+    Classification metrics are separated from gross realized-return strategy
+    diagnostics; no fee/tax/slippage edge is implied.
     """
     from datetime import datetime, timezone as _tz
 
@@ -449,7 +507,7 @@ def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model
 
     from market_ai_hub.backtest.walk_forward import (
         classification_metrics,
-        compute_metrics,
+        strategy_metrics,
         walk_forward_splits,
     )
     from market_ai_hub.features.features import build_features, future_return_k
@@ -457,15 +515,49 @@ def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model
     from market_ai_hub.providers.yfinance_provider import YFinanceProvider
     from market_ai_hub.schemas.backtest import BacktestRecord
     from market_ai_hub.storage.performance import PerformanceStore
+    from market_ai_hub.services.taiwan_stock_data import (
+        TaiwanStockDataIntegrityError,
+        is_taiwan_stock_symbol,
+        load_taiwan_stock_model_data,
+        period_window,
+    )
 
-    df = YFinanceProvider().fetch(symbol, period=period)
+    if is_taiwan_stock_symbol(symbol):
+        start_date, end_date = period_window(period)
+        try:
+            bundle = load_taiwan_stock_model_data(
+                symbol, start_date, end_date, min_rows=60
+            )
+        except TaiwanStockDataIntegrityError as exc:
+            return {
+                "status": "DATA_INTEGRITY_BLOCKED",
+                "symbol": symbol,
+                "reason": exc.reason,
+                "details": exc.details,
+                "economic_metrics_status": "NOT_AVAILABLE",
+            }
+        df = bundle.frame
+        data_identity = bundle.metadata
+    else:
+        df = YFinanceProvider().fetch(symbol, period=period)
+        data_identity = {
+            "dataset_semantics": "YFINANCE_RAW_CLOSE_V1",
+            "adjustment_semantics": "YFINANCE_AUTO_ADJUST_FALSE",
+            "source_semantics": "YFINANCE_RESEARCH_PROXY",
+            "feature_version": "base-v1",
+        }
     feat = build_features(df)
     valid = feat[FEATURE_INPUT].notna().all(axis=1) & feat["future_return_1"].notna()
     X = feat.loc[valid, FEATURE_INPUT]
     y = (feat.loc[valid, "future_return_1"] > FLAT_THRESHOLD).astype(int) - (feat.loc[valid, "future_return_1"] < -FLAT_THRESHOLD).astype(int)
-    data = pd.concat([X, y.rename("label")], axis=1)
+    realized = feat.loc[valid, "future_return_1"].astype(float)
+    data = pd.concat(
+        [X, y.rename("label"), realized.rename("realized_return")],
+        axis=1,
+    )
     splits = walk_forward_splits(data, n_splits=int(n_splits))
-    actual_all, pred_all, dirs, train_labels_all = [], [], [], []
+    actual_all, realized_all, pred_all, dirs = [], [], [], []
+    train_labels_all, naive_dir_preds = [], []
     for sp in splits:
         if sp.train.empty or sp.test.empty:
             continue
@@ -476,29 +568,46 @@ def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model
         actual_all += sp.test["label"].tolist()
         pred_all += [p for p in preds]
         train_labels_all += sp.train["label"].tolist()
+        realized_all += sp.test["realized_return"].astype(float).tolist()
+        from collections import Counter
+        fold_majority = Counter(sp.train["label"].tolist()).most_common(1)[0][0]
+        naive_dir_preds += [fold_majority] * len(sp.test)
     if not actual_all:
         return {"status": "INSUFFICIENT_DATA"}
 
-    # label 是 -1/0/1；報酬近似（threshold ±0.5% 當方向報酬 proxy）沿用 v1 指標
-    act_ret = [FLAT_THRESHOLD if a == 1 else (-FLAT_THRESHOLD if a == -1 else 0.0) for a in actual_all]
-    metrics = compute_metrics(act_ret, pred_all, dirs)
-
+    # Classification and realized-return economics are separate contracts.
     cm = classification_metrics(actual_all, pred_all, train_labels_all)
-
-    # naive direction baseline：always predict majority class（train 分佈）
-    from collections import Counter
-
-    majority_class = Counter(train_labels_all).most_common(1)[0][0] if train_labels_all else 0
-    naive_dir_preds = [majority_class] * len(actual_all)
-    naive_cm = classification_metrics(actual_all, naive_dir_preds, train_labels_all)
-
-    # 以 OOS 是否超越 baseline 決定 validation status / eligibility
-    beat = bool(cm["beats_majority_baseline"])
+    naive_cm = classification_metrics(
+        actual_all, naive_dir_preds, train_labels_all
+    )
+    paired_threshold = max(float(naive_cm["balanced_accuracy"]), 1 / 3)
+    beat = bool(
+        float(cm["accuracy"]) > float(naive_cm["accuracy"])
+        and float(cm["balanced_accuracy"]) > paired_threshold
+        and float(cm["macro_f1"]) > float(naive_cm["macro_f1"])
+    )
+    cm.update(
+        {
+            "majority_class_baseline_accuracy": naive_cm["accuracy"],
+            "majority_class_baseline_balanced_accuracy": naive_cm["balanced_accuracy"],
+            "majority_class_baseline_macro_f1": naive_cm["macro_f1"],
+            "baseline_metric": "accuracy+balanced_accuracy+macro_f1",
+            "baseline_threshold": paired_threshold,
+            "baseline_semantics": "FOLD_LOCAL_TRAIN_MAJORITY_SAME_OOS_ORIGINS_V2",
+            "beats_majority_baseline": beat,
+        }
+    )
+    metrics = strategy_metrics(realized_all, dirs)
     val_status = "EXPERIMENTAL" if beat else "DEGRADED"
 
     rec = BacktestRecord(
-        model=model, model_version="2", data_version="yfinance-live",
-        symbol=symbol, period=period, horizon="1d", feature_set="base-v1",
+        model=model,
+        model_version="3",
+        data_version=str(data_identity["dataset_semantics"]),
+        symbol=symbol,
+        period=period,
+        horizon="1d",
+        feature_set=str(data_identity.get("feature_version") or "base-v1"),
         timestamp=datetime.now(_tz.utc),
         task_type="classification",
         classes=[-1, 0, 1],
@@ -507,12 +616,32 @@ def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model
         balanced_accuracy=cm["balanced_accuracy"],
         macro_f1=cm["macro_f1"],
         mcc=cm["mcc"],
+        directional_accuracy=cm["accuracy"],
+        mae=None,
+        rmse=None,
+        pinball_loss=None,
         mase=None,
         class_distribution=cm["class_distribution"],
         uniform_random_baseline_accuracy=cm["uniform_random_baseline_accuracy"],
         majority_class_baseline_accuracy=cm["majority_class_baseline_accuracy"],
         baseline_threshold=cm["baseline_threshold"],
         beats_majority_baseline=beat,
+        majority_class=cm.get("majority_class"),
+        majority_class_train_prevalence=cm.get("majority_class_train_prevalence"),
+        uniform_random_baseline_balanced_accuracy=cm.get(
+            "uniform_random_baseline_balanced_accuracy"
+        ),
+        majority_class_baseline_balanced_accuracy=cm.get(
+            "majority_class_baseline_balanced_accuracy"
+        ),
+        majority_class_baseline_macro_f1=cm.get(
+            "majority_class_baseline_macro_f1"
+        ),
+        baseline_metric=cm.get("baseline_metric"),
+        baseline_semantics=cm.get("baseline_semantics"),
+        dataset_semantics=str(data_identity["dataset_semantics"]),
+        adjustment_semantics=str(data_identity["adjustment_semantics"]),
+        source_semantics=str(data_identity["source_semantics"]),
         engineering_status="PASS",
         predictive_validation_status=val_status,
         eligible_for_direction_vote=beat,
@@ -521,6 +650,7 @@ def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model
             "last_price_naive_mae": None,
         },
         sample_size=len(actual_all),
+        n_samples=len(actual_all),
         date_range={"start": str(df["timestamp_utc"].min()), "end": str(df["timestamp_utc"].max())},
         brier_score=None,
         **metrics,
@@ -528,7 +658,15 @@ def backtest(symbol: str = "^N225", period: str = "1y", n_splits: int = 5, model
     PerformanceStore().save(rec)
     out = rec.model_dump()
     out["naive_majority_class_baseline"] = naive_cm
-    out["note"] = "50% 不是通用門檻；判定用 baseline_threshold = max(majority, uniform)"
+    out["regression_metrics_status"] = "NOT_AVAILABLE_FOR_CLASSIFICATION"
+    out["economic_metrics_note"] = (
+        "Sharpe/PF/DD 使用真實 realized next-bar return 的 gross diagnostic；"
+        "未含 fee/tax/slippage，不是 cost-aware economic edge。"
+    )
+    out["note"] = (
+        "classification promotion uses fold-local majority balanced accuracy "
+        "on the same OOS origins"
+    )
     return out
 
 
@@ -548,9 +686,41 @@ def run_ts_validation(symbol: str = "^N225", period: str = "1y", n_folds: int = 
         determine_validation_status,
         run_ts_oos_validation,
     )
+    from market_ai_hub.services.taiwan_stock_data import (
+        TaiwanStockDataIntegrityError,
+        is_taiwan_stock_symbol,
+        load_taiwan_stock_model_data,
+        period_window,
+    )
 
-    df = YFinanceProvider().fetch(symbol, period=period)
-    closes = df.sort_values("timestamp_utc").set_index("timestamp_utc")["close"].dropna()
+    if is_taiwan_stock_symbol(symbol):
+        start_date, end_date = period_window(period)
+        try:
+            bundle = load_taiwan_stock_model_data(
+                symbol, start_date, end_date, min_rows=60
+            )
+        except TaiwanStockDataIntegrityError as exc:
+            return {
+                "status": "DATA_INTEGRITY_BLOCKED",
+                "symbol": symbol,
+                "reason": exc.reason,
+                "details": exc.details,
+            }
+        df = bundle.frame
+        data_identity = bundle.metadata
+    else:
+        df = YFinanceProvider().fetch(symbol, period=period)
+        data_identity = {
+            "dataset_semantics": "YFINANCE_RAW_CLOSE_V1",
+            "adjustment_semantics": "YFINANCE_AUTO_ADJUST_FALSE",
+            "source_semantics": "YFINANCE_RESEARCH_PROXY",
+            "feature_version": "base-v1",
+        }
+    closes = (
+        df.sort_values("timestamp_utc")
+        .set_index("timestamp_utc")["close"]
+        .dropna()
+    )
 
     if model == "chronos-2":
         adapter = get_chronos()
@@ -562,6 +732,10 @@ def run_ts_validation(symbol: str = "^N225", period: str = "1y", n_folds: int = 
     result = run_ts_oos_validation(adapter, model, symbol, closes, n_origins=int(n_folds))
     if result.get("status") != "OK":
         return result
+    result["dataset_semantics"] = data_identity["dataset_semantics"]
+    result["adjustment_semantics"] = data_identity["adjustment_semantics"]
+    result["source_semantics"] = data_identity["source_semantics"]
+    result["feature_version"] = data_identity.get("feature_version") or "base-v1"
 
     status, reasons = determine_validation_status(result)
     TsValidationStore().save(result, status)
@@ -587,6 +761,10 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
     public 模式只回一般使用者看得懂的中文摘要；audit 才回技術欄位。
     價格模型優先使用 JPX/OSE 官方 Micro 實際限月清算價，不用 ^N225 冒充 Micro。
     """
+    from market_ai_hub.services.data_continuity import (
+        jnu_continuity_user_summary,
+        jnu_data_continuity_status,
+    )
     from market_ai_hub.services.jnu_direct import (
         analyze_jnu_direct,
         jnu_user_summary,
@@ -597,11 +775,31 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
         refresh = refresh_jnu_direct_data()
     except Exception as exc:
         refresh = {"status": "REFRESH_FAILED", "error": type(exc).__name__}
+
+    continuity = jnu_data_continuity_status(contract_month=contract_month)
+    if continuity.get("context_only"):
+        if view == "audit":
+            return {
+                "status": "DATA_CONTINUITY_MODE",
+                "data_refresh": refresh,
+                "data_continuity": continuity,
+                "PREDICTIVE_GAIN": False,
+                "CALIBRATED": False,
+                "TRADING_EDGE": False,
+            }
+        public = jnu_continuity_user_summary(continuity)
+        public["產品分層"] = {
+            "Settlement Forecast": "exact JNU published-settlement target 暫停，等待 exact official data 恢復",
+            "Trading Path": "可另用 analyze_jnu_trading_path 查看 true-Micro session context；不補造 settlement target",
+        }
+        return public
+
     direct = analyze_jnu_direct(
         horizon=horizon,
         contract_month=contract_month,
         validate_history=True,
     )
+    direct["data_continuity"] = continuity
     if view == "audit":
         direct["data_refresh"] = refresh
         return direct
@@ -614,7 +812,72 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
         }
     except Exception:
         calibration = {"public_calibrated": False, "settled_samples": 0}
-    return jnu_user_summary(direct, calibration_status=calibration)
+    public = jnu_user_summary(direct, calibration_status=calibration)
+    public["資料連續性"] = {
+        "模式": continuity.get("mode"),
+        "新鮮度": continuity.get("freshness_status"),
+        "來源交叉驗證": (continuity.get("source_redundancy") or {}).get("status"),
+        "context_confidence_grade": continuity.get("context_confidence_grade"),
+        "not_probability": True,
+    }
+    public["產品分層"] = {
+        "本工具": "Settlement Forecast：NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
+        "交易路徑": "另用 analyze_jnu_trading_path；只讀真正 JNU Micro session quote，不與 settlement target 混算",
+        "新聞": "live-news fusion 仍延後到 P6；官方事件只作 context/risk/abstention",
+    }
+    return public
+
+
+@mcp.tool()
+def analyze_jnu_trading_path(
+    level: float | None = None,
+    direction: str = "AUTO",
+    view: str = "public",
+) -> dict:
+    """JNU 真實 day/night session 的描述性 Trading Path Decision Support。
+
+    與 settlement forecast 分離；只使用 market 207 的 true JNU Micro durable quote。
+    level 可選，用於 Touch/Break/Acceptance；不自動製造支撐壓力或機率。
+    """
+    from market_ai_hub.services.jnu_trading_path import (
+        build_jnu_trading_path_context,
+        jnu_trading_path_user_summary,
+    )
+
+    result = build_jnu_trading_path_context(level=level, direction=direction)
+    return result if view == "audit" else jnu_trading_path_user_summary(result)
+
+
+@mcp.tool()
+def get_itrader_advisory(
+    strategy: str = "OCO",
+    instrument: str = "JNU",
+    position_side: str = "",
+    quantity: int | None = None,
+    cost_price: float | None = None,
+    take_profit_price: float | None = None,
+    stop_loss_price: float | None = None,
+    trigger_price: float | None = None,
+    trail_activation_ticks: int | None = None,
+    trail_retrace_ticks: int | None = None,
+    pre_activation_stop_ticks: int | None = None,
+) -> dict:
+    """純文字元大/iTRADER條件策略轉譯；不登入、不查帳務、不送單。"""
+    from market_ai_hub.services.itrader_advisory import itrader_smart_order_guidance
+
+    return itrader_smart_order_guidance(
+        strategy=strategy,
+        instrument=instrument,
+        position_side=position_side or None,
+        quantity=quantity,
+        cost_price=cost_price,
+        take_profit_price=take_profit_price,
+        stop_loss_price=stop_loss_price,
+        trigger_price=trigger_price,
+        trail_activation_ticks=trail_activation_ticks,
+        trail_retrace_ticks=trail_retrace_ticks,
+        pre_activation_stop_ticks=pre_activation_stop_ticks,
+    )
 
 
 @mcp.tool()
@@ -676,8 +939,63 @@ def get_data_coverage() -> dict:
         "NFP": {"status": SOURCE_VERIFIED, "source": "BLS API v2 (official source)"},
     }
     recs = LiveCoverageAuditor().audit_osaka(overrides)
-    return {"factors": [r.model_dump() for r in recs],
-            "summary": LiveCoverageAuditor().summary([r for r in recs])}
+    try:
+        from market_ai_hub.research.future_data_acquisition import future_data_readiness
+        future = future_data_readiness()
+    except Exception as exc:
+        future = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+        p5_forward = p5_forward_evidence_summary()
+    except Exception as exc:
+        p5_forward = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    try:
+        from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+        continuity = jnu_data_continuity_status()
+    except Exception as exc:
+        continuity = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "mode": "DATA_CONTINUITY_STATUS_UNAVAILABLE",
+            "context_only": True,
+            "target_prediction_allowed": False,
+            "proxy_can_replace_target": False,
+        }
+    return {
+        "factors": [r.model_dump() for r in recs],
+        "summary": LiveCoverageAuditor().summary([r for r in recs]),
+        "future_data_acquisition": future,
+        "accuracy_v2_p5_forward": p5_forward,
+        "data_continuity": continuity,
+    }
+
+
+@mcp.tool()
+def get_data_continuity_status() -> dict:
+    """JNU exact-target continuity / staleness / source-redundancy status.
+
+    DATA_CONTINUITY_MODE means context-only: proxies may inform risk but may not
+    replace the exact JNU target or create forward predictive evidence.
+    """
+    from market_ai_hub.services.data_continuity import jnu_data_continuity_status
+
+    return jnu_data_continuity_status()
+
+
+@mcp.tool()
+def get_capability_registry() -> dict:
+    """Machine-readable available/data_ready/evidence/blocked-reason capability map."""
+    from market_ai_hub.services.capability_registry import capability_registry_snapshot
+
+    return capability_registry_snapshot()
+
+
+@mcp.tool()
+def get_system_completion_status() -> dict:
+    """Machine-readable closeout: actionable engineering vs future/authorization dependencies."""
+    from market_ai_hub.services.system_completion import system_completion_snapshot
+
+    return system_completion_snapshot()
 
 
 @mcp.tool()
@@ -838,6 +1156,18 @@ def get_forward_test_status() -> dict:
         summary["w32_event_probability_status"] = "AUDIT_STATUS_UNAVAILABLE_" + type(exc).__name__
     else:
         summary["w32_event_probability_status"] = "ACCUMULATING" if event_registered else "NONE_YET"
+
+    try:
+        from market_ai_hub.research.accuracy_v2_p5_engine import p5_forward_evidence_summary
+        summary["accuracy_v2_p5"] = p5_forward_evidence_summary()
+    except Exception as exc:
+        summary["accuracy_v2_p5"] = {
+            "status": "UNAVAILABLE",
+            "reason": type(exc).__name__,
+            "PREDICTIVE_GAIN": False,
+            "CALIBRATED": False,
+            "TRADING_EDGE": False,
+        }
 
     summary.update({
         "w32_event_probability_registered": event_registered,

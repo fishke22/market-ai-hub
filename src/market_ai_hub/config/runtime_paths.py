@@ -71,6 +71,11 @@ def research_outputs_root() -> Path:
     return data_root() / "research_outputs"
 
 
+def taiwan_context_receipts_root() -> Path:
+    """Immutable Taiwan target-context receipts under canonical data root."""
+    return research_outputs_root() / "taiwan_context_receipts"
+
+
 def forward_outputs_root() -> Path:
     return research_outputs_root() / "forward"
 

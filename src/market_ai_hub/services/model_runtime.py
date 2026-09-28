@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 _lock = threading.Lock()
 _chronos = None
 _timesfm = None
+_timesfm_research = None
 
 
 def get_chronos():
@@ -32,5 +33,27 @@ def get_timesfm():
         if _timesfm is None:
             from market_ai_hub.models.timesfm_model import TimesFM3Adapter
 
-            _timesfm = TimesFM3Adapter()
+            # This singleton is a user-facing serving path; TimesFM-3 weights are research-only.
+            # The adapter purpose gate therefore blocks load fail-closed.
+            _timesfm = TimesFM3Adapter(purpose="SERVING")
         return _timesfm
+
+
+def get_timesfm_research(acknowledgement: str):
+    """Explicit local personal-research singleton; never used by serving/ensemble."""
+    global _timesfm_research
+    from market_ai_hub.models.timesfm_model import MODEL_CACHE, TimesFM3Adapter
+    from market_ai_hub.services.model_governance import (
+        require_timesfm3_research_access,
+    )
+
+    # Revalidate explicit authorization on every call, including after the
+    # singleton has already been initialized.
+    require_timesfm3_research_access(
+        acknowledgement,
+        cache_dir=MODEL_CACHE,
+    )
+    with _lock:
+        if _timesfm_research is None:
+            _timesfm_research = TimesFM3Adapter(purpose="RESEARCH")
+        return _timesfm_research

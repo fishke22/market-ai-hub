@@ -2,7 +2,7 @@
 # 每個模型記錄 license / hardware / 狀態。RTX 4060 Ti 16GB 為本機硬體上限。
 # 禁止為了硬跑模型造成長時間 OOM / swap。
 
-schema_version: 1
+schema_version: 2
 hardware_limit_vram_mb: 16380
 
 models:
@@ -19,10 +19,14 @@ models:
     training_cutoff: unknown
     supported_horizons: ["1d", "2d", "5d", "10d"]
     input_frequency: daily
-    supports_covariates: false
+    supports_covariates: true
     supports_probabilistic: true
     supports_finetune: true
     estimated_vram_mb: 1200
+    allowed_purposes: [RESEARCH, SERVING]
+    upstream_support: {covariates: true, multivariate: true}
+    adapter_implemented: {univariate: true, past_only_covariates: true, future_covariates: false, multivariate: false}
+    local_verified: {univariate: false, covariates: false, multivariate: false}
     status: AVAILABLE
 
   - name: timesfm-3.0
@@ -31,9 +35,12 @@ models:
     repo: https://huggingface.co/google/timesfm-3.0-pytorch
     model_id: google/timesfm-3.0-pytorch
     revision: 43046b85ec22d584a13f8098c2ed39c889e129c2
+    package_version: 3.0.2
     code_license: Apache-2.0
     weight_license: timesfm-non-commercial-license-v1.0
     commercial_use: false
+    production_use: false
+    personal_noncommercial_research: true
     training_start: unknown
     training_cutoff: unknown
     supported_horizons: ["1d", "2d", "5d", "10d"]
@@ -42,6 +49,10 @@ models:
     supports_probabilistic: true
     supports_finetune: true
     estimated_vram_mb: 3000
+    allowed_purposes: [RESEARCH]
+    upstream_support: {covariates: true, multivariate: true}
+    adapter_implemented: {univariate: true, past_only_covariates: true, multivariate: true}
+    local_verified: {univariate: false, covariates: false, multivariate: false}
     status: AVAILABLE
 
   - name: xgboost

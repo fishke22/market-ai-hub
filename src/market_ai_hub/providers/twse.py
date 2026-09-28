@@ -81,6 +81,67 @@ class TWSEProvider(BaseProvider):
             raise ProviderError(f"twse STOCK_DAY_ALL empty for {date_str}")
         return df
 
+    def _fetch_current_table(self, path: str, required: set[str]) -> pd.DataFrame:
+        """Fetch a current TWSE OpenAPI table without stale file-cache reuse."""
+        data = self._get_json(path, params={}, cache=False)
+        if not isinstance(data, list):
+            raise ProviderError(f"unexpected twse current-table payload: {path}")
+        frame = pd.DataFrame(data)
+        missing = required - set(frame.columns)
+        if missing:
+            raise ProviderError(
+                f"twse current-table schema mismatch {path}: missing {sorted(missing)}"
+            )
+        return frame
+
+    def fetch_context_valuation(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/exchangeReport/BWIBBU_ALL",
+            {"Date", "Code", "Name", "PEratio", "DividendYield", "PBratio"},
+        )
+
+    def fetch_context_margin_short(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/exchangeReport/MI_MARGN",
+            {
+                "股票代號",
+                "股票名稱",
+                "融資買進",
+                "融資賣出",
+                "融資今日餘額",
+                "融券買進",
+                "融券賣出",
+                "融券今日餘額",
+            },
+        )
+
+    def fetch_context_monthly_revenue(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/opendata/t187ap05_L",
+            {
+                "出表日期",
+                "資料年月",
+                "公司代號",
+                "公司名稱",
+                "營業收入-當月營收",
+                "營業收入-上月比較增減(%)",
+                "營業收入-去年同月增減(%)",
+            },
+        )
+
+    def fetch_context_eps_report(self) -> pd.DataFrame:
+        return self._fetch_current_table(
+            "/opendata/t187ap14_L",
+            {
+                "出表日期",
+                "年度",
+                "季別",
+                "公司代號",
+                "公司名稱",
+                "基本每股盈餘(元)",
+            },
+        )
+
     def fetch_symbol_daily(self, symbol: str, start: str, end: str) -> pd.DataFrame:
         """symbol 日線（用 TWSE 官方單股 `STOCK_DAY` endpoint，逐月拉取）。
 
@@ -129,12 +190,109 @@ class TWSEProvider(BaseProvider):
             raise ProviderError(f"no twse data for {symbol} {start}..{end}")
         return self._to_uniform(df, symbol)
 
+    def fetch_taiex_daily(self, start: str, end: str) -> pd.DataFrame:
+        """Official TAIEX daily OHLC from TWSE MI_5MINS_HIST, month by month.
+
+        start/end are Gregorian YYYYMMDD.  This is a cash-index reference;
+        it does not imply that TAIEX itself is executable.
+        """
+        from datetime import datetime as _dt
+
+        s = _dt.strptime(start, "%Y%m%d")
+        e = _dt.strptime(end, "%Y%m%d")
+        if e < s:
+            raise ValueError("end must be on or after start")
+        rows: list[dict] = []
+        cursor = s.replace(day=1)
+        expected = ["日期", "開盤指數", "最高指數", "最低指數", "收盤指數"]
+        while cursor <= e:
+            payload = self._get_taiex_history_json(cursor.strftime("%Y%m01"))
+            if payload.get("stat") != "OK":
+                cursor = _next_month(cursor)
+                continue
+            fields = payload.get("fields") or []
+            if fields != expected:
+                raise ProviderError(
+                    "twse MI_5MINS_HIST schema mismatch: "
+                    f"expected {expected!r}, got {fields!r}"
+                )
+            for raw in payload.get("data") or []:
+                if not isinstance(raw, list) or len(raw) != 5:
+                    raise ProviderError("twse MI_5MINS_HIST row schema mismatch")
+                try:
+                    roc_y, month, day = str(raw[0]).split("/")
+                    iso = (
+                        f"{int(roc_y) + 1911:04d}-"
+                        f"{int(month):02d}-{int(day):02d}"
+                    )
+                    o, h, l, c = (_num(raw[i]) for i in range(1, 5))
+                except Exception as exc:
+                    raise ProviderError(
+                        f"twse MI_5MINS_HIST invalid row: {raw!r}"
+                    ) from exc
+                if any(v is None for v in (o, h, l, c)):
+                    raise ProviderError(
+                        f"twse MI_5MINS_HIST missing OHLC: {raw!r}"
+                    )
+                rows.append(
+                    {
+                        "Date": iso,
+                        "Open": o,
+                        "High": h,
+                        "Low": l,
+                        "Close": c,
+                        "TradeVolume": 0.0,
+                    }
+                )
+            cursor = _next_month(cursor)
+        if not rows:
+            raise ProviderError(f"no TAIEX data for {start}..{end}")
+        df = (
+            pd.DataFrame(rows)
+            .drop_duplicates(subset=["Date"])
+            .sort_values("Date")
+        )
+        lo = s.strftime("%Y-%m-%d")
+        hi = e.strftime("%Y-%m-%d")
+        df = df[(df["Date"] >= lo) & (df["Date"] <= hi)].reset_index(drop=True)
+        if df.empty:
+            raise ProviderError(f"no TAIEX data for {start}..{end}")
+        return self._to_uniform(df, "TAIEX")
+
     def _get_stock_day_json(self, symbol: str, roc_month: str) -> dict:
         url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
         params = {"response": "json", "date": roc_month, "stockNo": symbol}
         resp = httpx.get(url, params=params, timeout=self._timeout)
         resp.raise_for_status()
         return resp.json()
+
+    def _get_taiex_history_json(self, month_date: str) -> dict:
+        url = "https://www.twse.com.tw/indicesReport/MI_5MINS_HIST"
+        params = {"response": "json", "date": month_date}
+        for attempt in range(1, self._retries + 1):
+            try:
+                resp = httpx.get(url, params=params, timeout=self._timeout)
+                resp.raise_for_status()
+                payload = resp.json()
+                if not isinstance(payload, dict):
+                    raise ProviderError(
+                        "unexpected TWSE MI_5MINS_HIST payload type"
+                    )
+                return payload
+            except Exception as exc:
+                log.warning(
+                    "twse MI_5MINS_HIST %s attempt %d failed: %s",
+                    month_date,
+                    attempt,
+                    exc,
+                )
+                if attempt == self._retries:
+                    raise ProviderError(
+                        "twse MI_5MINS_HIST failed after "
+                        f"{self._retries} retries: {exc}"
+                    ) from exc
+                time.sleep(1.0 * attempt)
+        raise ProviderError("unreachable")
 
     def _to_uniform(self, df: pd.DataFrame, symbol: str) -> pd.DataFrame:
         local = pd.to_datetime(df["Date"]).dt.tz_localize("Asia/Taipei", ambiguous="infer")
