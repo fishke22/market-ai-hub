@@ -1,0 +1,122 @@
+name: Accuracy v2 P5 Cloud Public Forward
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/p5-cloud-public-forward.yml"
+      - "requirements-p5-cloud.txt"
+      - "scripts/run_accuracy_v2_p5_cloud_cycle.py"
+      - "scripts/sync_accuracy_v2_p5_cloud_state.py"
+      - "scripts/register_accuracy_v2_p5_cloud_sync_task.ps1"
+      - "tests/test_accuracy_v2_p5_cloud.py"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke never writes a prediction; scheduled delegates to the frozen P5 gates"
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - scheduled
+  schedule:
+    # Pre-warm before the frozen 08:05 origin. Early start absorbs Actions queue delay.
+    - cron: "40 7 * * 1-5"
+      timezone: "Asia/Taipei"
+    # Backup attempt remains inside the frozen <=15 minute lateness window.
+    - cron: "15 8 * * 1-5"
+      timezone: "Asia/Taipei"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: accuracy-v2-p5-cloud-public-forward
+  cancel-in-progress: false
+
+jobs:
+  p5-public-forward:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      MARKET_AI_DATA_ROOT: ${{ runner.temp }}/market-ai-p5-data
+      PYTHONPATH: ${{ github.workspace }}/src
+      P5_CLOUD_ARTIFACT_NAME: p5-cloud-state
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-p5-cloud.txt
+
+      - name: Install minimal P5 cloud dependencies
+        run: python -m pip install -r requirements-p5-cloud.txt
+
+      - name: Restore latest valid cloud P5 state
+        if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/sync_accuracy_v2_p5_cloud_state.py --mode restore --repo "${{ github.repository }}" --artifact-name "${{ env.P5_CLOUD_ARTIFACT_NAME }}"
+
+      - name: Run public-source P5 cloud cycle
+        env:
+          RUN_MODE: ${{ github.event_name == 'pull_request' && 'smoke' || (github.event_name == 'workflow_dispatch' && inputs.mode || 'scheduled') }}
+        run: python scripts/run_accuracy_v2_p5_cloud_cycle.py --mode "$RUN_MODE" --months 3 --settlement-lookback-days 10
+
+      - name: Verify cloud safety contract
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["MARKET_AI_DATA_ROOT"])
+          summary = json.loads((root / "cloud" / "p5_cloud_run_summary.json").read_text(encoding="utf-8"))
+          assert summary["public_sources_only"] is True
+          assert summary["broker_used"] is False
+          assert summary["credentials_used"] is False
+          assert summary["recorder_touched"] is False
+          assert summary["order_action"] is False
+          manifest = json.loads((root / "cloud" / "p5_cloud_state_manifest.json").read_text(encoding="utf-8"))
+          assert manifest["state_valid"] is True
+          assert manifest["public_sources_only"] is True
+          PY
+
+      - name: Upload valid P5 cloud state
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.P5_CLOUD_ARTIFACT_NAME }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ${{ env.MARKET_AI_DATA_ROOT }}/audit/prediction_audit.duckdb
+            ${{ env.MARKET_AI_DATA_ROOT }}/automation/p5_forward_state.json
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_run_summary.json
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_state_manifest.json
+
+      - name: Upload PR smoke evidence
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-cloud-pr-smoke-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_run_summary.json
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_state_manifest.json
+
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p5-cloud-diagnostics-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/
+            ${{ env.MARKET_AI_DATA_ROOT }}/automation/

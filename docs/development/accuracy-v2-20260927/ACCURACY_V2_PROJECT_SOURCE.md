@@ -2,6 +2,15 @@
 
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
+## 2026-09-28 P5 public-source cloud automation
+
+- 使用者已授權把 JPX official + P5 08:05 公開資料流程雲端化，目標是家中 Windows/元大 quote runtime 未開機時仍可累積合法 forward evidence；此包**不**碰 broker/account/recorder/order。
+- 新增 `.github/workflows/p5-cloud-public-forward.yml`、`requirements-p5-cloud.txt`、cloud runner/state-sync/local-sync task-plan。PR event 僅允許 `smoke`，不寫 canonical prediction/production state；只有手動 merge 到 default branch 後，GitHub `schedule` 才會自動執行。排程固定 **07:40 Asia/Taipei** 預熱 JPX 公開資料，原 frozen canonical origin 仍是 08:05；**08:15** 為既有 <=15m lateness 內的 backup。沒有改 P5 protocol hash、target、origin gate、attempt cap、PIT receipt、no-backfill 或 promotion gate。
+- Cloud runner 使用獨立 ephemeral `MARKET_AI_DATA_ROOT`，每次重建至少三個月 JPX public history；persistent artifact `p5-cloud-state` 只保存 P5 PredictionAuditDB、`automation/p5_forward_state.json` 與 cloud summary/manifest。不得保存元大 tick、credential、private data 或 model weights。
+- 本機同步採 append-only scope merge：只把 cloud DB 中 `OSAKA_MICRO/JNU/NEXT_PUBLISHED_OBSERVATION/accuracy_v2_p4_baseline/accuracy-v2-p5-publication-v1/FORWARD_PRECOMMITTED` bundle/outcome idempotently append 到本機既有 audit DB，不覆寫/刪除其他 W3/P5 evidence。19:05 Windows sync task 的註冊器已施工，但目前只 dry-run，尚未註冊。
+- Empty-data-root live smoke：JPX Jul-Sep archive=58 daily rows、latest settlement receipt=`20260928`、JNU 202610 settlement=65,485；smoke preview=`WAITING_FOR_ORIGIN`、prediction_count=0；public_sources_only=true，broker/credentials/recorder/order=false。Focused cloud+P5+audit regression=`55 passed`；最後 schedule/timezone/PR-smoke 修改後 affected test=`5 passed`，workflow YAML/timezone parse PASS。
+- 此工程降低「使用者早上必須開機」的 operational dependency，但在 PR 尚未手動 merge 前**不能宣稱雲端排程已上線**。沒有自動 merge；`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false` 不變。
+
 ## 2026-09-28 P5 first-origin operational evidence + clock hotfix
 
 - First canonical window 2026-09-28 08:05 Asia/Taipei did **not** produce a canonical artifact. One-shot automation had a run record at 08:08, but later audit remained canonical_prediction_count=0. Manual recovery at 08:17 was still inside the frozen <=15m lateness gate.

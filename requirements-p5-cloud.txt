@@ -1,0 +1,20 @@
+# Minimal public-source-only Accuracy v2 P5 cloud runtime.
+# No broker SDK, no model weights, no torch/Chronos/TimesFM.
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+scikit-learn==1.9.1
+pyarrow==25.0.1
+openpyxl==3.1.5
+lightgbm==4.7.0
+duckdb==1.5.5
+requests==2.34.2
+httpx==0.28.1
+pytz==2026.3.post1
+tzdata==2026.4
+PyYAML==6.0.3
+exchange-calendars==4.13.2
+pandas-market-calendars==5.4.0
+pydantic==2.13.5
+python-dotenv==1.2.3
+yfinance==1.7.0
