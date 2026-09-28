@@ -12,20 +12,31 @@ $PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
 $PreflightRaw = & $PreflightScript
 if ($LASTEXITCODE -ne 0) { throw "YUANTA_LIVE_PREFLIGHT_FAILED" }
 $Preflight = ($PreflightRaw -join [Environment]::NewLine) | ConvertFrom-Json
-$HealthReasonCount = 0
+$HealthReasons = @()
 if ($null -ne $Preflight.health_reasons) {
   if ($Preflight.health_reasons -is [System.Management.Automation.PSCustomObject]) {
-    $HealthReasonCount = @($Preflight.health_reasons.PSObject.Properties).Count
+    $HealthReasons = @($Preflight.health_reasons.PSObject.Properties | ForEach-Object { [string]$_.Name })
   } else {
-    $HealthReasonCount = @($Preflight.health_reasons).Count
+    $HealthReasons = @($Preflight.health_reasons | ForEach-Object { [string]$_ })
   }
 }
+# In the OSE post-day-close maintenance window no streaming callback is expected.
+# A fresh maintenance owner may therefore be DEGRADED solely because no recent
+# callback has arrived; GetStkTickDetail is still the bounded query being tested.
+$UnexpectedHealthReasons = @($HealthReasons | Where-Object {
+  $_ -and $_ -ne "NO_RECENT_CALLBACK_SESSION_UNCHECKED"
+})
+$RuntimeStatusAllowed = ([string]$Preflight.status) -in @("RUNNING", "DEGRADED")
+$HeartbeatFresh = ($null -ne $Preflight.heartbeat_age_seconds -and
+  $null -ne $Preflight.heartbeat_max_age_seconds -and
+  [double]$Preflight.heartbeat_age_seconds -le [double]$Preflight.heartbeat_max_age_seconds)
 if ($Preflight.classification -ne "MAINTENANCE_OWNER_RUNNING" -or
-    $Preflight.status -ne "RUNNING" -or
+    -not $RuntimeStatusAllowed -or
+    -not $HeartbeatFresh -or
     -not $Preflight.runtime_measurement_gate -or
     $Preflight.tracked_measurement_gate -or
     $Preflight.runtime_build_id -ne $Preflight.disk_build_id -or
-    $HealthReasonCount -ne 0) {
+    $UnexpectedHealthReasons.Count -ne 0) {
   throw "YUANTA_TICK_DETAIL_REQUEST_BLOCKED_$($Preflight.classification)"
 }
 $Inbox = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root, _load_config, CONFIG_PATH, _within; print(_within(recorder_root(), _load_config(CONFIG_PATH)['dynamic_requests'].get('inbox', 'control/inbox')))"

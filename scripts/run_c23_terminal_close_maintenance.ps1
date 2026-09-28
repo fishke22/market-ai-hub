@@ -114,6 +114,24 @@ try {
         Write-State "IN_PROGRESS" "STOP_SAFE_DEFAULT" "CONTROLLED_HANDOVER" $TradingDate $Symbol
         & $Stop | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "C23_SAFE_DEFAULT_STOP_FAILED" }
+        # stop_yuanta_live_recorder.ps1 returns when status.json reaches STOPPED,
+        # but the owner process can linger briefly while Python exits. Starting the
+        # maintenance owner before the process is actually gone makes start.ps1
+        # correctly refuse a second owner and leaves the runtime gate disabled.
+        $StopDeadline = (Get-Date).AddSeconds(10)
+        $StoppedClass = ""
+        do {
+            Start-Sleep -Milliseconds 250
+            $StopPreRaw = & $Preflight
+            if ($LASTEXITCODE -ne 0) { throw "C23_POST_STOP_PREFLIGHT_FAILED" }
+            $StopPre = ($StopPreRaw -join [Environment]::NewLine) | ConvertFrom-Json
+            $StoppedClass = [string]$StopPre.classification
+            if ($StoppedClass -eq "NO_RUNNING_OWNER") { break }
+            if ($StoppedClass -in @("BLOCKED_DUPLICATE_OWNER_RISK", "BLOCKED_OWNER_UNVERIFIED")) {
+                throw "C23_POST_STOP_OWNER_STATE_BLOCKED_$StoppedClass"
+            }
+        } while ((Get-Date) -lt $StopDeadline)
+        if ($StoppedClass -ne "NO_RUNNING_OWNER") { throw "C23_POST_STOP_OWNER_EXIT_TIMEOUT_$StoppedClass" }
     } elseif ($Class -ne "NO_RUNNING_OWNER") {
         throw "C23_OWNER_STATE_UNEXPECTED_$Class"
     }

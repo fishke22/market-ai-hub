@@ -9,6 +9,14 @@
 - Evidence claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`, no broker/account/order action, no HPQ1 replay, no attempt-cap override.
 - Validation: focused P5 regression=`12 passed`; final targeted P5/protocol/build-freeze regression=`67 passed, 2 deselected`; `git diff --check` PASS; changed-file high-risk secret scan=0 hits.
 
+## 2026-09-28 C23 terminal-close operational miss / hardening
+
+- The 2026-09-28 C23 OSE post-close run consumed the preregistered three-attempt cap and did not create typed GetStkTickDetail terminal-close evidence. No counter reset, fourth attempt, backfill, or manual Feature Store insertion was performed.
+- Failure chain: one attempt exposed a stop/start race where status reached `STOPPED` before the old Python owner PID fully exited; another reached `MAINTENANCE_OWNER_RUNNING` but the tick-detail request helper rejected a fresh post-close maintenance owner because it was legitimately `DEGRADED / NO_RECENT_CALLBACK_SESSION_UNCHECKED` with no new streaming callbacks.
+- Hardening: C23 now waits for `NO_RUNNING_OWNER` before maintenance start. Tick-detail request accepts a `DEGRADED` maintenance owner only when heartbeat is fresh, runtime/disk builds match, runtime measurement gate=true, tracked gate=false, and the only allowed health reason is `NO_RECENT_CALLBACK_SESSION_UNCHECKED`; all other reasons remain fail-closed. Focused regression=`25 passed, 1 deselected`.
+- Research-only close preservation: JNU2612 day-session deduplicated StockTick count=64,882, DealVol sum=295,142, O/H/L/last=66,200/66,840/65,600/65,600, VWAP≈66,206.416. Observed 15:45:01 JST tick=65,600, DealVol=2,289, bid/ask=65,595/65,600, receipt lag≈0.185s. This is `RESEARCH_ONLY_NONCANONICAL_NOT_C23_TYPED_EVIDENCE`; `terminal_close_materialization_allowed=false`.
+- Current C23 state=`BLOCKED / ATTEMPT_LIMIT / 3`. Safe-default quote recorder recovery remains quote-only; no account/position/balance/order action. P5 2026-09-28 remains missed/no-backfill.
+
 ## 2026-09-28 authorized live-data acquisition / recorder handover
 
 - Explicit authorization permitted a controlled quote-only runtime handover from stale build `2647d9da4e9b73ac` to current build `426583a3e6f2f27e`. Final owner preflight=`SAFE_DEFAULT_OWNER_HEALTHY`; JNU2612 lag improved from about 1162s to latest 0.73s / median 0.26s / p90 1.18s; dropped_records=0 and persistence_error=null.
@@ -16,7 +24,7 @@
 - Taiwan cash/TAIFEX absence is official holiday behavior on 2026-09-28 (Teacher’s Day), not a collection failure; stale cash snapshots are not counted as today’s data.
 - JPX direct settlement refresh latest=`2026-09-25`, Jul-Sep archive complete; derivative investor-flow latest public receipt=`20260907/20260911`, product code=331, receipt-time only.
 - Fixed false request blocking when PowerShell deserializes empty `health_reasons` as `{}`. Quote/tick-detail helpers now count PSCustomObject properties explicitly; real reasons still fail closed. Live quote queueing succeeded after repair; PowerShell parse PASS; final Yuanta+C23 regression=`24 passed, 1 deselected` with a static guard.
-- Local inventory is under `data/research_outputs/today_acquisition_inventory/2026-09-28/`. C23 terminal-close remains pending OSE 15:45–17:00 JST. P5 2026-09-28 remains a missed canonical origin and is not backfilled.
+- Local inventory is under `data/research_outputs/today_acquisition_inventory/2026-09-28/`. The later C23 section above supersedes the earlier pending status: 2026-09-28 typed terminal-close evidence is blocked at `ATTEMPT_LIMIT=3`, while the continuous close candidate is research-only. P5 2026-09-28 remains a missed canonical origin and is not backfilled.
 
 ## 2026-09-28 Accuracy v2 system engineering closeout
 

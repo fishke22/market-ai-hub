@@ -11,11 +11,18 @@
 - `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false` remain frozen. This hotfix repairs operational causality only; it does not manufacture the missed sample.
 - Validation：focused P5=`12 passed`；final targeted P5/protocol/build-freeze=`67 passed, 2 deselected`；diff-check PASS；changed-file secret scan=0 hits。
 
+## 2026-09-28 C23 terminal-close operational miss / evidence boundary
+
+- 2026-09-28 OSE post-close C23 reached the frozen three-attempt daily cap without typed terminal-close evidence. No counter reset、fourth attempt、manual materialization or backfill is allowed. Current state=`BLOCKED / ATTEMPT_LIMIT / 3`.
+- Operational causes were engineering races/gates, not missing market prints: (1) stop script may emit `STOPPED` just before the old Python PID fully exits, so C23 now waits for preflight=`NO_RUNNING_OWNER`; (2) a fresh post-close maintenance owner may be `DEGRADED` solely because there are no new streaming callbacks. The tick-detail helper now allows this exact state only when heartbeat is fresh, runtime/disk build match, runtime measurement gate=true, tracked gate=false, and the sole allowed health reason is `NO_RECENT_CALLBACK_SESSION_UNCHECKED`. Other degradation remains fail-closed. Regression=`25 passed, 1 deselected`.
+- Separate continuous StockTick preservation is research-only: JNU2612 07:45–14:45 Asia/Taipei has 64,882 deduplicated ticks、DealVol=295,142、O/H/L/last=66,200/66,840/65,600/65,600、VWAP≈66,206.416. The observed 15:45:01 JST tick is 65,600 with DealVol=2,289、bid/ask=65,595/65,600、receipt lag≈0.185s. It is `RESEARCH_ONLY_NONCANONICAL_NOT_C23_TYPED_EVIDENCE` and cannot establish terminal-close DAILY evidence or settle/promote W3.2 by itself.
+- `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false` remain unchanged. No account/position/balance/order action occurred.
+
 ## 2026-09-28 Live acquisition / authorized recorder handover
 
 - 使用者已明示授權 runtime handover；Yuanta quote-only single owner 由 stale build `2647d9da4e9b73ac` 切換到 current build `426583a3e6f2f27e`。最終 preflight=`SAFE_DEFAULT_OWNER_HEALTHY`；JNU2612 receipt lag 由約 1162s backlog 降至 latest≈0.73s / median≈0.26s / p90≈1.18s，StockTick/FiveTick live verified，dropped=0、persistence error=null。
 - 今日實際可得 context：JNU2612/JNU2703、NQ/MNQ、ES、JPY futures、Gold、WTI、DXY、VX。ZF/ZN 回傳不可用 sentinel，明確排除。2026-09-28 TWSE/TAIFEX 為官方教師節休市，沒有新的台灣交易樣本；stale cash snapshot 不計入。
-- JPX settlement refresh latest=`2026-09-25`，Jul-Sep archive 無 missing day；JPX derivatives investor-flow 最新公開 receipt=`20260907/20260911`、product code=331、receipt-time only。C23 terminal-close 需等 OSE 15:45–17:00 JST 固定窗口；P5 2026-09-28 missed origin 不回填。
+- JPX settlement refresh latest=`2026-09-25`，Jul-Sep archive 無 missing day；JPX derivatives investor-flow 最新公開 receipt=`20260907/20260911`、product code=331、receipt-time only。C23 2026-09-28 已完成窗口內嘗試但因上方所述 operational gates 用盡三次上限，typed terminal-close evidence=`BLOCKED / ATTEMPT_LIMIT / 3`；P5 2026-09-28 missed origin 不回填。
 - `request_yuanta_quote.ps1` / `request_yuanta_tick_detail_measurement.ps1` 修正空 `health_reasons {}` PSCustomObject 被誤算為一個 health reason 的 false block；真正 health reasons 仍 fail-closed。Live quote request 已成功驗證，PowerShell parse PASS，final Yuanta+C23 regression=`24 passed, 1 deselected`，並補 static regression guard。
 
 ## 2026-09-28 System engineering closeout

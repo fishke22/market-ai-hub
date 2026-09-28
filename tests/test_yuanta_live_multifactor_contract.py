@@ -195,12 +195,18 @@ def test_request_scripts_require_verified_running_owner_before_queue():
     assert "YUANTA_TICK_DETAIL_REQUEST_BLOCKED_" in tick
 
 
-def test_request_scripts_count_empty_pscustomobject_health_reasons_as_zero():
+def test_request_scripts_handle_empty_pscustomobject_health_reasons_without_false_block():
     quote = (ROOT / "scripts" / "request_yuanta_quote.ps1").read_text(encoding="utf-8")
     tick = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
-    for text in (quote, tick):
-        assert "$HealthReasonCount = 0" in text
-        assert "[System.Management.Automation.PSCustomObject]" in text
-        assert "$Preflight.health_reasons.PSObject.Properties" in text
-        assert "$HealthReasonCount -ne 0" in text
-        assert "@($Preflight.health_reasons).Count -ne 0" not in text
+    assert "$HealthReasonCount = 0" in quote
+    assert "[System.Management.Automation.PSCustomObject]" in quote
+    assert "$Preflight.health_reasons.PSObject.Properties" in quote
+    assert "$HealthReasonCount -ne 0" in quote
+    assert "@($Preflight.health_reasons).Count -ne 0" not in quote
+    assert "$HealthReasons = @()" in tick
+    assert "$UnexpectedHealthReasons" in tick
+    assert 'NO_RECENT_CALLBACK_SESSION_UNCHECKED' in tick
+    assert '$RuntimeStatusAllowed' in tick
+    assert '$HeartbeatFresh' in tick
+    assert '$UnexpectedHealthReasons.Count -ne 0' in tick
+    assert '@($Preflight.health_reasons).Count -ne 0' not in tick

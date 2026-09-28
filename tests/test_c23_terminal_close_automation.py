@@ -173,3 +173,13 @@ def test_maintenance_bounds_attempts_per_trading_date():
     assert "$AttemptCount -ge 3" in text
     assert "MAX_THREE_ATTEMPTS_PER_TRADING_DATE" in text
     assert "$AttemptCount += 1" in text
+
+
+def test_maintenance_waits_for_owner_process_exit_before_maintenance_start():
+    text = MAINTENANCE.read_text(encoding="utf-8")
+    stop = text.index("& $Stop | Out-Host")
+    wait = text.index('if ($StoppedClass -eq "NO_RUNNING_OWNER") { break }', stop)
+    start = text.index("& $Start -EnableTickDetailMeasurements", wait)
+    assert stop < wait < start
+    assert "C23_POST_STOP_OWNER_EXIT_TIMEOUT_" in text
+    assert "C23_POST_STOP_OWNER_STATE_BLOCKED_" in text
