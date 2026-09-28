@@ -9,6 +9,15 @@
 - Evidence claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`, no broker/account/order action, no HPQ1 replay, no attempt-cap override.
 - Validation: focused P5 regression=`12 passed`; final targeted P5/protocol/build-freeze regression=`67 passed, 2 deselected`; `git diff --check` PASS; changed-file high-risk secret scan=0 hits.
 
+## 2026-09-28 authorized live-data acquisition / recorder handover
+
+- Explicit authorization permitted a controlled quote-only runtime handover from stale build `2647d9da4e9b73ac` to current build `426583a3e6f2f27e`. Final owner preflight=`SAFE_DEFAULT_OWNER_HEALTHY`; JNU2612 lag improved from about 1162s to latest 0.73s / median 0.26s / p90 1.18s; dropped_records=0 and persistence_error=null.
+- Live context obtained today: JNU2612/JNU2703, NQ/MNQ, ES, JPY futures, Gold, WTI, DXY and VX. ZF/ZN prices are invalid provider sentinels and are excluded.
+- Taiwan cash/TAIFEX absence is official holiday behavior on 2026-09-28 (Teacher’s Day), not a collection failure; stale cash snapshots are not counted as today’s data.
+- JPX direct settlement refresh latest=`2026-09-25`, Jul-Sep archive complete; derivative investor-flow latest public receipt=`20260907/20260911`, product code=331, receipt-time only.
+- Fixed false request blocking when PowerShell deserializes empty `health_reasons` as `{}`. Quote/tick-detail helpers now count PSCustomObject properties explicitly; real reasons still fail closed. Live quote queueing succeeded after repair; PowerShell parse PASS; final Yuanta+C23 regression=`24 passed, 1 deselected` with a static guard.
+- Local inventory is under `data/research_outputs/today_acquisition_inventory/2026-09-28/`. C23 terminal-close remains pending OSE 15:45–17:00 JST. P5 2026-09-28 remains a missed canonical origin and is not backfilled.
+
 ## 2026-09-28 Accuracy v2 system engineering closeout
 
 - State: **ENGINEERING_COMPLETE_WAITING_FOR_EXTERNAL_EVIDENCE / READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION**. Source/config build=`2647d9da4e9b73ac`.

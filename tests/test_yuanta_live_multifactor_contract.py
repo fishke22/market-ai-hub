@@ -193,3 +193,14 @@ def test_request_scripts_require_verified_running_owner_before_queue():
     assert "$Preflight.tracked_measurement_gate" in tick
     assert "$Preflight.runtime_build_id -ne $Preflight.disk_build_id" in tick
     assert "YUANTA_TICK_DETAIL_REQUEST_BLOCKED_" in tick
+
+
+def test_request_scripts_count_empty_pscustomobject_health_reasons_as_zero():
+    quote = (ROOT / "scripts" / "request_yuanta_quote.ps1").read_text(encoding="utf-8")
+    tick = (ROOT / "scripts" / "request_yuanta_tick_detail_measurement.ps1").read_text(encoding="utf-8")
+    for text in (quote, tick):
+        assert "$HealthReasonCount = 0" in text
+        assert "[System.Management.Automation.PSCustomObject]" in text
+        assert "$Preflight.health_reasons.PSObject.Properties" in text
+        assert "$HealthReasonCount -ne 0" in text
+        assert "@($Preflight.health_reasons).Count -ne 0" not in text

@@ -11,6 +11,13 @@
 - `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false` remain frozen. This hotfix repairs operational causality only; it does not manufacture the missed sample.
 - Validation：focused P5=`12 passed`；final targeted P5/protocol/build-freeze=`67 passed, 2 deselected`；diff-check PASS；changed-file secret scan=0 hits。
 
+## 2026-09-28 Live acquisition / authorized recorder handover
+
+- 使用者已明示授權 runtime handover；Yuanta quote-only single owner 由 stale build `2647d9da4e9b73ac` 切換到 current build `426583a3e6f2f27e`。最終 preflight=`SAFE_DEFAULT_OWNER_HEALTHY`；JNU2612 receipt lag 由約 1162s backlog 降至 latest≈0.73s / median≈0.26s / p90≈1.18s，StockTick/FiveTick live verified，dropped=0、persistence error=null。
+- 今日實際可得 context：JNU2612/JNU2703、NQ/MNQ、ES、JPY futures、Gold、WTI、DXY、VX。ZF/ZN 回傳不可用 sentinel，明確排除。2026-09-28 TWSE/TAIFEX 為官方教師節休市，沒有新的台灣交易樣本；stale cash snapshot 不計入。
+- JPX settlement refresh latest=`2026-09-25`，Jul-Sep archive 無 missing day；JPX derivatives investor-flow 最新公開 receipt=`20260907/20260911`、product code=331、receipt-time only。C23 terminal-close 需等 OSE 15:45–17:00 JST 固定窗口；P5 2026-09-28 missed origin 不回填。
+- `request_yuanta_quote.ps1` / `request_yuanta_tick_detail_measurement.ps1` 修正空 `health_reasons {}` PSCustomObject 被誤算為一個 health reason 的 false block；真正 health reasons 仍 fail-closed。Live quote request 已成功驗證，PowerShell parse PASS，final Yuanta+C23 regression=`24 passed, 1 deselected`，並補 static regression guard。
+
 ## 2026-09-28 System engineering closeout
 
 - 新增 `AV2.SYSTEM_COMPLETION.1` / `accuracy_v2_engineering_closeout_v1`，由 `config/accuracy_v2_system_completion.yaml` + `system_completion_snapshot()` 固定「目前可施工工程」的完成定義。它不把 future canonical outcomes、Taiwan 新 observation periods、外部 provider 設定、未授權 runtime/order execution、sealed final 或 P6 conditional research 冒充工程缺口。
