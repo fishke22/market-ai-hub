@@ -74,6 +74,8 @@ def test_cloud_workflow_is_public_only_and_has_primary_backup_schedule():
     assert "p5-cloud-state" in text
     assert "github.event_name != 'pull_request'" in text
     assert "p5-cloud-pr-smoke-${{ github.run_id }}" in text
+    assert 'MARKET_AI_DATA_ROOT: ${{ runner.temp }}' not in text
+    assert 'MARKET_AI_DATA_ROOT=$RUNNER_TEMP/market-ai-p5-data' in text
     assert "Yuanta" not in text
     assert "secrets." not in text
 
