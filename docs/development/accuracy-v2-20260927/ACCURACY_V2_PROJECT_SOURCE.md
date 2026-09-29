@@ -2,6 +2,14 @@
 
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
+## 2026-09-29 PR #76 local runtime evidence + Three-Engine adapter hardening
+
+- Main dirty checkout was not changed for this integration. Runtime host truth: branch `codex/vnext-audit-handoff`, HEAD `b4648448`, build `cb7557cf53fcfec9`; Yuanta owner `SAFE_DEFAULT_OWNER_HEALTHY`, no broker action. FunctionList resolves current Micro `JNU2612`; night live identity is `JNUPM2612` / `202612`. The observed 2026-09-29 night session started after the 17:00 JST boundary, so `coverage_complete=false` and `label_ready=false` remain correct.
+- Existing local caches were verified offline. Chronos-2=`chronos-forecasting 2.3.2`, revision `29ec3766d36d6f73f0696f85560a422f50e8498c`, CUDA univariate + PIT past-only-covariate inference PASS; future covariates blocked. TimesFM-3=`timesfm 3.0.2`, `google/timesfm-3.0-pytorch`, revision `43046b85ec22d584a13f8098c2ed39c889e129c2`, CUDA research-only univariate + past-only PASS, `local_files_only=true`; non-commercial/non-production license still blocks serving.
+- Settlement and trading path remain separate products: exact direct series `JNU2610` latest 2026-09-28 official settlement=65,485 with next-published-observation semantics; live descriptive path `JNU2612/JNUPM2612`. Direct path remains weak/unvalidated and trading path remains descriptive-only. MCP stdio=27 tools; predictive gain/calibrated probability/trading edge/live trading all false.
+- PR #76 isolated adapter now enforces authority enums, only `1h/4h/session_close/next_session/1d/5d` outcome horizons, explicit finite level for Acceptance claims, lossless separated `STRUCTURE/QUANT/MACRO/EVENT_RISK/DATA_QUALITY` evidence indexing, and componentwise local-runtime validation. Fusion remains `ABSTAIN` with no majority vote/weights; nested model evidence cannot promote validation claims.
+- Isolated final source/config build=`3adcadee17390cfc`; focused integration=`49 passed, 11 warnings`; content-equivalent pre-EOF-normalization full offline excluding only the live-owner mutex and isolated TimesFM-cache environment tests=`2224 passed, 7 skipped, 25 deselected, 152 warnings`, exit 0. This is engineering/runtime evidence, not `PREDICTIVE_GAIN`, `CALIBRATED` or `TRADING_EDGE`.
+
 ## 2026-09-28 P5 public-source cloud automation
 
 - 使用者已授權把 JPX official + P5 08:05 公開資料流程雲端化，目標是家中 Windows/元大 quote runtime 未開機時仍可累積合法 forward evidence；此包**不**碰 broker/account/recorder/order。
