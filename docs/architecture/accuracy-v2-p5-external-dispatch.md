@@ -52,6 +52,27 @@ A safe deployment sequence is:
 
 This repository does not deploy the stack automatically and contains no AWS credential bootstrap.
 
+## Operator workflow
+
+The repository now provides `scripts/operate_accuracy_v2_p5_external_dispatch.py`. It is deliberately narrower than a general AWS deployment tool:
+
+- `preflight`: read-only source-contract validation, AWS CLI discovery, STS caller-identity check, region resolution, and Secrets Manager `DescribeSecret` metadata check. It never requests `GetSecretValue`.
+- `deploy-disabled`: requires `--confirm-disabled-deploy`, acknowledges the template IAM role with `CAPABILITY_IAM`, and forces `ScheduleState=DISABLED`. The script has no schedule-enable operation.
+- `inspect`: read-only CloudFormation/EventBridge verification. It requires a complete stack, output `ScheduleState=DISABLED`, both expected cron expressions, exactly one API-Destination target per rule, the frozen GitHub `mode=scheduled` input, 300-second/3-attempt retry policy, DLQ and invocation role.
+
+The authorization secret ARN can be supplied at runtime or through `P5_GITHUB_AUTH_SECRET_ARN`; the secret value must remain out of the repository. A typical safe sequence after an AWS runtime is actually configured is:
+
+1. `python scripts/operate_accuracy_v2_p5_external_dispatch.py preflight --region <region>`
+2. `python scripts/operate_accuracy_v2_p5_external_dispatch.py deploy-disabled --region <region> --confirm-disabled-deploy`
+3. `python scripts/operate_accuracy_v2_p5_external_dispatch.py inspect --region <region>`
+
+This operator intentionally stops before schedule enablement. A noncanonical external smoke and subsequent real scheduled observation remain separate evidence requirements.
+
+Current local runtime evidence on 2026-09-30 is fail-closed: AWS CLI absent, project venv boto3 absent, no AWS/P5/GitHub deployment environment variables, no region and no authorization secret ARN. Therefore no deployment was performed.
+
+Engineering acceptance for this operator package: contract/operator tests `12 passed`; affected P5/cloud/root-allowlist/build-freeze cross-regression `24 passed`; direct CLI fail-closed preflight PASS; workflow YAML parse PASS. Runtime source/config build remains `426583a3e6f2f27e`; no full suite was repeated.
+
+
 ## Safety invariants
 
 The external scheduler cannot relax these existing P5 rules:

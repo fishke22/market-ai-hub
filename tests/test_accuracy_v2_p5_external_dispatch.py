@@ -101,6 +101,22 @@ def test_targets_are_retry_bounded_dlq_backed_and_p5_gates_frozen():
     assert 'cron: "15 8 * * 1-5"' in workflow
 
 
+def test_operator_contract_is_disabled_only_and_never_reads_secret_value():
+    contract, _, workflow = _docs()
+    operator = contract["operator"]
+    assert operator == {
+        "script": "scripts/operate_accuracy_v2_p5_external_dispatch.py",
+        "preflight_read_only": True,
+        "deployment_mode": "DISABLED_ONLY",
+        "cloudformation_capability": "CAPABILITY_IAM",
+        "secret_metadata_probe": "DescribeSecret",
+        "secret_value_read": False,
+        "schedule_enable_supported": False,
+    }
+    assert '"scripts/operate_accuracy_v2_p5_external_dispatch.py"' in workflow
+    assert '"tests/test_accuracy_v2_p5_external_dispatch_operator.py"' in workflow
+
+
 def test_validator_fails_closed_if_schedule_auto_enables_or_window_changes():
     contract, template, workflow = _docs()
     bad_template = deepcopy(template)

@@ -30,6 +30,8 @@ REQUIRED_WORKFLOW_PATHS = {
     "infra/aws/p5-eventbridge-dispatch.yaml",
     "scripts/validate_accuracy_v2_p5_external_dispatch.py",
     "tests/test_accuracy_v2_p5_external_dispatch.py",
+    "scripts/operate_accuracy_v2_p5_external_dispatch.py",
+    "tests/test_accuracy_v2_p5_external_dispatch_operator.py",
 }
 FORBIDDEN_SECRET_MARKERS = (
     "github_" + "pat_",
@@ -99,6 +101,20 @@ def validate_documents(
         errors.append("deployment must require explicit schedule enable")
     if deployment.get("end_to_end_github_runner_start_guaranteed") is not False:
         errors.append("end-to-end GitHub runner start must not be claimed guaranteed")
+
+    operator = contract.get("operator") or {}
+    expected_operator = {
+        "script": "scripts/operate_accuracy_v2_p5_external_dispatch.py",
+        "preflight_read_only": True,
+        "deployment_mode": "DISABLED_ONLY",
+        "cloudformation_capability": "CAPABILITY_IAM",
+        "secret_metadata_probe": "DescribeSecret",
+        "secret_value_read": False,
+        "schedule_enable_supported": False,
+    }
+    for key, expected in expected_operator.items():
+        if operator.get(key) != expected:
+            errors.append(f"operator.{key} must be {expected!r}")
 
     frozen = contract.get("p5_frozen_invariants") or {}
     expected_frozen = {

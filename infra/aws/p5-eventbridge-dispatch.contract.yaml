@@ -57,3 +57,11 @@ deployment:
   deployed: false
   local_aws_runtime_verified: false
   end_to_end_github_runner_start_guaranteed: false
+operator:
+  script: scripts/operate_accuracy_v2_p5_external_dispatch.py
+  preflight_read_only: true
+  deployment_mode: DISABLED_ONLY
+  cloudformation_capability: CAPABILITY_IAM
+  secret_metadata_probe: DescribeSecret
+  secret_value_read: false
+  schedule_enable_supported: false

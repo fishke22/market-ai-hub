@@ -14,6 +14,8 @@ on:
       - "infra/aws/p5-eventbridge-dispatch.yaml"
       - "scripts/validate_accuracy_v2_p5_external_dispatch.py"
       - "tests/test_accuracy_v2_p5_external_dispatch.py"
+      - "scripts/operate_accuracy_v2_p5_external_dispatch.py"
+      - "tests/test_accuracy_v2_p5_external_dispatch_operator.py"
   workflow_dispatch:
     inputs:
       mode:

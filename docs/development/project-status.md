@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 P5 external deploy/readiness operator
+
+- Runtime preflight after explicit user approval: AWS CLI absent, project venv boto3 absent, no AWS/P5/GitHub deployment env, region unresolved, authorization secret ARN absent. Result=`BLOCKED`; deployment_performed=false; secret_value_read=false.
+- Added `scripts/operate_accuracy_v2_p5_external_dispatch.py` with three actions only: `preflight`, `deploy-disabled`, `inspect`. No enable action exists. Disabled deploy requires explicit confirmation, `CAPABILITY_IAM`, and `ScheduleState=DISABLED`.
+- Readiness uses STS identity plus Secrets Manager `DescribeSecret` metadata only; it never retrieves secret values. Inspect validates the completed CloudFormation stack and both disabled EventBridge rules/targets/retry/DLQ/role/input without reading connection credentials.
+- Contract/operator tests=`12 passed`; affected cross-regression=`24 passed`; direct CLI fail-closed preflight=PASS; workflow YAML parse=PASS. Runtime build remains `426583a3e6f2f27e`; no full suite rerun.
+- Deployment remains `ENGINEERING_READY_NOT_DEPLOYED / P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`. No predictive/calibration/edge claim changes.
+
+
 ## 2026-09-30 P5 external punctual-dispatch engineering package
 
 - Separate worktree base=`origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6`; dirty primary checkout and PR #76 are not modified.

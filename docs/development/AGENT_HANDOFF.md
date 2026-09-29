@@ -2,6 +2,15 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 P5 external deploy/readiness operator — ENGINEERING_READY_RUNTIME_BLOCKED
+
+User explicitly authorized continuing the external punctual-dispatch work. Runtime preflight on this worktree found no usable AWS execution path: AWS CLI absent from PATH, project venv has no boto3, no AWS/P5/GitHub deployment environment variables are present, and no region or Secrets Manager authorization ARN is configured. Therefore no AWS stack, secret, rule, API Destination, or schedule was created/modified, and deployment is not claimed.
+
+Added `scripts/operate_accuracy_v2_p5_external_dispatch.py` as a fail-closed operator. `preflight` validates the source-controlled contract, resolves AWS CLI/identity/region, and uses only `secretsmanager describe-secret` metadata; it never calls `GetSecretValue`. `deploy-disabled` requires an explicit `--confirm-disabled-deploy`, uses CloudFormation `CAPABILITY_IAM`, and hard-codes `ScheduleState=DISABLED`; there is intentionally no enable action. `inspect` verifies CloudFormation completion plus both EventBridge rules/targets/retry/DLQ/role/input while requiring both rules to remain disabled. Source contract now records `deployment_mode=DISABLED_ONLY`, `secret_value_read=false`, and `schedule_enable_supported=false`.
+
+Validation after this package: external-dispatch contract/operator tests=`12 passed`; affected P5 cloud/operator/root-allowlist/build-freeze cross-regression=`24 passed`; direct CLI fail-closed preflight=PASS; workflow YAML parse=PASS. Runtime source/config build remains `426583a3e6f2f27e`; no full suite repeated. Keep `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED` until an authorized AWS runtime/account plus existing secret ARN are actually available, the disabled stack is deployed/inspected, and a later noncanonical smoke plus real scheduled observation is completed.
+
+
 ### 2026-09-30 P5 external punctual-dispatch IaC — ENGINEERING_READY_NOT_DEPLOYED
 
 A separate isolated worktree from `origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6` adds a no-secret external-trigger package without touching the dirty primary checkout or PR #76. The design is EventBridge scheduled rule -> API Destination -> existing GitHub `workflow_dispatch(mode=scheduled)`. Source-controlled schedules exactly mirror the existing cloud workflow slots: 07:40 Asia/Taipei = `cron(40 23 ? * SUN-THU *)` UTC, and 08:15 = `cron(15 0 ? * MON-FRI *)`. The P5 08:05 canonical origin, <=15m lateness, no-backfill, public-source-only and append-only gates are unchanged.

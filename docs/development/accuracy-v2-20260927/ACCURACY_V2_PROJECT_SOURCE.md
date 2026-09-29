@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：P5 external deploy/readiness operator
+
+- 使用者明示同意繼續施工後，實際 runtime preflight 顯示 AWS CLI 不在 PATH、project venv 無 boto3、沒有 AWS/P5/GitHub deployment env、region 未設定、Secrets Manager authorization ARN 未提供，因此真實部署**沒有執行**。不得把本包寫成上線證據。
+- 新增 `scripts/operate_accuracy_v2_p5_external_dispatch.py`：`preflight` 只做 offline contract + STS identity + region + Secrets Manager `DescribeSecret` metadata；不讀 `GetSecretValue`。只有 `deploy-disabled` 能改 AWS，且需 `--confirm-disabled-deploy`、`CAPABILITY_IAM`、固定 `ScheduleState=DISABLED`；另有 read-only `inspect`。沒有 enable subcommand。
+- Machine-readable contract 新增 `deployment_mode=DISABLED_ONLY`、`secret_value_read=false`、`schedule_enable_supported=false`。Inspect 必須驗證 stack complete、兩個 rules 都 DISABLED、cron/target/input/retry/DLQ/role 一致；否則 fail-closed。
+- Frozen P5 08:05 / lateness<=15m / no-backfill / public-source-only / append-only / no broker-recorder-order / no auto-promotion 完全不變。維持 `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`、`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`。
+- 驗收：contract/operator tests=`12 passed`；affected cross-regression=`24 passed`；direct CLI fail-closed preflight=PASS；workflow YAML parse=PASS；runtime build=`426583a3e6f2f27e`。不重跑 full suite。
+
+
 ## 2026-09-30 可替換快照：P5 external punctual-dispatch IaC
 
 - 以 `origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6` 的獨立 worktree 施工，不碰 dirty primary checkout，也不把此議題混入 PR #76。新增 EventBridge scheduled rule -> API Destination -> GitHub `workflow_dispatch(mode=scheduled)` 的 no-secret IaC、machine-readable contract、offline validator/test。
