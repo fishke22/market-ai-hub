@@ -1,5 +1,19 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-29 P5 punctual external trigger assessment
+
+- GitHub native schedule is still operationally insufficient for the frozen 08:05/<=08:15 canonical window; no lateness gate or no-backfill rule changed.
+- Preferred external-dispatch design: EventBridge scheduled rule -> API Destination -> GitHub `workflow_dispatch(mode=scheduled)`. Official EventBridge semantics are one-minute schedule resolution/within-minute execution with guaranteed occurrence; connection credentials are managed outside the repo. Existing P5 workflow needs no public API change.
+- Not deployed: this host has neither AWS CLI nor boto3/botocore and therefore no real external trigger smoke was possible. Even a successful EventBridge dispatch would not guarantee GitHub-hosted runner start latency. Status remains `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`; no credential/token was added to Git or workflow files.
+
+## 2026-09-29 PR #76 local validation / adapter hardening
+
+- Primary checkout was preserved dirty at `codex/vnext-audit-handoff@b4648448`, build `cb7557cf53fcfec9`; PR #76 work used the existing clean managed worktree at exact base `4fe8967b82224b9df38b403eab8f95f1ce7c2025`.
+- Host runtime: Yuanta=`SAFE_DEFAULT_OWNER_HEALTHY`, exact resolver=`JNU2612`, live night=`JNUPM2612`; current 2026-09-29 night coverage is intentionally incomplete (`open_boundary_observed=false`, `coverage_complete=false`, `label_ready=false`). Chronos-2 pinned CUDA univariate+PIT past-only covariates PASS. TimesFM-3 pinned CUDA research-only univariate+past-only PASS with `local_files_only=true`; serving remains license-blocked. MCP stdio=27 tools and health/system build match.
+- Exact official settlement path remains separate from live trading: direct `JNU2610` latest 2026-09-28 settlement=65,485, target=`NEXT_PUBLISHED_SETTLEMENT_OBSERVATION`; live descriptive trading path=`JNU2612/JNUPM2612`. Strong direction/calibrated probability/trading edge/order/account/broker mutation remain disabled.
+- PR #76 hardening: authority enum validation, six allowed ledger horizons, Acceptance explicit finite-level gate, lossless five-dimension evidence index, and componentwise local-validation states. No vote/weight was introduced and validation claims remain hard false.
+- Final PR worktree source/config build=`3adcadee17390cfc`. Focused integration=`49 passed, 11 warnings`; content-equivalent pre-EOF-normalization full offline excluding only the known live Yuanta owner-mutex and isolated TimesFM-cache tests=`2224 passed, 7 skipped, 25 deselected, 152 warnings`, exit 0. No predictive/calibration/economic promotion follows from these tests.
+
 ## 2026-09-28 P5 first canonical-origin operational miss / hotfix
 
 - 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.

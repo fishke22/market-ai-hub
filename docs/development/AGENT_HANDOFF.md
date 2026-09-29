@@ -1,6 +1,24 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
+## 2026-09-29 P5 external punctual-dispatch assessment
+
+GitHub native `schedule` remains an operational blocker: the 2026-09-29 scheduled runs completed successfully but started too late for the frozen canonical window, so no origin was backfilled and the lateness gate was not relaxed. Official GitHub documentation explicitly permits scheduled-event delay and even dropped queued jobs under high Actions load.
+
+The strongest low-cost external-dispatch candidate is an Amazon EventBridge **scheduled rule -> API Destination -> GitHub `workflow_dispatch`** path. EventBridge documents scheduled rules as running within one minute of the configured start and delivery type `guaranteed` (each expected time at least once); API Destinations can POST public HTTPS endpoints and store connection authorization in an EventBridge-managed Secrets Manager secret. GitHub's dispatch endpoint requires Actions write permission; the existing P5 workflow already supports `workflow_dispatch` with `mode=scheduled`. Two UTC rules can cover 07:40/07:45 and 08:05/08:15 Asia/Taipei without changing the P5 lateness/no-backfill gates.
+
+This has **not been deployed or claimed solved**. The current host has no AWS CLI and no boto3/botocore, and no external AWS account/runtime was available for a real AWS->GitHub trigger smoke. More importantly, punctual dispatch acceptance does not provide an end-to-end SLA for GitHub-hosted runner start time. Keep `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`; the candidate removes dependence on the home PC but cannot truthfully guarantee canonical execution by itself.
+
 ## Latest design: Accuracy v2 (2026-09-27)
+
+### 2026-09-29 PR #76 host validation + three-engine contract hardening
+
+PR #76 exact base `4fe8967b82224b9df38b403eab8f95f1ce7c2025` was re-opened only in its clean WebCodex managed worktree; the dirty primary checkout was not modified. The local host remained `codex/vnext-audit-handoff@b4648448` with source/config build `cb7557cf53fcfec9`. Yuanta owner preflight was `SAFE_DEFAULT_OWNER_HEALTHY`, runtime/disk build matched, login code was `0001`, dropped_records=0, persistence_error=null and no broker action occurred. FunctionList resolved the 2026-09-29 live Micro contract as `JNU2612`; the live night identity is `JNUPM2612` / contract month `202612`. The 2026-09-29 night materialized session is correctly incomplete because the recorder did not observe the 17:00 JST boundary: `open_boundary_observed=false`, `coverage_complete=false`, `label_ready=false`; do not promote this to a complete label.
+
+Host model verification used the existing cache with Hugging Face offline. Chronos-2 `chronos-forecasting==2.3.2` loaded on CUDA at pinned revision `29ec3766d36d6f73f0696f85560a422f50e8498c`; univariate and PIT-provenance past-only-covariate inference passed, future covariates remain blocked. TimesFM `timesfm==3.0.2`, `google/timesfm-3.0-pytorch`, revision `43046b85ec22d584a13f8098c2ed39c889e129c2` loaded on CUDA only through `PERSONAL_NONCOMMERCIAL_NONPRODUCTION_RESEARCH`, `local_files_only=true`; univariate and past-only-covariate inference passed. Serving use remains blocked by the non-commercial/non-production weight license.
+
+JNU product roles remain separate. The governed direct settlement series is exact `JNU2610` with 2026-09-28 official settlement 65,485 and target `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION`; its current model path is Chronos-only because TimesFM serving is license-blocked, and remains `WEAK_UNVALIDATED` / `not_trading_edge=true`. The live trading-path product is `JNU2612/JNUPM2612`, `DESCRIPTIVE_DECISION_SUPPORT_ONLY`, with orders/account/broker mutation disabled. MCP stdio enumerated 27 tools, health/system build both `cb7557cf53fcfec9`; capability truth remains predictive_gain=false, calibrated_probability=false, trading_edge=false and live_trading=false.
+
+PR #76 now fail-closes unsupported directional/confidence/regime enums, outcome horizons outside `1h|4h|session_close|next_session|1d|5d`, and Acceptance claims without an explicit finite level. Fusion still always emits `ABSTAIN`; full engine records are retained and a supplemental lossless index separates `STRUCTURE/QUANT/MACRO/EVENT_RISK/DATA_QUALITY` without voting or weights. Local validation is componentwise rather than a blanket pass. Final isolated source/config build=`3adcadee17390cfc`; isolated focused integration=`49 passed, 11 warnings`; content-equivalent pre-EOF-normalization full offline (deselecting only the known live-owner mutex and isolated TimesFM-cache tests)=`2224 passed, 7 skipped, 25 deselected, 152 warnings`, exit 0. These are runtime/engineering results only; `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
 
 ### 2026-09-28 P5 public-source cloud automation package
 
