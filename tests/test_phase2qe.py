@@ -19,7 +19,7 @@ ALLOWED_ROOT_FILES = {
 }
 
 ALLOWED_ROOT_DIRS = {
-    ".github", "config", "docs", "research", "examples", "external", "scripts",
+    ".github", "config", "docs", "research", "examples", "external", "infra", "scripts",
     "skills", "cherry_skills", "src", "tests", "vendor",
     "data",  # 預設 DATA_ROOT（僅 .gitkeep tracked，runtime data 皆 gitignored）
 }
