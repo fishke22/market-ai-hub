@@ -1,0 +1,59 @@
+schema: AV2.P5.EXTERNAL_DISPATCH.1
+status: ENGINEERING_READY_NOT_DEPLOYED
+provider: AWS_EVENTBRIDGE_SCHEDULED_RULE_API_DESTINATION
+purpose: EXTERNAL_PUNCTUAL_DISPATCH_ONLY
+repository:
+  owner: fishke22
+  name: market-ai-hub
+  workflow_file: p5-cloud-public-forward.yml
+  ref: main
+dispatch:
+  method: POST
+  endpoint_template: https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches
+  body:
+    ref: main
+    inputs:
+      mode: scheduled
+authentication:
+  connection_type: API_KEY_HEADER
+  header_name: Authorization
+  secret_store: AWS_SECRETS_MANAGER
+  secret_json_key: authorization
+  required_secret_value_format: Bearer <fine-grained-token>
+  github_fine_grained_permission: Actions:write
+  committed_secret_value: false
+schedules:
+  prewarm:
+    asia_taipei: "07:40"
+    utc: "23:40 previous calendar day"
+    eventbridge_cron: "cron(40 23 ? * SUN-THU *)"
+  backup:
+    asia_taipei: "08:15"
+    utc: "00:15 same calendar day"
+    eventbridge_cron: "cron(15 0 ? * MON-FRI *)"
+rules:
+  default_state: DISABLED
+  retry:
+    maximum_event_age_seconds: 300
+    maximum_retry_attempts: 3
+  dead_letter_queue: true
+p5_frozen_invariants:
+  canonical_origin_asia_taipei: "08:05"
+  max_lateness_minutes: 15
+  no_backfill: true
+  public_sources_only: true
+  append_only_state: true
+  broker_used: false
+  recorder_touched: false
+  order_action: false
+claims:
+  predictive_gain: false
+  calibrated: false
+  trading_edge: false
+deployment:
+  requires_aws_account: true
+  requires_existing_github_authorization_secret: true
+  requires_explicit_schedule_enable: true
+  deployed: false
+  local_aws_runtime_verified: false
+  end_to_end_github_runner_start_guaranteed: false

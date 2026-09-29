@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：P5 external punctual-dispatch IaC
+
+- 以 `origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6` 的獨立 worktree 施工，不碰 dirty primary checkout，也不把此議題混入 PR #76。新增 EventBridge scheduled rule -> API Destination -> GitHub `workflow_dispatch(mode=scheduled)` 的 no-secret IaC、machine-readable contract、offline validator/test。
+- 外部排程固定對齊既有 P5 cloud slots：07:40 Asia/Taipei = `cron(40 23 ? * SUN-THU *)` UTC；08:15 = `cron(15 0 ? * MON-FRI *)`。CloudFormation 預設 `ScheduleState=DISABLED`，每次 target event age 上限 300 秒、最多 3 retries、SQS DLQ。GitHub fine-grained token 只允許存在 AWS Secrets Manager；repo 只接受 secret ARN dynamic reference。
+- Frozen P5 protocol 完全不變：canonical origin=08:05、lateness<=15m、receipt/PIT、attempt cap、no-backfill、public-source-only、append-only state、no broker/recorder/order、no auto-promotion。Native GitHub schedule 保留為 fallback。
+- 這是 `ENGINEERING_READY_NOT_DEPLOYED`，不是已上線證據；本機無可用 AWS runtime/account，因此沒有真實 EventBridge->GitHub scheduled smoke，也不能保證 hosted runner start deadline。維持 `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`、`PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`。
+- 驗收：offline validator=`PASS`；external-dispatch tests=`6 passed`；affected P5 cloud/engine/protocol/capability/build-freeze cross-regression=`34 passed`；workflow YAML parse=`PASS`。本包不改 runtime source/config，build 維持 `426583a3e6f2f27e`；不重跑 full suite。
+
+
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 2026-09-28 P5 public-source cloud automation

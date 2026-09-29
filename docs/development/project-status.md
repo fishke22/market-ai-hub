@@ -1,5 +1,15 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 P5 external punctual-dispatch engineering package
+
+- Separate worktree base=`origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6`; dirty primary checkout and PR #76 are not modified.
+- Added disabled-by-default EventBridge scheduled-rule/API-Destination CloudFormation, a machine-readable external-dispatch contract, offline validator, tests and architecture documentation. GitHub authorization is an existing Secrets Manager ARN/dynamic reference only; no token or AWS credential is source controlled.
+- Exact external slots: 07:40 Asia/Taipei -> `cron(40 23 ? * SUN-THU *)`; 08:15 -> `cron(15 0 ? * MON-FRI *)`. Retry is max 300 seconds / 3 attempts with SQS DLQ. Existing native GitHub schedules remain unchanged as fallback.
+- Frozen P5 semantics remain 08:05 origin, <=15m lateness, no backfill, public-source-only and append-only state. External dispatch cannot promote predictive/calibration/edge claims.
+- Deployment/runtime evidence remains pending: no AWS account/CLI is used by this package and GitHub runner-start punctuality is not guaranteed. Status remains `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`.
+- Validation: offline validator=`PASS`; new tests=`6 passed`; affected P5 cross-regression=`34 passed`; workflow YAML parse=`PASS`; runtime build remains `426583a3e6f2f27e`. No full suite rerun.
+
+
 ## 2026-09-28 P5 first canonical-origin operational miss / hotfix
 
 - 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.
