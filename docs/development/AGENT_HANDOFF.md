@@ -2,6 +2,26 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 P5 external deploy/readiness operator — ENGINEERING_READY_RUNTIME_BLOCKED
+
+User explicitly authorized continuing the external punctual-dispatch work. Runtime preflight on this worktree found no usable AWS execution path: AWS CLI absent from PATH, project venv has no boto3, no AWS/P5/GitHub deployment environment variables are present, and no region or Secrets Manager authorization ARN is configured. Therefore no AWS stack, secret, rule, API Destination, or schedule was created/modified, and deployment is not claimed.
+
+Added `scripts/operate_accuracy_v2_p5_external_dispatch.py` as a fail-closed operator. `preflight` validates the source-controlled contract, resolves AWS CLI/identity/region, and uses only `secretsmanager describe-secret` metadata; it never calls `GetSecretValue`. `deploy-disabled` requires an explicit `--confirm-disabled-deploy`, uses CloudFormation `CAPABILITY_IAM`, and hard-codes `ScheduleState=DISABLED`; there is intentionally no enable action. `inspect` verifies CloudFormation completion plus both EventBridge rules/targets/retry/DLQ/role/input while requiring both rules to remain disabled. Source contract now records `deployment_mode=DISABLED_ONLY`, `secret_value_read=false`, and `schedule_enable_supported=false`.
+
+Validation after this package: external-dispatch contract/operator tests=`12 passed`; affected P5 cloud/operator/root-allowlist/build-freeze cross-regression=`24 passed`; direct CLI fail-closed preflight=PASS; workflow YAML parse=PASS. Runtime source/config build remains `426583a3e6f2f27e`; no full suite repeated. Keep `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED` until an authorized AWS runtime/account plus existing secret ARN are actually available, the disabled stack is deployed/inspected, and a later noncanonical smoke plus real scheduled observation is completed.
+
+
+### 2026-09-30 P5 external punctual-dispatch IaC — ENGINEERING_READY_NOT_DEPLOYED
+
+A separate isolated worktree from `origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6` adds a no-secret external-trigger package without touching the dirty primary checkout or PR #76. The design is EventBridge scheduled rule -> API Destination -> existing GitHub `workflow_dispatch(mode=scheduled)`. Source-controlled schedules exactly mirror the existing cloud workflow slots: 07:40 Asia/Taipei = `cron(40 23 ? * SUN-THU *)` UTC, and 08:15 = `cron(15 0 ? * MON-FRI *)`. The P5 08:05 canonical origin, <=15m lateness, no-backfill, public-source-only and append-only gates are unchanged.
+
+`infra/aws/p5-eventbridge-dispatch.yaml` is disabled by default and requires only the ARN of an out-of-band AWS Secrets Manager JSON secret whose `authorization` value is `Bearer <fine-grained-token>`; no token/AWS credential is committed. The EventBridge connection uses that dynamic secret, the invocation role is scoped to `events:InvokeApiDestination` on the single P5 destination, each rule has a 300-second/3-attempt retry cap and an encrypted SQS DLQ. `infra/aws/p5-eventbridge-dispatch.contract.yaml` plus `scripts/validate_accuracy_v2_p5_external_dispatch.py` make these invariants testable without AWS CLI/account access.
+
+Deployment is **not** claimed. The local host still has no usable AWS runtime/account evidence, schedules remain source-default `DISABLED`, and EventBridge dispatch punctuality does not guarantee GitHub-hosted runner start time. Keep `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED` until an explicit external deployment and real scheduled dispatch are observed. `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
+Validation: offline validator=`PASS`; new external-dispatch tests=`6 passed`; affected P5 cloud/engine/protocol/capability/build-freeze cross-regression=`34 passed`; workflow YAML parse=`PASS`. Runtime source/config build remains `426583a3e6f2f27e`; no full suite was repeated.
+
+
 ### 2026-09-28 P5 public-source cloud automation package
 
 User authorized construction of a P5/JPX path that does not require the home Windows/Yuanta runtime at 08:05. The implementation is isolated from the dirty primary checkout. `.github/workflows/p5-cloud-public-forward.yml` uses a minimal CPU/public-data dependency set, an ephemeral `MARKET_AI_DATA_ROOT`, JPX public-history bootstrap, and the existing frozen P5 engine. The workflow defines **smoke-only** behavior for pull-request events and cannot create canonical predictions or production state there; however, this first PR that introduces the brand-new workflow did not receive a separate P5-cloud workflow run, so pre-merge evidence is the empty-root live smoke plus the repository's existing CI. After manual merge to the default branch, scheduled runs are defined at **07:40 Asia/Taipei** for public-data pre-warm before the frozen 08:05 origin and **08:15 Asia/Taipei** as the existing in-window backup. GitHub schedule execution remains default-branch-only; no automatic merge is performed.

@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Accuracy v2 P5 external punctual-dispatch candidate. Creates disabled-by-default
+  EventBridge scheduled rules that POST GitHub workflow_dispatch through an API
+  Destination. GitHub authorization stays in an existing Secrets Manager secret.
+
+Parameters:
+  GitHubAuthorizationSecretArn:
+    Type: String
+    Description: >-
+      ARN of an existing Secrets Manager JSON secret. Key "authorization" must
+      contain "Bearer <fine-grained-token>" with Actions:write only for this repo.
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$"
+  GitHubOwner:
+    Type: String
+    Default: fishke22
+  GitHubRepository:
+    Type: String
+    Default: market-ai-hub
+  GitHubWorkflowFile:
+    Type: String
+    Default: p5-cloud-public-forward.yml
+  GitHubRef:
+    Type: String
+    Default: main
+  GitHubApiVersion:
+    Type: String
+    Default: "2026-03-10"
+  ScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+      - DISABLED
+      - ENABLED
+    Description: >-
+      Keep DISABLED until the external account, secret, and noncanonical dispatch
+      smoke are explicitly verified.
+
+Resources:
+  P5GitHubConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      AuthorizationType: API_KEY
+      Description: GitHub Actions workflow_dispatch authorization for P5 only.
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: Authorization
+          ApiKeyValue:
+            Fn::Sub: "{{resolve:secretsmanager:${GitHubAuthorizationSecretArn}:SecretString:authorization}}"
+        InvocationHttpParameters:
+          HeaderParameters:
+            - Key: Accept
+              Value: application/vnd.github+json
+              IsValueSecret: false
+            - Key: X-GitHub-Api-Version
+              Value:
+                Ref: GitHubApiVersion
+              IsValueSecret: false
+            - Key: User-Agent
+              Value: MARKET_AI_HUB-P5-EventBridge
+              IsValueSecret: false
+
+  P5GitHubDispatchDestination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      ConnectionArn:
+        Fn::GetAtt:
+          - P5GitHubConnection
+          - Arn
+      Description: GitHub workflow_dispatch endpoint for public-source P5.
+      HttpMethod: POST
+      InvocationEndpoint:
+        Fn::Sub: >-
+          https://api.github.com/repos/${GitHubOwner}/${GitHubRepository}/actions/workflows/${GitHubWorkflowFile}/dispatches
+      InvocationRateLimitPerSecond: 1
+
+  P5EventBridgeInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeP5GitHubApiDestination
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: events:InvokeApiDestination
+                Resource:
+                  Fn::GetAtt:
+                    - P5GitHubDispatchDestination
+                    - Arn
+
+  P5DispatchDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  P5DispatchDeadLetterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - Ref: P5DispatchDeadLetterQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridgeDeadLetters
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource:
+              Fn::GetAtt:
+                - P5DispatchDeadLetterQueue
+                - Arn
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+              ArnLike:
+                aws:SourceArn:
+                  Fn::Sub: arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/*
+
+  P5PrewarmDispatchRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: 07:40 Asia/Taipei prewarm dispatch (23:40 UTC SUN-THU).
+      ScheduleExpression: "cron(40 23 ? * SUN-THU *)"
+      State:
+        Ref: ScheduleState
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - P5GitHubDispatchDestination
+              - Arn
+          Id: P5GitHubPrewarmDispatch
+          RoleArn:
+            Fn::GetAtt:
+              - P5EventBridgeInvokeRole
+              - Arn
+          Input:
+            Fn::Sub: '{"ref":"${GitHubRef}","inputs":{"mode":"scheduled"}}'
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 300
+            MaximumRetryAttempts: 3
+          DeadLetterConfig:
+            Arn:
+              Fn::GetAtt:
+                - P5DispatchDeadLetterQueue
+                - Arn
+
+  P5BackupDispatchRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: 08:15 Asia/Taipei backup dispatch (00:15 UTC MON-FRI).
+      ScheduleExpression: "cron(15 0 ? * MON-FRI *)"
+      State:
+        Ref: ScheduleState
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - P5GitHubDispatchDestination
+              - Arn
+          Id: P5GitHubBackupDispatch
+          RoleArn:
+            Fn::GetAtt:
+              - P5EventBridgeInvokeRole
+              - Arn
+          Input:
+            Fn::Sub: '{"ref":"${GitHubRef}","inputs":{"mode":"scheduled"}}'
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 300
+            MaximumRetryAttempts: 3
+          DeadLetterConfig:
+            Arn:
+              Fn::GetAtt:
+                - P5DispatchDeadLetterQueue
+                - Arn
+
+Outputs:
+  ScheduleState:
+    Value:
+      Ref: ScheduleState
+  GitHubConnectionArn:
+    Value:
+      Fn::GetAtt:
+        - P5GitHubConnection
+        - Arn
+  ApiDestinationArn:
+    Value:
+      Fn::GetAtt:
+        - P5GitHubDispatchDestination
+        - Arn
+  PrewarmRuleArn:
+    Value:
+      Fn::GetAtt:
+        - P5PrewarmDispatchRule
+        - Arn
+  BackupRuleArn:
+    Value:
+      Fn::GetAtt:
+        - P5BackupDispatchRule
+        - Arn
+  DeadLetterQueueUrl:
+    Value:
+      Ref: P5DispatchDeadLetterQueue

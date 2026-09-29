@@ -1,5 +1,24 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 P5 external deploy/readiness operator
+
+- Runtime preflight after explicit user approval: AWS CLI absent, project venv boto3 absent, no AWS/P5/GitHub deployment env, region unresolved, authorization secret ARN absent. Result=`BLOCKED`; deployment_performed=false; secret_value_read=false.
+- Added `scripts/operate_accuracy_v2_p5_external_dispatch.py` with three actions only: `preflight`, `deploy-disabled`, `inspect`. No enable action exists. Disabled deploy requires explicit confirmation, `CAPABILITY_IAM`, and `ScheduleState=DISABLED`.
+- Readiness uses STS identity plus Secrets Manager `DescribeSecret` metadata only; it never retrieves secret values. Inspect validates the completed CloudFormation stack and both disabled EventBridge rules/targets/retry/DLQ/role/input without reading connection credentials.
+- Contract/operator tests=`12 passed`; affected cross-regression=`24 passed`; direct CLI fail-closed preflight=PASS; workflow YAML parse=PASS. Runtime build remains `426583a3e6f2f27e`; no full suite rerun.
+- Deployment remains `ENGINEERING_READY_NOT_DEPLOYED / P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`. No predictive/calibration/edge claim changes.
+
+
+## 2026-09-30 P5 external punctual-dispatch engineering package
+
+- Separate worktree base=`origin/main@93a12302f9f3efa30c61a9d740c389fc308ab9b6`; dirty primary checkout and PR #76 are not modified.
+- Added disabled-by-default EventBridge scheduled-rule/API-Destination CloudFormation, a machine-readable external-dispatch contract, offline validator, tests and architecture documentation. GitHub authorization is an existing Secrets Manager ARN/dynamic reference only; no token or AWS credential is source controlled.
+- Exact external slots: 07:40 Asia/Taipei -> `cron(40 23 ? * SUN-THU *)`; 08:15 -> `cron(15 0 ? * MON-FRI *)`. Retry is max 300 seconds / 3 attempts with SQS DLQ. Existing native GitHub schedules remain unchanged as fallback.
+- Frozen P5 semantics remain 08:05 origin, <=15m lateness, no backfill, public-source-only and append-only state. External dispatch cannot promote predictive/calibration/edge claims.
+- Deployment/runtime evidence remains pending: no AWS account/CLI is used by this package and GitHub runner-start punctuality is not guaranteed. Status remains `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`.
+- Validation: offline validator=`PASS`; new tests=`6 passed`; affected P5 cross-regression=`34 passed`; workflow YAML parse=`PASS`; runtime build remains `426583a3e6f2f27e`. No full suite rerun.
+
+
 ## 2026-09-28 P5 first canonical-origin operational miss / hotfix
 
 - 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.
