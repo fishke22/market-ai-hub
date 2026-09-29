@@ -1,5 +1,11 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-29 P5 punctual external trigger assessment
+
+- GitHub native schedule is still operationally insufficient for the frozen 08:05/<=08:15 canonical window; no lateness gate or no-backfill rule changed.
+- Preferred external-dispatch design: EventBridge scheduled rule -> API Destination -> GitHub `workflow_dispatch(mode=scheduled)`. Official EventBridge semantics are one-minute schedule resolution/within-minute execution with guaranteed occurrence; connection credentials are managed outside the repo. Existing P5 workflow needs no public API change.
+- Not deployed: this host has neither AWS CLI nor boto3/botocore and therefore no real external trigger smoke was possible. Even a successful EventBridge dispatch would not guarantee GitHub-hosted runner start latency. Status remains `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`; no credential/token was added to Git or workflow files.
+
 ## 2026-09-29 PR #76 local validation / adapter hardening
 
 - Primary checkout was preserved dirty at `codex/vnext-audit-handoff@b4648448`, build `cb7557cf53fcfec9`; PR #76 work used the existing clean managed worktree at exact base `4fe8967b82224b9df38b403eab8f95f1ce7c2025`.

@@ -1,5 +1,11 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-29 可替換快照：P5 外部準時 dispatch 評估
+
+- 9/29 GitHub native `schedule` 的實際 queue/execution 延遲已證明不能當 canonical punctuality 保證；frozen 08:05 origin、<=08:15 lateness、no-backfill、public-source-only、append-only state 全部不變。
+- 低成本候選為 Amazon EventBridge scheduled rule -> API Destination -> GitHub `workflow_dispatch(mode=scheduled)`。理由是 EventBridge 官方對 scheduled rule 明載一分鐘內執行與每個預期時間至少一次，而 GitHub dispatch API/既有 workflow 已能接 `mode=scheduled`。Connection authorization 應留在雲端 secret，不進 repo。
+- 目前未施工上線：本機無 AWS CLI、無 boto3/botocore，沒有可驗證的外部 AWS runtime，因此不能做真實 AWS->GitHub smoke；且 GitHub hosted-runner queue 仍無 end-to-end start-time 保證。`P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`，不宣稱問題已解決。
+
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 2026-09-29 PR #76 local runtime evidence + Three-Engine adapter hardening

@@ -1,5 +1,13 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
+## 2026-09-29 P5 external punctual-dispatch assessment
+
+GitHub native `schedule` remains an operational blocker: the 2026-09-29 scheduled runs completed successfully but started too late for the frozen canonical window, so no origin was backfilled and the lateness gate was not relaxed. Official GitHub documentation explicitly permits scheduled-event delay and even dropped queued jobs under high Actions load.
+
+The strongest low-cost external-dispatch candidate is an Amazon EventBridge **scheduled rule -> API Destination -> GitHub `workflow_dispatch`** path. EventBridge documents scheduled rules as running within one minute of the configured start and delivery type `guaranteed` (each expected time at least once); API Destinations can POST public HTTPS endpoints and store connection authorization in an EventBridge-managed Secrets Manager secret. GitHub's dispatch endpoint requires Actions write permission; the existing P5 workflow already supports `workflow_dispatch` with `mode=scheduled`. Two UTC rules can cover 07:40/07:45 and 08:05/08:15 Asia/Taipei without changing the P5 lateness/no-backfill gates.
+
+This has **not been deployed or claimed solved**. The current host has no AWS CLI and no boto3/botocore, and no external AWS account/runtime was available for a real AWS->GitHub trigger smoke. More importantly, punctual dispatch acceptance does not provide an end-to-end SLA for GitHub-hosted runner start time. Keep `P5_CLOUD_PUNCTUAL_TRIGGER=UNRESOLVED`; the candidate removes dependence on the home PC but cannot truthfully guarantee canonical execution by itself.
+
 ## Latest design: Accuracy v2 (2026-09-27)
 
 ### 2026-09-29 PR #76 host validation + three-engine contract hardening
