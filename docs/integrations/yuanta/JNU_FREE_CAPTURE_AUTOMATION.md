@@ -4,6 +4,25 @@
 
 ## 可變開機時段（重要）
 
+## 給你直接看的 Live Brief
+
+watchdog 會同步更新兩份檔案：
+
+- `research/jnu_live_capture_brief.json`
+- `research/jnu_live_capture_brief_zh_tw.md`
+
+繁中 brief 會直接整理：
+
+- 現在是否仍在錄製，以及 verified 開始/最後健康時間。
+- 差分基準是否涵蓋整段 window；若中途才上線，會寫明「不倒算、不補造」。
+- 目前這段新增 trades、DealVol、window VWAP、5 分鐘 bars。
+- session 最新價、observed range、session VWAP（明確標成 session context，不冒充 window-specific）。
+- microstructure 是否 live verified、dropped records、persistence error。
+- 為什麼尚未 `FULL_SESSION_LABEL_READY`。
+- 現在可以研究什麼、不能宣稱什麼。
+
+這份 brief 不會自行補勝率、機率、精準進出場、口數或下單建議。
+
 ## Capture window 研究摘要
 
 除了 coverage ledger，watchdog 也會自動更新：

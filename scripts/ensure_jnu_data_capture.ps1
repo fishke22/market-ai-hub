@@ -7,6 +7,7 @@ $PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
 $ForceStopScript = Join-Path $PSScriptRoot "force_stop_stale_yuanta_recorder.ps1"
 $CoverageScript = Join-Path $PSScriptRoot "update_jnu_capture_coverage.py"
 $ResearchSummaryScript = Join-Path $PSScriptRoot "update_jnu_capture_research_summary.py"
+$BriefScript = Join-Path $PSScriptRoot "update_jnu_capture_brief.py"
 
 $RecorderRoot = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root; print(recorder_root())"
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve recorder root" }
@@ -38,6 +39,7 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
         }
         & $Python -B $CoverageScript --recorder-root $RecorderRoot --classification $Classification --runtime-build-id $runtimeBuild | Out-Null
         & $Python -B $ResearchSummaryScript --recorder-root $RecorderRoot | Out-Null
+        & $Python -B $BriefScript --recorder-root $RecorderRoot | Out-Null
     } catch {}
 }
 

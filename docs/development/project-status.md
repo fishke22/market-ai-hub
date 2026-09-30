@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 JNU human-readable live brief
+
+- Watchdog now emits `research/jnu_live_capture_brief.json` plus `research/jnu_live_capture_brief_zh_tw.md`, derived from the governed window summary.
+- Brief reports active/closed state, verified interval, baseline completeness, data-health flags, window trade/DealVol/VWAP/new-bars, and separately labelled session latest/range/VWAP context.
+- It explains label blockers in Traditional Chinese and lists what can be researched versus what cannot be claimed. Predictive gain/calibrated probability/trading edge/order action remain hard false; no personalized trade instructions are generated.
+- Live proof at ~18:35 Asia/Taipei: same PID 16204, microstructure verified, dropped=0, persistence_error=null; JNU2612 delta=652 trades / DealVol 3,446 / window VWAP~67,196.14, session latest=67,210; JNU2703 delta=26 / volume 43 / window VWAP~67,424.19.
+- Focused regression=`37 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
 ## 2026-09-30 JNU capture-window research summary
 
 - The watchdog now snapshots materializer counters per verified capture window and emits `research/jnu_capture_window_summary.json`. Window metrics are deltas from that window's baseline, so earlier whole-session trades/volume are not misattributed.

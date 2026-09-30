@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：JNU human-readable live brief
+
+- watchdog 現在從 governed capture-window summary 自動產生 `research/jnu_live_capture_brief.json` 與繁中 `research/jnu_live_capture_brief_zh_tw.md`，不另掃全量 Parquet，因此沿用相同 no-backfill / window-delta 語義。
+- 給非技術使用者的 brief 會直接說明：目前錄製中或已結束、verified window 時間、差分基準是否覆蓋整段、microstructure/drop/persistence 健康、每個 JNU 合約的 window trades/DealVol/VWAP，以及明確標成 session-level 的最新價/range/VWAP context。
+- brief 會用繁中列出 full-session label blockers、目前可做的研究與不能宣稱/不能做的事項；硬鎖 `predictive_gain=false / calibrated_probability=false / trading_edge=false / order_action=false`，不產生個人化進出場/部位/下單指令。
+- 約 18:35 Asia/Taipei 實機仍為 PID 16204、microstructure verified、dropped=0、persistence_error=null。基準 18:27:23 晚於 window start，因此 brief 明寫不倒算。當時 JNU2612 window delta=652 trades / DealVol 3446 / VWAP≈67,196.14、session latest=67,210；JNU2703 delta=26 / volume 43 / VWAP≈67,424.19。只屬 descriptive/context。
+- focused regression=`37 passed, 1 deselected`；build=`a0ac8fdb8f218c39`。
+
+
 ## 2026-09-30 可替換快照：JNU capture-window research summary
 
 - 每個 verified capture window 現在記錄 materializer counter baseline/latest，研究數值採**視窗差分**，不把開機前的整個夜盤累積誤算進 18:55–22:00 或其他實際開機區段。

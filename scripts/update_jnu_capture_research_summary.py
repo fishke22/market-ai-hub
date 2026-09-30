@@ -69,6 +69,15 @@ def _session_delta(
             "usable_as_context": bool(session.get("usable_as_context")),
             "full_session_label_ready": full_label,
             "label_block_reasons": reasons,
+            "session_context": {
+                "latest_price": session.get("latest_price"),
+                "observed_high": session.get("observed_high"),
+                "observed_low": session.get("observed_low"),
+                "session_vwap": session.get("session_vwap"),
+                "opening_range_high": session.get("opening_range_high"),
+                "opening_range_low": session.get("opening_range_low"),
+                "opening_range_complete": session.get("opening_range_complete"),
+            },
         }
 
     trades = max(0, _integer(end.get("trade_count")) - _integer(base.get("trade_count")))
@@ -93,6 +102,15 @@ def _session_delta(
         "usable_as_context": bool(session.get("usable_as_context")) and trades > 0,
         "full_session_label_ready": full_label,
         "label_block_reasons": reasons,
+        "session_context": {
+            "latest_price": session.get("latest_price"),
+            "observed_high": session.get("observed_high"),
+            "observed_low": session.get("observed_low"),
+            "session_vwap": session.get("session_vwap"),
+            "opening_range_high": session.get("opening_range_high"),
+            "opening_range_low": session.get("opening_range_low"),
+            "opening_range_complete": session.get("opening_range_complete"),
+        },
     }
 
 
