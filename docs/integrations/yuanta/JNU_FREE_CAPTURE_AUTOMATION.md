@@ -4,6 +4,23 @@
 
 ## 可變開機時段（重要）
 
+## 研究 Artifact 刷新狀態
+
+`automation_watchdog.json` 現在會另外寫入 `artifact_refresh`，讓研究輸出失敗不再被靜默忽略。
+
+刷新順序固定為：
+
+`coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`
+
+若某一步失敗：
+
+- `artifact_refresh.status = ERROR`
+- 記錄 `failed_step` 與 `failed_exit_code`（或 exception type）
+- 所有依賴該上游的後續步驟列入 `skipped_steps`
+- recorder 本身不會因此停止、logout、relogin 或執行 broker action
+
+如果整條鏈成功，`artifact_refresh.status = PASS`。若刷新途中程序被中斷，先前寫入的 `RUNNING` 狀態會留下，避免舊 artifact 被誤認成剛更新成功。
+
 ## 一個 market session 一列的研究 View
 
 系統現在也會自動更新：

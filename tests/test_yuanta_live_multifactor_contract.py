@@ -169,6 +169,35 @@ def test_stale_owner_force_stop_is_separate_and_fail_closed():
     assert watchdog.index(graceful_call) < watchdog.index(force_call)
 
 
+def test_watchdog_artifact_refresh_is_dependency_ordered_and_fail_honest():
+    text = (ROOT / "scripts" / "ensure_jnu_data_capture.ps1").read_text(
+        encoding="utf-8"
+    )
+    start = text.index("function Write-WatchdogState")
+    end = text.index("if (Test-Path $C23StatePath)")
+    block = text[start:end]
+    expected_order = [
+        'Name = "coverage"',
+        'Name = "research_summary"',
+        'Name = "live_brief"',
+        'Name = "closed_window_dataset"',
+        'Name = "window_rollup"',
+        'Name = "market_session_view"',
+    ]
+    positions = [block.index(token) for token in expected_order]
+    assert positions == sorted(positions)
+    assert 'status = "RUNNING"' in block
+    assert '$artifactRefresh.status = "PASS"' in block
+    assert '$artifactRefresh.status = "ERROR"' in block
+    assert "$artifactRefresh.failed_step = $step.Name" in block
+    assert "$artifactRefresh.failed_exit_code = $stepExitCode" in block
+    assert "$artifactRefresh.skipped_steps += $step.Name" in block
+    assert "$stepExitCode = $LASTEXITCODE" in block
+    assert "catch {}" not in block
+    assert "Stop-Process" not in block
+    assert "stop_yuanta_live_recorder.ps1" not in block
+
+
 def test_owner_preflight_is_read_only_parent_child_aware_and_fail_closed():
     text = (ROOT / "scripts" / "check_yuanta_recorder_owner.ps1").read_text(encoding="utf-8")
     assert "status.pid" in text

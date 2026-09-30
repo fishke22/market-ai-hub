@@ -18,6 +18,14 @@ $StatePath = Join-Path $RecorderRoot "automation_watchdog.json"
 $C23StatePath = Join-Path $RecorderRoot "automation\c23_terminal_close.json"
 
 function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
+    $artifactRefresh = [ordered]@{
+        status = "RUNNING"
+        completed_steps = @()
+        failed_step = $null
+        failed_exit_code = $null
+        failure_type = $null
+        skipped_steps = @()
+    }
     $payload = [ordered]@{
         version = 1
         checked_at = (Get-Date).ToUniversalTime().ToString("o")
@@ -29,24 +37,86 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
         quote_only = $true
         broker_order_action = $false
         jnu_microstructure_requested = $true
+        artifact_refresh = $artifactRefresh
     }
     $tmp = $StatePath + ".tmp"
-    $payload | ConvertTo-Json -Depth 4 | Set-Content -Path $tmp -Encoding UTF8
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $tmp -Encoding UTF8
     Move-Item -Force -LiteralPath $tmp -Destination $StatePath
-    try {
-        $runtimeBuild = ""
-        if (Test-Path (Join-Path $RecorderRoot "status.json")) {
-            try {
-                $runtimeBuild = [string]((Get-Content (Join-Path $RecorderRoot "status.json") -Raw -Encoding UTF8 | ConvertFrom-Json).runtime_build_id)
-            } catch {}
+
+    $runtimeBuild = ""
+    if (Test-Path (Join-Path $RecorderRoot "status.json")) {
+        try {
+            $runtimeBuild = [string]((Get-Content (Join-Path $RecorderRoot "status.json") -Raw -Encoding UTF8 | ConvertFrom-Json).runtime_build_id)
+        } catch {
+            $payload["runtime_build_read_error"] = $_.Exception.GetType().Name
         }
-        & $Python -B $CoverageScript --recorder-root $RecorderRoot --classification $Classification --runtime-build-id $runtimeBuild | Out-Null
-        & $Python -B $ResearchSummaryScript --recorder-root $RecorderRoot | Out-Null
-        & $Python -B $BriefScript --recorder-root $RecorderRoot | Out-Null
-        & $Python -B $DatasetScript --recorder-root $RecorderRoot | Out-Null
-        & $Python -B $RollupScript --recorder-root $RecorderRoot | Out-Null
-        & $Python -B $SessionViewScript --recorder-root $RecorderRoot | Out-Null
-    } catch {}
+    }
+
+    $artifactSteps = @(
+        [pscustomobject]@{
+            Name = "coverage"
+            Script = $CoverageScript
+            Arguments = @("--recorder-root", $RecorderRoot, "--classification", $Classification, "--runtime-build-id", $runtimeBuild)
+        },
+        [pscustomobject]@{
+            Name = "research_summary"
+            Script = $ResearchSummaryScript
+            Arguments = @("--recorder-root", $RecorderRoot)
+        },
+        [pscustomobject]@{
+            Name = "live_brief"
+            Script = $BriefScript
+            Arguments = @("--recorder-root", $RecorderRoot)
+        },
+        [pscustomobject]@{
+            Name = "closed_window_dataset"
+            Script = $DatasetScript
+            Arguments = @("--recorder-root", $RecorderRoot)
+        },
+        [pscustomobject]@{
+            Name = "window_rollup"
+            Script = $RollupScript
+            Arguments = @("--recorder-root", $RecorderRoot)
+        },
+        [pscustomobject]@{
+            Name = "market_session_view"
+            Script = $SessionViewScript
+            Arguments = @("--recorder-root", $RecorderRoot)
+        }
+    )
+
+    $artifactFailed = $false
+    foreach ($step in $artifactSteps) {
+        if ($artifactFailed) {
+            $artifactRefresh.skipped_steps += $step.Name
+            continue
+        }
+        try {
+            $stepArgs = [object[]]$step.Arguments
+            & $Python -B $step.Script @stepArgs | Out-Null
+            $stepExitCode = $LASTEXITCODE
+            if ($stepExitCode -ne 0) {
+                $artifactRefresh.status = "ERROR"
+                $artifactRefresh.failed_step = $step.Name
+                $artifactRefresh.failed_exit_code = $stepExitCode
+                $artifactFailed = $true
+            } else {
+                $artifactRefresh.completed_steps += $step.Name
+            }
+        } catch {
+            $artifactRefresh.status = "ERROR"
+            $artifactRefresh.failed_step = $step.Name
+            $artifactRefresh.failure_type = $_.Exception.GetType().Name
+            $artifactFailed = $true
+        }
+    }
+    if (-not $artifactFailed) {
+        $artifactRefresh.status = "PASS"
+    }
+
+    $tmp = $StatePath + ".tmp"
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $tmp -Encoding UTF8
+    Move-Item -Force -LiteralPath $tmp -Destination $StatePath
 }
 
 if (Test-Path $C23StatePath) {
