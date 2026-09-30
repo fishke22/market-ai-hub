@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-10-01 可替換快照：JNU market-session research view
+
+- 新增 `research/jnu_market_session_view.json` 與繁中 view；來源只使用 immutable CLOSED-window dataset。
+- 以 `session + session_start_date` 產生「一個 market session 一列」的研究 view，PC 開關切段只保留成 window/gap metadata，不增加獨立樣本數。
+- 真實資料目前為 2 capture windows -> 1 個 `NIGHT|2026-09-30` market-session row；verified capture=109.77 分鐘；兩段間 gap=11,413.84 秒；`segmented_capture=true`；不假設兩段統計獨立。
+- JNU2612 聚合 capture trades=8,393 / DealVol=48,376 / VWAP≈67,555.38；JNU2703=260 / 388 / ≈67,775.46。兩者 `market_session_full_session_label_ready=false`，不因多段資料拼接而升格完整 session。
+- 實機 direct CLI 曾抓到 `scripts.*` import path 問題，已改成 script 內聚的小 helper 並重新通過；focused regression=`50 passed, 1 deselected`。predictive/calibrated/edge claims 仍 false。
+
+
 ## 2026-10-01 可替換快照：JNU closed-window rollup
 
 - 真實 immutable dataset 已有 2 筆 CLOSED rows，兩筆都逐筆用 governed summary 重建並取得相同 canonical hash，沒有資料漂移。

@@ -2,6 +2,15 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-01 JNU one-row-per-market-session research view
+
+Added `research/jnu_market_session_view.json` and `research/jnu_market_session_view_zh_tw.md`, deterministically derived from the immutable CLOSED-window dataset. The view groups by `session + session_start_date`, so downstream research consumes one row per market session rather than one row per PC-on interval. Segmented capture explicitly sets `statistical_independence_between_windows_assumed=false`.
+
+The current live view has `capture_window_count=2` but `market_session_count=1`, yielding exactly one row: `NIGHT|2026-09-30`. It preserves 109.77 verified capture minutes and the 11,413.84-second gap between the two capture segments instead of pretending continuous coverage. JNU2612 aggregates 8,393 captured trades / DealVol 48,376 / capture VWAP ~67,555.38; JNU2703 aggregates 260 / 388 / ~67,775.46. Both remain `market_session_full_session_label_ready=false` because the session is segmented and neither source window is full-session ready.
+
+A runtime-path defect was caught during live execution: direct invocation of the session-view script could not import another `scripts.*` module because repo root was not on `sys.path`. The script now owns its two tiny canonical helpers locally, and both focused tests and direct CLI execution pass. Focused regression=`50 passed, 1 deselected`. Predictive gain, calibrated probability and trading edge remain false.
+
+
 ### 2026-10-01 JNU closed-window rollup + first real immutable rows
 
 The long-term capture dataset now has **2 real CLOSED rows** from the 2026-09-30 NIGHT market session. Both rows were independently re-derived from the governed window summary and their canonical hashes matched exactly, confirming the append-only dataset has not drifted. Window 1 is 18:13:21–18:58:21 Asia/Taipei, closed because the owner became `SAFE_DEFAULT_OWNER_DEGRADED`; its delta baseline was adopted after the window started, so `metrics_complete_from_window_start=false`. Window 2 is 22:08:35–23:13:21, with a true window-start counter snapshot and `metrics_complete_from_window_start=true`.

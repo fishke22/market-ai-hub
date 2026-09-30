@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-01 JNU market-session research view
+
+- Added `research/jnu_market_session_view.json` + Traditional-Chinese markdown, derived only from immutable CLOSED-window rows.
+- Grouping key is `session + session_start_date`; downstream analysis gets one row per market session, not one row per PC-on window.
+- Live result: 2 capture windows -> 1 `NIGHT|2026-09-30` market-session row; verified capture=109.77 min; inter-window gap=11,413.84 sec; segmented_capture=true; independence between windows is not assumed.
+- JNU2612 aggregated capture=8,393 trades / DealVol 48,376 / VWAP~67,555.38; JNU2703=260 / 388 / ~67,775.46. Both market-session full-label flags remain false.
+- Direct CLI execution exposed and fixed a script import-path bug; focused regression=`50 passed, 1 deselected`.
+
+
 ## 2026-10-01 JNU closed-window rollup
 
 - The first real immutable dataset evidence is now present: `jnu_capture_window_dataset.json` has 2 CLOSED rows from one 2026-09-30 NIGHT market session. Both row hashes exactly match the current governed summary.
