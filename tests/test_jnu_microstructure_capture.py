@@ -55,11 +55,15 @@ def test_jnu_microstructure_pairs_are_exact_and_bounded():
     cfg = {"jnu_microstructure": {"enabled": True, "market_no": 207, "code_prefix": "JNU", "max_contracts": 2}}
     pairs = [
         (207, "JNU2612", "ose_micro"),
+        (207, "JNUPM2612", "ose_micro"),
         (207, "JNU2703", "ose_micro"),
+        (207, "JNUPM2703", "ose_micro"),
         (207, "JNU_CONT", "bad"),
         (203, "NQ_202612", "nq"),
     ]
     assert R._jnu_microstructure_pairs(cfg, pairs) == [
         (207, "JNU2612", "ose_micro"),
+        (207, "JNUPM2612", "ose_micro"),
         (207, "JNU2703", "ose_micro"),
+        (207, "JNUPM2703", "ose_micro"),
     ]

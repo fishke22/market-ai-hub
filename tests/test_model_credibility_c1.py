@@ -109,7 +109,7 @@ def test_ts_oos_validation_uses_same_origin_information_for_model_and_naive():
     result = run_ts_oos_validation(
         LastSeen(), "last-seen-model", "X", closes, n_origins=10, history_len=20
     )
-    assert result["validation_schema_version"] == "2"
+    assert result["validation_schema_version"] == "3"
     assert result["eval"]["model"]["mase"] == pytest.approx(1.0)
     pair = result["paired_vs_last_price_naive"]
     assert pair["common_origin_count"] == 10
@@ -139,6 +139,37 @@ def test_ts_oos_drift_baseline_uses_only_each_origin_context():
         result["eval"]["model"]["mae"]
     )
     assert result["eval"]["beats_drift_mae"] is False
+
+
+@pytest.mark.parametrize("steps", [1, 2, 4, 5, 10])
+def test_ts_oos_validation_is_horizon_specific(steps):
+    from market_ai_hub.services.validation import run_ts_oos_validation
+
+    seen = []
+
+    class LastSeenPath:
+        def predict(self, series, horizon=1):
+            seen.append(horizon)
+            last = float(series.iloc[-1])
+            vals = [last] * horizon
+            return {"path": {"p10": vals, "p50": vals, "p90": vals}}
+
+    idx = pd.date_range("2026-01-01", periods=90, freq="D", tz="UTC")
+    closes = pd.Series(np.arange(90, dtype=float) + 100.0, index=idx)
+    result = run_ts_oos_validation(
+        LastSeenPath(),
+        "last-seen-path",
+        "X",
+        closes,
+        n_origins=10,
+        history_len=20,
+        horizon_steps=steps,
+    )
+    assert result["status"] == "OK"
+    assert result["horizon_steps"] == steps
+    assert result["eval"]["horizon_steps"] == steps
+    assert result["eval"]["model"]["mase"] == pytest.approx(1.0)
+    assert set(seen) == {steps}
 
 
 def test_random_walk_respects_horizon_in_both_baseline_paths():

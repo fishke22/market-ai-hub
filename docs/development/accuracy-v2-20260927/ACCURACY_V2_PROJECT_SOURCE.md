@@ -1,5 +1,16 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：zero-cost JNU live evidence path
+
+- 使用者新增永久硬限制：**永不付費**，並要求假設永遠不建立 AWS 帳戶時系統仍可達成原始目的。因此 AWS/EventBridge 降級為 optional；本機 Windows Task Scheduler、既有 GitHub/public-source fallback 與 quote-only SPARK 才是預設 continuity path。雲端缺席只影響 punctuality/availability，不得阻塞本機 forward/context evidence 累積。
+- `MARKET_AI_HUB_JNU_Capture_Watchdog` 已由舊 18:55–22:00 wrapper 改成 source-controlled 每 5 分鐘 task（Interactive/Limited、StartWhenAvailable、IgnoreNew），action=`ensure_jnu_data_capture.ps1`。2026-09-30 16:33:18 Asia/Taipei 由 Windows Task Scheduler 自行恢復 single owner，preflight=`SAFE_DEFAULT_OWNER_HEALTHY`，沒有 duplicate owner、沒有 broker action。
+- quote-only bounded reconnect 正式 live adoption：`yuanta_live_recorder.yaml version=2026-09-30`、`auto_reconnect.enabled=true`、max_attempts=3、bounded backoff；仍是 full-runtime replacement，且與 tick-detail maintenance 互斥。
+- 新增／接續 `JNU.SESSION.MATERIALIZED.2`：StockTick callback 直接增量物化 exact-contract DAY/NIGHT session、5m bars、DealVol/trade count、VWAP、range/profile、MFE/MAE、boundary coverage。只有 open+close boundary 都觀察到才 `label_ready=true`；partial session 不得回填、不得升格正式 label。
+- 今日主機晚於 16:00 開盤才可用；JNU2612 first retained night event=16:05:53 Asia/Taipei，所以 `open_boundary_observed=false / coverage_complete=false / label_ready=false`。16:33 descriptive snapshot：577 verified StockTick trades、DealVol=2435、range=67,350–67,510、VWAP≈67,413.46；只作 live research context。
+- 修正 live materializer freshness race：production live call 用實際 artifact read time 評估 freshness，顯式 `now=` replay 維持 pinned。修正前可能因 concurrent persist 產生負 age 而誤判 STALE；修正後實機=`FRESH / used=true / fallback_to_bounded_parquet=false`。
+- build=`a0ac8fdb8f218c39`；驗收：focused `30 passed`、build-freeze `3 passed`、affected selector `107 passed, 1 deselected`。不重跑 full suite。維持 `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`，無 account/position/balance/order action。
+
+
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 2026-09-28 P5 public-source cloud automation

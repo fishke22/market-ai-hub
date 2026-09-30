@@ -102,6 +102,7 @@ def validate_jnu_direct_history(
     contract_month: str = "",
     *,
     force: bool = False,
+    horizon_steps: int = 1,
 ) -> dict[str, Any]:
     """Rolling-origin historical diagnostic for exact-contract settlement forecasts.
 
@@ -118,7 +119,10 @@ def validate_jnu_direct_history(
     series, meta = load_direct_micro_settlements(contract_month)
     if meta.get("status") != "OK":
         return {"status": "DATA_NOT_READY", "models": {}, "data": meta}
-    required = DIRECT_VALIDATION_HISTORY_LEN + DIRECT_VALIDATION_ORIGINS + 2
+    steps = int(horizon_steps)
+    if steps < 1:
+        raise ValueError("horizon_steps must be >= 1")
+    required = DIRECT_VALIDATION_HISTORY_LEN + DIRECT_VALIDATION_ORIGINS + steps - 1
     if len(series) < required:
         return {
             "status": "INSUFFICIENT_HISTORY",
@@ -130,6 +134,7 @@ def validate_jnu_direct_history(
     symbol = f"{meta['quote_code']}_SETTLEMENT"
     store = TsValidationStore()
     models: dict[str, Any] = {}
+    model_availability: list[dict[str, Any]] = []
     for name, factory in (("chronos-2", get_chronos), ("timesfm-3.0", get_timesfm)):
         cached = None if force else store.latest(name, symbol)
         result = (cached or {}).get("result") if cached else None
@@ -139,21 +144,47 @@ def validate_jnu_direct_history(
             and result.get("window", {}).get("end") == meta["latest_date"]
             and int(result.get("history_len", 0)) == DIRECT_VALIDATION_HISTORY_LEN
             and int(result.get("n_origins", 0)) == DIRECT_VALIDATION_ORIGINS
+            and int(result.get("horizon_steps", 0)) == steps
         )
         if not current:
-            result = run_ts_oos_validation(
-                factory(),
-                name,
-                symbol,
-                series,
-                n_origins=DIRECT_VALIDATION_ORIGINS,
-                history_len=DIRECT_VALIDATION_HISTORY_LEN,
-            )
+            try:
+                result = run_ts_oos_validation(
+                    factory(),
+                    name,
+                    symbol,
+                    series,
+                    n_origins=DIRECT_VALIDATION_ORIGINS,
+                    history_len=DIRECT_VALIDATION_HISTORY_LEN,
+                    horizon_steps=steps,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # A governance-blocked or unloadable model must not abort the other
+                # models' historical validation. Mirror analyze_jnu_direct's
+                # model_availability pattern: record UNAVAILABLE with the reason and
+                # continue. The purpose gate itself stays fail-closed (TimesFM-3
+                # weights remain RESEARCH-only and are never loaded on a serving path).
+                reason = type(exc).__name__
+                model_availability.append(
+                    {"model": name, "status": "UNAVAILABLE", "reason": reason})
+                models[name] = {
+                    "status": "MODEL_UNAVAILABLE",
+                    "n_oos": 0,
+                    "mase": None,
+                    "direction_accuracy": None,
+                    "beats_last_price_naive": False,
+                    "beats_drift": False,
+                    "paired_vs_last_price_naive": None,
+                    "window_end": None,
+                    "horizon_steps": steps,
+                    "reasons": [f"model unavailable: {reason}"],
+                }
+                continue
             status, reasons = determine_validation_status(result)
             if result.get("status") == "OK":
                 store.save(result, status, run_kind="RUNTIME_VALIDATION")
         else:
             status, reasons = determine_validation_status(result)
+        model_availability.append({"model": name, "status": "AVAILABLE"})
 
         ev = (result or {}).get("eval", {})
         models[name] = {
@@ -165,6 +196,7 @@ def validate_jnu_direct_history(
             "beats_drift": bool(ev.get("beats_drift_mae", False)),
             "paired_vs_last_price_naive": (result or {}).get("paired_vs_last_price_naive"),
             "window_end": (result or {}).get("window", {}).get("end"),
+            "horizon_steps": int((result or {}).get("horizon_steps", steps) or steps),
             "reasons": reasons,
         }
 
@@ -180,6 +212,9 @@ def validate_jnu_direct_history(
         "status": "OK",
         "overall": overall,
         "models": models,
+        "model_availability": model_availability,
+        "horizon_steps": steps,
+        "target_semantics": "EXACT_CONTRACT_TERMINAL_SETTLEMENT_AT_REQUESTED_HORIZON",
         "all_models_beat_last_price_naive": bool(beats) and all(beats),
         "any_model_beats_last_price_naive": any(beats),
         "scope": "HISTORICAL_OOS_ONLY",
@@ -329,6 +364,17 @@ def _model_result(adapter, name: str, series: pd.Series, steps: int, target_date
         raise ValueError("model returned incomplete path")
     last = float(series.iloc[-1])
     terminal = float(p50[-1])
+    forecast_path = {
+        "semantics": "PUBLISHED_SETTLEMENT_PATH_QUANTILES",
+        "target_dates": list(target_dates),
+        "p10": [float(x) for x in p10],
+        "p50": [float(x) for x in p50],
+        "p90": [float(x) for x in p90],
+        "not_intraday_high_low": True,
+        "not_support_resistance": True,
+        "not_touch_probability": True,
+        "not_first_passage_probability": True,
+    }
     return {
         "model": name,
         "p10": float(p10[-1]) if len(p10) >= steps else None,
@@ -336,6 +382,8 @@ def _model_result(adapter, name: str, series: pd.Series, steps: int, target_date
         "p90": float(p90[-1]) if len(p90) >= steps else None,
         "expected_return": (terminal - last) / last if last else 0.0,
         "target_dates": list(target_dates),
+        "forecast_path": forecast_path,
+        "terminal_value_semantics": "FINAL_STEP_OF_PUBLISHED_SETTLEMENT_PATH",
         "validation": "UNVALIDATED",
     }
 
@@ -495,7 +543,7 @@ def analyze_jnu_direct(
     }
     stance = _stance(ensemble["expected_return"])
     historical_validation = (
-        validate_jnu_direct_history(str(meta["contract_month"]))
+        validate_jnu_direct_history(str(meta["contract_month"]), horizon_steps=steps)
         if validate_history
         else {"status": "NOT_RUN"}
     )
@@ -728,10 +776,11 @@ def jnu_user_summary(result: dict[str, Any], *, calibration_status: dict[str, An
             "綜合預測": f"{ens['p50']:,.0f} 點" if ens.get("p50") is not None else "目前無法提供",
             "研究方向": stance_text,
             "預測變動": f"{ens['expected_return'] * 100:+.2f}%" if ens.get("expected_return") is not None else "目前無法提供",
-            "參考範圍": (
+            "終端清算價統計參考範圍": (
                 f"{ens['p10']:,.0f} ～ {ens['p90']:,.0f} 點"
                 if ens.get("p10") is not None and ens.get("p90") is not None else "目前無法提供"
             ),
+            "範圍語義": "這是預測 horizon 最後一步的清算價統計區間，不是盤中最高／最低、支撐壓力或觸價機率。",
             "可信度": "低信心研究參考" if preq_blocked or preq_low_confidence or (
                 historical.get("status") == "OK" and not historical.get("any_model_beats_last_price_naive", False)
             )
