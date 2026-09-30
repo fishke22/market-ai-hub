@@ -4,6 +4,23 @@
 
 ## 可變開機時段（重要）
 
+## Closed window 長期研究資料集
+
+系統現在另外維護：
+
+`research/jnu_capture_window_dataset.json`
+
+規則很簡單：
+
+1. **正在錄製中的 ACTIVE window 不會進長期資料集。**
+2. 只有 window 已被誠實判定 CLOSED 才 append 一筆。
+3. 關閉時間使用最後一次 verified healthy 時間，不用下次開機時間假裝前次關機時間。
+4. 每一筆 closed row 固定保存當時最後一次 verified session context；同一夜盤之後的新行情不能回頭改寫舊 row。
+5. 既有 `window_id` 若內容想被改寫，系統回報 `IMMUTABILITY_CONFLICT`，不覆寫原資料。
+6. 舊格式若沒有足夠的 interval-local snapshot，只留在即時 summary，不硬升格進長期資料集。
+
+因此目前你電腦還開著、JNU 還在錄製時，dataset 的 `row_count=0` 是正確的；等這段 capture window 真正結束後才會產生第一筆 immutable row。
+
 ## 給你直接看的 Live Brief
 
 watchdog 會同步更新兩份檔案：

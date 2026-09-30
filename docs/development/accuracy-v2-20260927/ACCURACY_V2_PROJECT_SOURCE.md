@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：append-only JNU closed-window dataset
+
+- 新增 `research/jnu_capture_window_dataset.json`，只收 **CLOSED verified capture windows**；ACTIVE window 絕不提前定案。
+- coverage ledger 每次 verified healthy sample 都保存 `session_context_latest`，research summary 對 closed window 固定使用 `INTERVAL_LAST_VERIFIED_HEALTHY`。因此同一官方夜盤之後重新開機、繼續收到新 tick，也不能回頭改寫舊 capture window 的 latest/context/label 狀態。
+- dataset 以 `window_id` 做 semantic append-only；既有 row 若遇到不同內容，回報 `IMMUTABILITY_CONFLICT` 並保持檔案不變。沒有 interval-local snapshot 的 legacy closed window 不升格入庫。
+- 實機目前 window 仍 ACTIVE，因此 dataset 已建立但 `row_count=0`；這是正確結果。等未來 watchdog 看到 >8 分鐘 gap，舊 window 只在舊 `last_healthy_at` 關閉後才 append 第一筆。
+- recorder PID 仍 16204；focused regression=`41 passed, 1 deselected`；build=`a0ac8fdb8f218c39`。不改 predictive/calibrated/edge claims。
+
+
 ## 2026-09-30 可替換快照：JNU human-readable live brief
 
 - watchdog 現在從 governed capture-window summary 自動產生 `research/jnu_live_capture_brief.json` 與繁中 `research/jnu_live_capture_brief_zh_tw.md`，不另掃全量 Parquet，因此沿用相同 no-backfill / window-delta 語義。
