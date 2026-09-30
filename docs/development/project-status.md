@@ -3,7 +3,7 @@
 ## 2026-09-30 P5 zero-cost punctuality fallback
 
 - AWS/EventBridge is optional and not required. Default stack is public GitHub standard runner + native GitHub cron + optional local Windows `gh` fallback when the PC is on.
-- Local fallback slots are 07:52 and 08:08 Asia/Taipei. It first lists today's main-branch P5 runs and skips dispatch when a native `schedule` or prior `local-zero-cost-fallback` run is active/successful. Otherwise it dispatches only `mode=scheduled`. Manual smoke runs are not treated as coverage.
+- Local fallback slots are 07:52 and 08:08 Asia/Taipei. It first lists today's main-branch P5 runs and skips dispatch when a native `schedule` run has actually started/succeeded, or a prior `local-zero-cost-fallback` is queued/active/succeeded. A merely queued native cron does not suppress fallback because queue delay is the failure being mitigated. Otherwise it dispatches only `mode=scheduled`. Manual smoke runs are not treated as coverage.
 - Existing workflow concurrency serializes overlapping runs; frozen P5 engine remains authoritative for max attempts=2, canonical 08:05 origin, <=15m lateness, no backfill and append-only audit.
 - Zero-cost guards: public repo required, standard `ubuntu-24.04` only, state artifact <=8 MiB / 7-day retention, PR/failure evidence 3-day retention, diagnostics <=2 MiB. No AWS, larger runner, paid API, broker/recorder/account/order dependency.
 - Registration remains dry-run/not installed from this isolated worktree. This package is engineering readiness, not evidence that local punctual fallback has run on a future canonical morning.

@@ -3,7 +3,7 @@
 ## 2026-09-30 可替換快照：P5 zero-cost punctuality fallback
 
 - 永不付費為硬限制；AWS/EventBridge 永久降級 optional。P5 預設可在完全沒有 AWS 帳戶的情況運作：public GitHub standard runner 原生 schedule 作 PC-off fallback，本機 Windows 開機時再由 `gh` CLI 做條件式補觸發。
-- 本機補觸發固定 07:52 / 08:08 Asia/Taipei；先查今日 main branch 的 P5 workflow runs，只把 native `schedule` 或 run-title 帶 `local-zero-cost-fallback` 的 active/success run 視為已覆蓋。沒有才送 `workflow_dispatch mode=scheduled`。手動 smoke 不會誤阻擋。
+- 本機補觸發固定 07:52 / 08:08 Asia/Taipei；先查今日 main branch 的 P5 workflow runs，只把 已實際 started/succeeded 的 native `schedule`，或 queued/active/succeeded 且 run-title 帶 `local-zero-cost-fallback` 的本機 fallback；單純 queued 的 native cron 不算已覆蓋 視為已覆蓋。沒有才送 `workflow_dispatch mode=scheduled`。手動 smoke 不會誤阻擋。
 - workflow 原有 concurrency group / `cancel-in-progress=false` 保留；P5 engine 原 frozen max-attempts=2、08:05 origin、lateness<=15m、PIT receipt、append-only、no-backfill 全部不變。
 - 零成本 fail-closed：repo 若變 private 就拒絕此 zero-cost workflow；只用 `ubuntu-24.04` standard runner；state artifact <=8 MiB、retention=7 days；PR/failure evidence retention=3 days、diagnostics<=2 MiB。沒有 AWS/larger runner/paid API/broker/recorder/account/order/model weights。
 - Task registration script 預設 dry-run；ephemeral worktree 不註冊 production task。只有合併到 primary/default branch 後才能在固定 canonical path 註冊。此包不改 `PREDICTIVE_GAIN=false / CALIBRATED=false / TRADING_EDGE=false`。

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, time, timedelta
+from datetime import datetime, time
 import json
 import subprocess
 from typing import Any
@@ -14,7 +14,8 @@ BRANCH = "main"
 LOCAL_MARKER = "local-zero-cost-fallback"
 WINDOW_START = time(7, 35)
 WINDOW_END = time(8, 19)
-ACTIVE_STATUSES = {"queued", "in_progress", "waiting", "pending", "requested"}
+LOCAL_ACTIVE_STATUSES = {"queued", "in_progress", "waiting", "pending", "requested"}
+NATIVE_STARTED_STATUSES = {"in_progress", "waiting"}
 GOOD_CONCLUSIONS = {"success"}
 
 
@@ -40,11 +41,22 @@ def relevant_run(rows: list[dict[str, Any]], *, now: datetime) -> dict[str, Any]
             continue
         event = str(row.get("event") or "")
         title = str(row.get("displayTitle") or "")
-        if event != "schedule" and LOCAL_MARKER not in title:
+        is_native = event == "schedule"
+        is_local = LOCAL_MARKER in title
+        if not is_native and not is_local:
             continue
         status = str(row.get("status") or "").lower()
         conclusion = str(row.get("conclusion") or "").lower()
-        if status in ACTIVE_STATUSES or conclusion in GOOD_CONCLUSIONS:
+        # A queued native cron is not punctuality evidence: queue delay is exactly
+        # what this fallback is meant to bypass. A prior local fallback, however,
+        # must suppress another local dispatch even while it is still queued.
+        if is_native and (
+            status in NATIVE_STARTED_STATUSES or conclusion in GOOD_CONCLUSIONS
+        ):
+            return row
+        if is_local and (
+            status in LOCAL_ACTIVE_STATUSES or conclusion in GOOD_CONCLUSIONS
+        ):
             return row
     return None
 

@@ -13,33 +13,30 @@ ROOT = Path(__file__).resolve().parents[1]
 TAIPEI = ZoneInfo("Asia/Taipei")
 
 
-def _run_row(*, event="schedule", status="queued", conclusion="", title="scheduled", hour=7, minute=40):
-    return {
-        "databaseId": 123,
-        "event": event,
-        "status": status,
-        "conclusion": conclusion,
-        "createdAt": f"2026-09-30T{hour-8 if hour >= 8 else hour+16:02d}:{minute:02d}:00Z",
-        "displayTitle": title,
-        "headBranch": "main",
-    }
-
-
-def test_relevant_run_accepts_native_schedule_or_local_marker_only():
+def test_relevant_run_distinguishes_delayed_native_queue_from_local_queue():
     now = datetime(2026, 9, 30, 7, 52, tzinfo=TAIPEI)
-    native = {
+    native_queued = {
         "databaseId": 1, "event": "schedule", "status": "queued", "conclusion": "",
         "createdAt": "2026-09-29T23:40:00Z", "displayTitle": "schedule",
     }
-    assert dispatch.relevant_run([native], now=now)["databaseId"] == 1
+    assert dispatch.relevant_run([native_queued], now=now) is None
+    native_started = dict(native_queued, databaseId=2, status="in_progress")
+    assert dispatch.relevant_run([native_started], now=now)["databaseId"] == 2
+
     manual_smoke = {
-        "databaseId": 2, "event": "workflow_dispatch", "status": "completed",
+        "databaseId": 3, "event": "workflow_dispatch", "status": "completed",
         "conclusion": "success", "createdAt": "2026-09-29T23:45:00Z",
         "displayTitle": "P5 Cloud Public Forward (manual)",
     }
     assert dispatch.relevant_run([manual_smoke], now=now) is None
-    local = dict(manual_smoke, databaseId=3, displayTitle=f"P5 ({dispatch.LOCAL_MARKER})")
-    assert dispatch.relevant_run([local], now=now)["databaseId"] == 3
+    local_queued = dict(
+        manual_smoke,
+        databaseId=4,
+        status="queued",
+        conclusion="",
+        displayTitle=f"P5 ({dispatch.LOCAL_MARKER})",
+    )
+    assert dispatch.relevant_run([local_queued], now=now)["databaseId"] == 4
 
 
 def test_dispatch_skips_existing_active_run(monkeypatch):
