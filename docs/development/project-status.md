@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-01 fail-honest JNU artifact refresh
+
+- Watchdog research refresh is now dependency-ordered and observable: coverage -> summary -> brief -> immutable dataset -> rollup -> market-session view.
+- `automation_watchdog.json` records `artifact_refresh.status`, completed steps, failed step/exit code or exception type, and skipped downstream steps. Silent artifact-refresh `catch {}` was removed.
+- Artifact failure never stops or relogs the quote-only recorder; it only prevents downstream research files from being regenerated from stale upstream evidence.
+- Negative validation: forced `research_summary` exit 7 after successful coverage; only the first two steps executed, four dependent steps were skipped, state reported ERROR, and broker_order_action remained false.
+- PowerShell parser PASS; focused regression=`51 passed, 1 deselected`.
+
+
 ## 2026-10-01 JNU market-session research view
 
 - Added `research/jnu_market_session_view.json` + Traditional-Chinese markdown, derived only from immutable CLOSED-window rows.

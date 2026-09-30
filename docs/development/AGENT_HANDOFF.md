@@ -2,6 +2,15 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-01 fail-honest JNU research artifact refresh
+
+The JNU watchdog research chain no longer hides downstream artifact failures behind an empty `catch {}`. `Write-WatchdogState` now records an `artifact_refresh` object with `RUNNING/PASS/ERROR`, completed steps, failed step, native exit code or exception type, and downstream skipped steps. Refresh order is dependency-safe: `coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`.
+
+A failed artifact step does **not** stop, logout, relogin, or otherwise mutate the quote-only recorder. It only stops downstream research refreshes that would otherwise consume stale upstream artifacts. The watchdog state is written once before the refresh begins and again with the terminal artifact-refresh result, so interrupted refreshes remain visible as `RUNNING` rather than silently looking successful.
+
+Validation includes PowerShell parser PASS, focused regression=`51 passed, 1 deselected`, and an isolated temp-root behavior test. In that negative test `coverage` passed and `research_summary` intentionally exited 7; the state recorded `failed_step=research_summary / failed_exit_code=7`, only those first two steps ran, and `live_brief/closed_window_dataset/window_rollup/market_session_view` were all skipped. `broker_order_action=false` remained unchanged.
+
+
 ### 2026-10-01 JNU one-row-per-market-session research view
 
 Added `research/jnu_market_session_view.json` and `research/jnu_market_session_view_zh_tw.md`, deterministically derived from the immutable CLOSED-window dataset. The view groups by `session + session_start_date`, so downstream research consumes one row per market session rather than one row per PC-on interval. Segmented capture explicitly sets `statistical_independence_between_windows_assumed=false`.

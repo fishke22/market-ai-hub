@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-10-01 可替換快照：JNU research artifact refresh fail-honest
+
+- watchdog 的研究 artifact chain 改為明確依賴順序：`coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`。
+- 不再以空白 `catch {}` 吞掉研究輸出錯誤；`automation_watchdog.json` 新增 `artifact_refresh`，記錄 RUNNING/PASS/ERROR、completed steps、failed step、exit code/exception type 與 skipped downstream steps。
+- 任一上游失敗後，下游不再使用舊 artifact 繼續刷新；但這個 fail-closed 僅作用於研究輸出，**不停止、不 logout、不 relogin recorder**。
+- 負測試刻意讓 `research_summary` exit 7：實際只執行 coverage 與 summary，brief/dataset/rollup/session-view 全部 skipped；state 正確記 `failed_step=research_summary`、`failed_exit_code=7`，且 `broker_order_action=false`。
+- PowerShell parser PASS；focused regression=`51 passed, 1 deselected`；不改 predictive/calibrated/edge claims。
+
+
 ## 2026-10-01 可替換快照：JNU market-session research view
 
 - 新增 `research/jnu_market_session_view.json` 與繁中 view；來源只使用 immutable CLOSED-window dataset。
