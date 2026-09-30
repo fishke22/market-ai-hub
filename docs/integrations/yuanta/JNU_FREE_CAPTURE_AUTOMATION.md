@@ -4,6 +4,24 @@
 
 ## 可變開機時段（重要）
 
+## 一個 market session 一列的研究 View
+
+系統現在也會自動更新：
+
+- `research/jnu_market_session_view.json`
+- `research/jnu_market_session_view_zh_tw.md`
+
+這份 view 是後續跨日研究的主要入口。規則：
+
+1. 以 `NIGHT/DAY + session_start_date` 合併同一市場 session。
+2. PC 開關造成的多段 capture 只記錄成 `capture_window_count` 與 inter-window gap，不會變成多個獨立樣本。
+3. 各 window 的 trades、DealVol、capture VWAP、5m bars 會在同一 market session 內聚合。
+4. segmented capture 不會因為拼接多段資料而升格成 `FULL_SESSION_LABEL_READY`。
+5. last verified context 只取該 market session 最後一個 verified window 的 context。
+6. 這仍是資料/context view，不評估方向準確率、校準機率或 trading edge。
+
+目前 2026-09-30 NIGHT：2 個 CLOSED windows -> 1 個 market-session row。
+
 ## 跨 capture window 品質摘要
 
 系統現在會從 immutable CLOSED-window dataset 自動更新：
