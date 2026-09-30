@@ -4,6 +4,25 @@
 
 ## 可變開機時段（重要）
 
+## 跨 capture window 品質摘要
+
+系統現在會從 immutable CLOSED-window dataset 自動更新：
+
+- `research/jnu_capture_window_rollup.json`
+- `research/jnu_capture_window_rollup_zh_tw.md`
+
+這個 rollup 特別避免一個常見誤判：**window 數量不等於獨立市場樣本數。** 如果同一個 NIGHT/DAY session 因為電腦開關被切成多段，系統會以 `session + session_start_date` 合併成同一個 market-session group。
+
+因此目前 2026-09-30 NIGHT 有 2 個 CLOSED capture windows，但只算 1 個 unique market session。rollup 會累積：
+
+- verified capture 分鐘與 baseline 完整度。
+- microstructure verified、dropped records、persistence error、broker-action 品質欄位。
+- 每個 JNU 合約的 capture trades、DealVol、volume-weighted capture VWAP、5m bars。
+- FULL_SESSION_LABEL_READY 視窗數。
+- 同一市場 session 被切成多 windows 的警示。
+
+這些是資料品質/覆蓋統計，不是方向準確率、校準機率或 trading edge。
+
 ## Closed window 長期研究資料集
 
 系統現在另外維護：
