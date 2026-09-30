@@ -1,4 +1,5 @@
 name: Accuracy v2 P5 Cloud Public Forward
+run-name: Accuracy v2 P5 (${{ github.event_name == 'workflow_dispatch' && inputs.dispatch_source || github.event_name }})
 
 on:
   pull_request:
@@ -9,6 +10,10 @@ on:
       - "scripts/run_accuracy_v2_p5_cloud_cycle.py"
       - "scripts/sync_accuracy_v2_p5_cloud_state.py"
       - "scripts/register_accuracy_v2_p5_cloud_sync_task.ps1"
+      - "scripts/dispatch_accuracy_v2_p5_zero_cost_fallback.py"
+      - "scripts/register_accuracy_v2_p5_zero_cost_fallback.ps1"
+      - "scripts/validate_accuracy_v2_p5_cloud_artifact_budget.py"
+      - "tests/test_accuracy_v2_p5_zero_cost_dispatch.py"
       - "tests/test_accuracy_v2_p5_cloud.py"
   workflow_dispatch:
     inputs:
@@ -20,6 +25,14 @@ on:
         options:
           - smoke
           - scheduled
+      dispatch_source:
+        description: "audit label for zero-cost/local fallback; does not change P5 gates"
+        required: false
+        default: manual
+        type: choice
+        options:
+          - manual
+          - local-zero-cost-fallback
   schedule:
     # Pre-warm before the frozen 08:05 origin. Early start absorbs Actions queue delay.
     - cron: "40 7 * * 1-5"
@@ -46,6 +59,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Verify zero-cost GitHub context
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$REPOSITORY_PRIVATE" = "false"
 
       - name: Configure ephemeral P5 data root
         shell: bash
@@ -89,12 +107,16 @@ jobs:
           assert manifest["public_sources_only"] is True
           PY
 
+      - name: Enforce zero-cost artifact budget
+        if: success()
+        run: python scripts/validate_accuracy_v2_p5_cloud_artifact_budget.py --root "$MARKET_AI_DATA_ROOT"
+
       - name: Upload valid P5 cloud state
         if: success() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.P5_CLOUD_ARTIFACT_NAME }}
-          retention-days: 30
+          retention-days: 7
           if-no-files-found: error
           path: |
             ${{ env.MARKET_AI_DATA_ROOT }}/audit/prediction_audit.duckdb
@@ -107,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: p5-cloud-pr-smoke-${{ github.run_id }}
-          retention-days: 14
+          retention-days: 3
           if-no-files-found: error
           path: |
             ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_run_summary.json
@@ -118,8 +140,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: p5-cloud-diagnostics-${{ github.run_id }}
-          retention-days: 14
+          retention-days: 3
           if-no-files-found: ignore
           path: |
-            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/
-            ${{ env.MARKET_AI_DATA_ROOT }}/automation/
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_run_summary.json
+            ${{ env.MARKET_AI_DATA_ROOT }}/cloud/p5_cloud_state_manifest.json
+            ${{ env.MARKET_AI_DATA_ROOT }}/automation/p5_forward_state.json

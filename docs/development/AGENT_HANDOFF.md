@@ -2,6 +2,17 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 zero-cost P5 punctuality fallback — AWS OPTIONAL
+
+Permanent operating constraint is zero paid services. P5 no longer treats AWS/EventBridge as required infrastructure. The default punctuality design is: (1) the existing public-repository GitHub scheduled workflow remains the PC-off fallback; (2) when the home Windows machine is on, a local Task Scheduler helper checks at 07:52 and 08:08 Asia/Taipei whether the current day's P5 workflow already has a native scheduled or prior local-fallback run that is active/successful; only if none exists does it issue `gh workflow run ... mode=scheduled dispatch_source=local-zero-cost-fallback`. Manual smoke dispatches do not suppress this check because workflow run titles carry an explicit dispatch-source marker.
+
+No new canonical-evidence rule is introduced. GitHub workflow concurrency remains one serialized group with `cancel-in-progress=false`; the frozen P5 engine still enforces max 2 attempts/local date, 08:05 nominal origin, <=15m lateness, receipt-before-origin, append-only audit and no backfill. The local helper does not access broker/account/recorder/order APIs and requires only an already authenticated free `gh` CLI session. If the PC is off, nothing local runs and native GitHub schedule remains the fallback.
+
+Zero-cost guards are machine-enforced: workflow uses standard `ubuntu-24.04` only, refuses the zero-cost path if repository context becomes private, state artifact retention is reduced to 7 days, PR/failure evidence retention to 3 days, and an offline budget validator blocks state artifacts above 8 MiB or diagnostics above 2 MiB. There is no larger runner, AWS, paid API, broker data or model-weight dependency. The Windows registration script is source-controlled and dry-run by default; it is not registered from an ephemeral worktree.
+
+Read-only GitHub runtime evidence on 2026-09-30 showed two main-branch `event=schedule` P5 runs created at 10:21:55 and 13:28:22 Asia/Taipei, both outside the frozen <=08:20 canonical lateness window. The metadata does not identify which cron expression produced which run, so no one-to-one mapping is claimed; it does establish that native schedule creation can arrive too late for the evidence window. Focused zero-cost/cloud/build-freeze validation=`14 passed`; workflow YAML/public guard=PASS; registration plan=DRY_RUN_NOT_REGISTERED; `gh run list` field compatibility=PASS.
+
+
 ### 2026-09-28 P5 public-source cloud automation package
 
 User authorized construction of a P5/JPX path that does not require the home Windows/Yuanta runtime at 08:05. The implementation is isolated from the dirty primary checkout. `.github/workflows/p5-cloud-public-forward.yml` uses a minimal CPU/public-data dependency set, an ephemeral `MARKET_AI_DATA_ROOT`, JPX public-history bootstrap, and the existing frozen P5 engine. The workflow defines **smoke-only** behavior for pull-request events and cannot create canonical predictions or production state there; however, this first PR that introduces the brand-new workflow did not receive a separate P5-cloud workflow run, so pre-merge evidence is the empty-root live smoke plus the repository's existing CI. After manual merge to the default branch, scheduled runs are defined at **07:40 Asia/Taipei** for public-data pre-warm before the frozen 08:05 origin and **08:15 Asia/Taipei** as the existing in-window backup. GitHub schedule execution remains default-branch-only; no automatic merge is performed.

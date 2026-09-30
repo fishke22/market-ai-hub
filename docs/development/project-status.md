@@ -1,5 +1,15 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 P5 zero-cost punctuality fallback
+
+- AWS/EventBridge is optional and not required. Default stack is public GitHub standard runner + native GitHub cron + optional local Windows `gh` fallback when the PC is on.
+- Local fallback slots are 07:52 and 08:08 Asia/Taipei. It first lists today's main-branch P5 runs and skips dispatch when a native `schedule` or prior `local-zero-cost-fallback` run is active/successful. Otherwise it dispatches only `mode=scheduled`. Manual smoke runs are not treated as coverage.
+- Existing workflow concurrency serializes overlapping runs; frozen P5 engine remains authoritative for max attempts=2, canonical 08:05 origin, <=15m lateness, no backfill and append-only audit.
+- Zero-cost guards: public repo required, standard `ubuntu-24.04` only, state artifact <=8 MiB / 7-day retention, PR/failure evidence 3-day retention, diagnostics <=2 MiB. No AWS, larger runner, paid API, broker/recorder/account/order dependency.
+- Registration remains dry-run/not installed from this isolated worktree. This package is engineering readiness, not evidence that local punctual fallback has run on a future canonical morning.
+- 2026-09-30 read-only GitHub evidence: two `event=schedule` main-branch runs were created at 10:21:55 and 13:28:22 Asia/Taipei, both too late for the frozen <=08:20 window. Their individual cron source cannot be distinguished from run-list metadata. Validation=`14 passed`; workflow YAML/public guard PASS; registration dry-run PASS; `gh run list` JSON fields PASS.
+
+
 ## 2026-09-28 P5 first canonical-origin operational miss / hotfix
 
 - 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.

@@ -1,5 +1,15 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：P5 zero-cost punctuality fallback
+
+- 永不付費為硬限制；AWS/EventBridge 永久降級 optional。P5 預設可在完全沒有 AWS 帳戶的情況運作：public GitHub standard runner 原生 schedule 作 PC-off fallback，本機 Windows 開機時再由 `gh` CLI 做條件式補觸發。
+- 本機補觸發固定 07:52 / 08:08 Asia/Taipei；先查今日 main branch 的 P5 workflow runs，只把 native `schedule` 或 run-title 帶 `local-zero-cost-fallback` 的 active/success run 視為已覆蓋。沒有才送 `workflow_dispatch mode=scheduled`。手動 smoke 不會誤阻擋。
+- workflow 原有 concurrency group / `cancel-in-progress=false` 保留；P5 engine 原 frozen max-attempts=2、08:05 origin、lateness<=15m、PIT receipt、append-only、no-backfill 全部不變。
+- 零成本 fail-closed：repo 若變 private 就拒絕此 zero-cost workflow；只用 `ubuntu-24.04` standard runner；state artifact <=8 MiB、retention=7 days；PR/failure evidence retention=3 days、diagnostics<=2 MiB。沒有 AWS/larger runner/paid API/broker/recorder/account/order/model weights。
+- Task registration script 預設 dry-run；ephemeral worktree 不註冊 production task。只有合併到 primary/default branch 後才能在固定 canonical path 註冊。此包不改 `PREDICTIVE_GAIN=false / CALIBRATED=false / TRADING_EDGE=false`。
+- 2026-09-30 read-only GitHub runtime evidence：main branch 兩個 `event=schedule` run 分別到 10:21:55、13:28:22 Asia/Taipei 才建立，均超過 <=08:20 canonical window；run-list metadata 無法判定各自對應哪條 cron，因此不做一對一歸因。驗收：zero-cost/cloud/build-freeze focused=`14 passed`；workflow YAML/public guard PASS；registration dry-run PASS；`gh run list` 欄位相容 PASS。
+
+
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 2026-09-28 P5 public-source cloud automation
