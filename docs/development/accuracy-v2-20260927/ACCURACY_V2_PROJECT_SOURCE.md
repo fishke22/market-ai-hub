@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-10-01 可替換快照：JNU market-session 累積 readiness
+
+- 新增 `research/jnu_market_session_readiness.json` 與繁中 markdown，來源只使用「一個 market session 一列」的 governed view；capture-window 數永遠不能替代 market-session 樣本數。
+- 目前真實狀態為 `ACCUMULATING_MARKET_SESSIONS`：eligible distinct sessions=1（`NIGHT|2026-09-30`），還差 1 個獨立 session 才能建立描述性的 cross-session pairing table。
+- 2 個 session 只是建立描述性 pairing 的數學最低條件，不代表可以做模型挑選、預測績效驗證、校準機率或 trading edge。這些仍需另外預先固定 chronological protocol 與更多 forward evidence。
+- 目前 `cross_session_descriptive_pairing_ready=false`、`chronological_model_selection_ready=false`、`predictive_performance_evaluation_ready=false`；predictive/calibrated/edge claims 維持 false。
+- watchdog fail-honest artifact chain 現在最後接 `market_session_readiness`。focused regression=`38 passed, 1 deselected`；diff check PASS。
+
+
 ## 2026-10-01 可替換快照：JNU 背景排程不再跳終端機
 
 - 每 5 分鐘跳出的終端機來源已確認是 `MARKET_AI_HUB_JNU_Capture_Watchdog` 直接啟動 Interactive PowerShell；不是 recorder 每 5 分鐘被重啟。

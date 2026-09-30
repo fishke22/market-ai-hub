@@ -183,6 +183,7 @@ def test_watchdog_artifact_refresh_is_dependency_ordered_and_fail_honest():
         'Name = "closed_window_dataset"',
         'Name = "window_rollup"',
         'Name = "market_session_view"',
+        'Name = "market_session_readiness"',
     ]
     positions = [block.index(token) for token in expected_order]
     assert positions == sorted(positions)

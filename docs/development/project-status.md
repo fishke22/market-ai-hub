@@ -1,5 +1,15 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-01 JNU market-session accumulation readiness
+
+- Added `jnu_market_session_readiness.json` + zh-TW markdown, sourced only from the governed one-row-per-market-session view.
+- Current live status: `ACCUMULATING_MARKET_SESSIONS`; eligible distinct sessions=1 (`NIGHT|2026-09-30`); sessions still needed for descriptive cross-session pairing=1.
+- Minimum of 2 distinct eligible market sessions only unlocks **descriptive pairing**, not model selection or predictive-performance evaluation.
+- `chronological_model_selection_ready=false`, `predictive_performance_evaluation_ready=false`, and predictive/calibrated/edge claims remain false.
+- Watchdog artifact order now ends with `market_session_view -> market_session_readiness`.
+- Focused readiness/session/watchdog regression=`38 passed, 1 deselected`; diff check PASS.
+
+
 ## 2026-10-01 background-only JNU scheduler
 
 - Root cause of the recurring terminal flash: `MARKET_AI_HUB_JNU_Capture_Watchdog` directly launched interactive PowerShell every 5 minutes.
