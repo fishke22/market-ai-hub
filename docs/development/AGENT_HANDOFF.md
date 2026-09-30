@@ -2,6 +2,15 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 JNU human-readable live capture brief
+
+The 5-minute watchdog now also writes a user-facing pair under the recorder research root: `jnu_live_capture_brief.json` and `jnu_live_capture_brief_zh_tw.md`. These are generated from the governed capture-window summary, not from an independent rescan, so they inherit the same no-backfill and window-delta semantics.
+
+The brief is designed for a nontechnical operator. It states whether capture is active/closed, the verified window start/last healthy time, whether the delta baseline covers the whole window, microstructure/drop/persistence health, and per-instrument window trade count, DealVol, window VWAP plus clearly labelled session-level latest price/range/VWAP context. It lists why a session is not `FULL_SESSION_LABEL_READY`, what can be researched now, and what cannot be claimed. It hard-codes `predictive_gain=false`, `calibrated_probability=false`, `trading_edge=false`, `order_action=false`, and never emits personalized entry/exit/size instructions.
+
+Live verification at ~18:35 Asia/Taipei kept the same recorder PID 16204 and showed healthy microstructure, dropped_records=0 and persistence_error=null. Because the delta baseline was adopted at 18:27:23 after the window began, the brief explicitly says earlier metrics are not back-calculated. At that snapshot JNU2612 window delta was 652 trades / DealVol 3,446 / window VWAP ~67,196.14, with session latest price 67,210 and session observed range 67,080–67,510; JNU2703 window delta was 26 trades / DealVol 43 / window VWAP ~67,424.19. These remain descriptive/context facts only. Focused regression=`37 passed, 1 deselected`; runtime build unchanged at `a0ac8fdb8f218c39`.
+
+
 ### 2026-09-30 JNU capture-window research/quality summary
 
 The existing variable-PC coverage ledger now records per-window materializer counter baselines and latest snapshots so research metrics are computed as **window deltas**, not whole-session totals. For a newly created capture window the baseline is taken at the verified window start. For a window that was already active before this feature was deployed, the code adopts the first available baseline at deployment time and explicitly sets `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`; it never retroactively attributes earlier session trades to that window.
