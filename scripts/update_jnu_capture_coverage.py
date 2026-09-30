@@ -165,6 +165,11 @@ def update_coverage(
     now = _utc(checked_at)
     materialized = _materialized_sessions(root)
     counters = _session_counters(materialized)
+    session_context = {
+        key: _session_summary(value)
+        for key, value in materialized.items()
+        if isinstance(value, dict)
+    }
     runtime_context = _runtime_context(root)
     intervals = state["intervals"]
     active = intervals[-1] if intervals and intervals[-1].get("status") == "ACTIVE" else None
@@ -197,6 +202,7 @@ def update_coverage(
                 "metrics_baseline_reason": "WINDOW_START_COUNTER_SNAPSHOT",
                 "session_baseline": deepcopy(counters),
                 "session_latest": deepcopy(counters),
+                "session_context_latest": deepcopy(session_context),
                 "latest_runtime_context": deepcopy(runtime_context),
             }
             intervals.append(active)
@@ -209,6 +215,7 @@ def update_coverage(
             active["last_healthy_at"] = now.isoformat()
             active["metrics_latest_at"] = now.isoformat()
             active["session_latest"] = deepcopy(counters)
+            active["session_context_latest"] = deepcopy(session_context)
             active["latest_runtime_context"] = deepcopy(runtime_context)
             if runtime_build_id:
                 active["runtime_build_id"] = runtime_build_id
@@ -224,11 +231,7 @@ def update_coverage(
             interval["observed_minutes"] = None
 
     state["intervals"] = intervals[-MAX_INTERVALS:]
-    state["sessions"] = {
-        key: _session_summary(value)
-        for key, value in materialized.items()
-        if isinstance(value, dict)
-    }
+    state["sessions"] = deepcopy(session_context)
     state["updated_at"] = now.isoformat()
     state["current_owner_classification"] = classification
     state["policy"] = {

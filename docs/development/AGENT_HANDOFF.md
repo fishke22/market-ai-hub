@@ -2,6 +2,15 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 append-only JNU closed-window research dataset
+
+Added `research/jnu_capture_window_dataset.json` as a semantic append-only dataset for **CLOSED verified capture windows only**. ACTIVE windows are never promoted into this long-term dataset. Each row is keyed by `window_id` and carries the immutable closed-window timing, window-delta metrics, sampled microstructure quality context, per-session context snapshot, and research-use gates. Existing rows are never updated; if a later summary proposes different content for an existing window ID, the updater returns `IMMUTABILITY_CONFLICT` and leaves the stored dataset unchanged.
+
+To make closed rows stable, the coverage ledger now stores `session_context_latest` at each verified healthy sample. The research summary uses that interval-local snapshot and marks `session_context_snapshot_source=INTERVAL_LAST_VERIFIED_HEALTHY`. Therefore a later reconnect in the same official NIGHT/DAY session cannot retroactively change an older closed capture window's latest price, label-ready state, or boundary status. Legacy closed windows without an interval-local context snapshot are not promoted; they remain available in the live summary only.
+
+Live adoption on 2026-09-30 correctly produced dataset `row_count=0` while the current capture window remained ACTIVE. This is expected: the first immutable row will be appended only after the current window becomes CLOSED, normally when a future healthy watchdog sample observes a >8-minute gap and closes the old interval at its previous `last_healthy_at`. Recorder PID remained 16204 and healthy. Focused regression=`41 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
 ### 2026-09-30 JNU human-readable live capture brief
 
 The 5-minute watchdog now also writes a user-facing pair under the recorder research root: `jnu_live_capture_brief.json` and `jnu_live_capture_brief_zh_tw.md`. These are generated from the governed capture-window summary, not from an independent rescan, so they inherit the same no-backfill and window-delta semantics.

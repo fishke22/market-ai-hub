@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 append-only JNU capture-window dataset
+
+- Added `research/jnu_capture_window_dataset.json`; only CLOSED verified windows are appended. ACTIVE windows are never frozen early.
+- Coverage now snapshots per-session context at every verified healthy sample. Closed-window summaries use `INTERVAL_LAST_VERIFIED_HEALTHY`, so later ticks from the same official session cannot rewrite an older window's context or label state.
+- Existing dataset rows are immutable by `window_id`; content drift returns `IMMUTABILITY_CONFLICT` and does not modify the stored dataset. Legacy closed windows lacking an interval-local snapshot are not promoted.
+- Live proof while current window remained ACTIVE: dataset exists with `row_count=0`, recorder PID 16204 remains healthy. The first row will append only after a future watchdog cycle truthfully closes this window at its prior `last_healthy_at`.
+- Focused regression=`41 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
 ## 2026-09-30 JNU human-readable live brief
 
 - Watchdog now emits `research/jnu_live_capture_brief.json` plus `research/jnu_live_capture_brief_zh_tw.md`, derived from the governed window summary.

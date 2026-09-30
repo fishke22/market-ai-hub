@@ -129,13 +129,24 @@ def build_summary(root: Path) -> dict[str, Any]:
         latest = interval.get("session_latest")
         baseline = baseline if isinstance(baseline, dict) else {}
         latest = latest if isinstance(latest, dict) else {}
-        session_keys = sorted(set(baseline) | set(latest))
+        interval_sessions = interval.get("session_context_latest")
+        interval_sessions = interval_sessions if isinstance(interval_sessions, dict) else {}
+        snapshot_source = (
+            "INTERVAL_LAST_VERIFIED_HEALTHY"
+            if interval_sessions
+            else "LEGACY_GLOBAL_FALLBACK"
+        )
+        session_keys = sorted(set(baseline) | set(latest) | set(interval_sessions))
         per_session = [
             _session_delta(
                 key,
                 baseline=baseline,
                 latest=latest,
-                session=sessions.get(key) if isinstance(sessions.get(key), dict) else {},
+                session=(
+                    interval_sessions.get(key)
+                    if isinstance(interval_sessions.get(key), dict)
+                    else (sessions.get(key) if isinstance(sessions.get(key), dict) else {})
+                ),
             )
             for key in session_keys
         ]
@@ -178,6 +189,7 @@ def build_summary(root: Path) -> dict[str, Any]:
                 interval.get("metrics_complete_from_window_start", False)
             ),
             "metrics_baseline_reason": interval.get("metrics_baseline_reason"),
+            "session_context_snapshot_source": snapshot_source,
             "quote_only": bool(interval.get("quote_only")),
             "broker_order_action": bool(interval.get("broker_order_action")),
             "microstructure_context": {
