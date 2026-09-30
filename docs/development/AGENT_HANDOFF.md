@@ -2,6 +2,17 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 JNU capture-window research/quality summary
+
+The existing variable-PC coverage ledger now records per-window materializer counter baselines and latest snapshots so research metrics are computed as **window deltas**, not whole-session totals. For a newly created capture window the baseline is taken at the verified window start. For a window that was already active before this feature was deployed, the code adopts the first available baseline at deployment time and explicitly sets `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`; it never retroactively attributes earlier session trades to that window.
+
+The same 5-minute watchdog now writes `research/jnu_capture_window_summary.json`. Each window includes exact verified start/last-healthy/close times, gap from the previous verified window, observed minutes, sampled microstructure status/callbacks/drop/persistence state, and per-session delta trade count, DealVol, delta VWAP and new 5-minute-bar count. Session price/volume profiles are exposed only as cumulative session context (`SESSION_CUMULATIVE_CONTEXT_NOT_WINDOW_SPECIFIC`) unless a true window-specific delta is available. Missing official open/close boundaries are listed as explicit label-block reasons. Partial windows remain research/context only; predictive-gain, calibrated-probability and trading-edge claims are all hard false.
+
+Restart semantics remain truthful: if the PC was off long enough that the next healthy sample is >8 minutes after the previous one, the old ACTIVE interval is closed at its previous `last_healthy_at`, not at restart time, and a new interval starts at the new verified sample. Shutdown time is therefore never invented.
+
+Live adoption did not restart the recorder: PID stayed 16204 and owner remained `SAFE_DEFAULT_OWNER_HEALTHY`. The first production baseline for the already-active 2026-09-30 window was adopted at 18:27:23 Asia/Taipei, so its metrics are explicitly incomplete from the original 18:13 window start. About 34 seconds later, the delta summary reported JNU2612 +24 trades / DealVol +101 / window VWAP ~67,178.86 and JNU2703 +2 trades / DealVol +5, while preserving the session-level profile context and microstructure live verification. Focused regression=`35 passed, 1 deselected`; runtime source/config build remains `a0ac8fdb8f218c39`.
+
+
 ### 2026-09-30 JNU variable-PC capture-window policy
 
 The user clarified that the PC is **not** expected to stay on for a full OSE session. The normal habit is roughly 18:55 Asia/Taipei power-on and about 22:00 shutdown, but either side may be earlier or later. This is now a durable operating rule, not a hard schedule. The recorder/watchdog must capture whenever the PC is actually available and must never require overnight operation.
