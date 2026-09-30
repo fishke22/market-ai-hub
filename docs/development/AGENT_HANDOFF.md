@@ -2,6 +2,17 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-01 hidden/background JNU watchdog + legacy 22:05 stop retirement
+
+The user's recurring terminal flashes were traced to the actual Windows Task Scheduler action for `MARKET_AI_HUB_JNU_Capture_Watchdog`: it launched interactive `powershell.exe` directly every 5 minutes. This was a UI/launch-mode issue, not evidence that the recorder itself was being restarted every 5 minutes.
+
+The source-controlled JNU watchdog registration now launches through `wscript.exe -> scripts/run-hidden.vbs -> PowerShell -WindowStyle Hidden`. `run-hidden.vbs` uses `WScript.Shell.Run(..., 0, False)`, so no console/Windows Terminal window is created for the periodic health check. C2.3 terminal-close task registration was aligned to the same hidden runner so a future re-registration cannot regress to visible PowerShell.
+
+The preferred PC availability remains approximately 18:55–22:00 Asia/Taipei and remains informational only: earlier/later PC availability is accepted and captured truthfully. The stale fixed task `MARKET_AI_HUB_JNU_Capture_Stop_2205` conflicted with that policy and with the 5-minute watchdog (it could stop at 22:05 and be restarted on the next watchdog tick), so the JNU registration now removes that legacy task. Shutdown is therefore naturally governed by actual PC availability/manual shutdown rather than a synthetic 22:05 data break.
+
+Live adoption was completed without restarting or relogging the recorder. Before adoption owner PID=7440 was `SAFE_DEFAULT_OWNER_HEALTHY`; after the new hidden scheduled action ran automatically at 06:51:06 Asia/Taipei, PID remained 7440, task result=0, watchdog action=`KEEP_EXISTING_OWNER`, all six research artifact refresh steps were PASS, and `broker_order_action=false`. Focused validation: PowerShell parse PASS, DryRun plans show `hidden_window=true`, and `35 passed, 1 deselected`.
+
+
 ### 2026-10-01 fail-honest JNU research artifact refresh
 
 The JNU watchdog research chain no longer hides downstream artifact failures behind an empty `catch {}`. `Write-WatchdogState` now records an `artifact_refresh` object with `RUNNING/PASS/ERROR`, completed steps, failed step, native exit code or exception type, and downstream skipped steps. Refresh order is dependency-safe: `coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`.

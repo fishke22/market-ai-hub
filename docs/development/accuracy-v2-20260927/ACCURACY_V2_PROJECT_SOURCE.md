@@ -1,5 +1,15 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-10-01 可替換快照：JNU 背景排程不再跳終端機
+
+- 每 5 分鐘跳出的終端機來源已確認是 `MARKET_AI_HUB_JNU_Capture_Watchdog` 直接啟動 Interactive PowerShell；不是 recorder 每 5 分鐘被重啟。
+- JNU watchdog 現改為 `wscript.exe -> run-hidden.vbs -> PowerShell -WindowStyle Hidden`，保留 5 分鐘健康檢查但不建立可見 console/Windows Terminal。C2.3 registration source 同步採相同 hidden runner。
+- 18:55–22:00 仍是使用者慣用開機時段、只作 informational preference；提早或延後開機時仍可誠實累積真實 capture。
+- 淘汰舊 `MARKET_AI_HUB_JNU_Capture_Stop_2205`，避免 22:05 強制停止後又被 5 分鐘 watchdog 啟回、造成非使用者造成的 artificial gap。
+- live adoption 未停止/重登 recorder：前後 PID=7440；06:51:06 隱藏 task 自動執行 result=0，watchdog=`KEEP_EXISTING_OWNER`，artifact refresh 全 PASS，`broker_order_action=false`。
+- focused validation=`35 passed, 1 deselected`；diff check PASS；預測/校準/edge claims 不變。
+
+
 ## 2026-10-01 可替換快照：JNU research artifact refresh fail-honest
 
 - watchdog 的研究 artifact chain 改為明確依賴順序：`coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`。
