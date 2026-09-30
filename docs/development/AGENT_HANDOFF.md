@@ -2,6 +2,113 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-01 JNU distinct-market-session readiness gate
+
+Added `research/jnu_market_session_readiness.json` and `research/jnu_market_session_readiness_zh_tw.md`, derived only from the one-row-per-market-session view. This gate prevents capture-window count from leaking back into sample-count decisions.
+
+The gate uses a deliberately narrow rule: at least **2 distinct eligible market-session rows** are required before the system may even build a descriptive cross-session pairing table. Reaching 2 sessions does **not** unlock model selection, predictive-performance evaluation, calibrated probability, or trading-edge claims; those still require a separately predeclared chronological protocol and materially more forward evidence.
+
+Current live state is `ACCUMULATING_MARKET_SESSIONS`: one eligible row (`NIGHT|2026-09-30`), one more distinct market session needed for descriptive pairing, `cross_session_descriptive_pairing_ready=false`, `chronological_model_selection_ready=false`, and `predictive_performance_evaluation_ready=false`. The readiness updater is appended after `market_session_view` in the fail-honest watchdog artifact chain.
+
+
+### 2026-10-01 hidden/background JNU watchdog + legacy 22:05 stop retirement
+
+The user's recurring terminal flashes were traced to the actual Windows Task Scheduler action for `MARKET_AI_HUB_JNU_Capture_Watchdog`: it launched interactive `powershell.exe` directly every 5 minutes. This was a UI/launch-mode issue, not evidence that the recorder itself was being restarted every 5 minutes.
+
+The source-controlled JNU watchdog registration now launches through `wscript.exe -> scripts/run-hidden.vbs -> PowerShell -WindowStyle Hidden`. `run-hidden.vbs` uses `WScript.Shell.Run(..., 0, False)`, so no console/Windows Terminal window is created for the periodic health check. C2.3 terminal-close task registration was aligned to the same hidden runner so a future re-registration cannot regress to visible PowerShell.
+
+The preferred PC availability remains approximately 18:55–22:00 Asia/Taipei and remains informational only: earlier/later PC availability is accepted and captured truthfully. The stale fixed task `MARKET_AI_HUB_JNU_Capture_Stop_2205` conflicted with that policy and with the 5-minute watchdog (it could stop at 22:05 and be restarted on the next watchdog tick), so the JNU registration now removes that legacy task. Shutdown is therefore naturally governed by actual PC availability/manual shutdown rather than a synthetic 22:05 data break.
+
+Live adoption was completed without restarting or relogging the recorder. Before adoption owner PID=7440 was `SAFE_DEFAULT_OWNER_HEALTHY`; after the new hidden scheduled action ran automatically at 06:51:06 Asia/Taipei, PID remained 7440, task result=0, watchdog action=`KEEP_EXISTING_OWNER`, all six research artifact refresh steps were PASS, and `broker_order_action=false`. Focused validation: PowerShell parse PASS, DryRun plans show `hidden_window=true`, and `35 passed, 1 deselected`.
+
+
+### 2026-10-01 fail-honest JNU research artifact refresh
+
+The JNU watchdog research chain no longer hides downstream artifact failures behind an empty `catch {}`. `Write-WatchdogState` now records an `artifact_refresh` object with `RUNNING/PASS/ERROR`, completed steps, failed step, native exit code or exception type, and downstream skipped steps. Refresh order is dependency-safe: `coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`.
+
+A failed artifact step does **not** stop, logout, relogin, or otherwise mutate the quote-only recorder. It only stops downstream research refreshes that would otherwise consume stale upstream artifacts. The watchdog state is written once before the refresh begins and again with the terminal artifact-refresh result, so interrupted refreshes remain visible as `RUNNING` rather than silently looking successful.
+
+Validation includes PowerShell parser PASS, focused regression=`51 passed, 1 deselected`, and an isolated temp-root behavior test. In that negative test `coverage` passed and `research_summary` intentionally exited 7; the state recorded `failed_step=research_summary / failed_exit_code=7`, only those first two steps ran, and `live_brief/closed_window_dataset/window_rollup/market_session_view` were all skipped. `broker_order_action=false` remained unchanged.
+
+
+### 2026-10-01 JNU one-row-per-market-session research view
+
+Added `research/jnu_market_session_view.json` and `research/jnu_market_session_view_zh_tw.md`, deterministically derived from the immutable CLOSED-window dataset. The view groups by `session + session_start_date`, so downstream research consumes one row per market session rather than one row per PC-on interval. Segmented capture explicitly sets `statistical_independence_between_windows_assumed=false`.
+
+The current live view has `capture_window_count=2` but `market_session_count=1`, yielding exactly one row: `NIGHT|2026-09-30`. It preserves 109.77 verified capture minutes and the 11,413.84-second gap between the two capture segments instead of pretending continuous coverage. JNU2612 aggregates 8,393 captured trades / DealVol 48,376 / capture VWAP ~67,555.38; JNU2703 aggregates 260 / 388 / ~67,775.46. Both remain `market_session_full_session_label_ready=false` because the session is segmented and neither source window is full-session ready.
+
+A runtime-path defect was caught during live execution: direct invocation of the session-view script could not import another `scripts.*` module because repo root was not on `sys.path`. The script now owns its two tiny canonical helpers locally, and both focused tests and direct CLI execution pass. Focused regression=`50 passed, 1 deselected`. Predictive gain, calibrated probability and trading edge remain false.
+
+
+### 2026-10-01 JNU closed-window rollup + first real immutable rows
+
+The long-term capture dataset now has **2 real CLOSED rows** from the 2026-09-30 NIGHT market session. Both rows were independently re-derived from the governed window summary and their canonical hashes matched exactly, confirming the append-only dataset has not drifted. Window 1 is 18:13:21–18:58:21 Asia/Taipei, closed because the owner became `SAFE_DEFAULT_OWNER_DEGRADED`; its delta baseline was adopted after the window started, so `metrics_complete_from_window_start=false`. Window 2 is 22:08:35–23:13:21, with a true window-start counter snapshot and `metrics_complete_from_window_start=true`.
+
+At 2026-10-01 startup the recorder owner check returned `NO_RUNNING_OWNER` with stale heartbeat. No recorder start/relogin was performed. The stale second interval was truthfully closed at its prior `last_healthy_at=23:13:21`, not at the 2026-10-01 observation time, and the brief moved to `CLOSED_CAPTURE`.
+
+Added `research/jnu_capture_window_rollup.json` and `research/jnu_capture_window_rollup_zh_tw.md`. The rollup explicitly separates capture-window count from market-session count, grouping by `session + session_start_date` so multiple PC-on segments from one official NIGHT/DAY session do not inflate the effective sample count. Current live rollup: 2 CLOSED windows but **1 unique market session**, 109.77 verified capture minutes, 1 complete-baseline window + 1 mid-window-baseline window, 2/2 microstructure-verified, dropped records=0, persistence error windows=0, broker order action windows=0, FULL_SESSION_LABEL_READY windows=0. JNU2612 captured 8,393 trades / DealVol 48,376 with capture volume-weighted VWAP ~67,555.38; JNU2703 captured 260 trades / DealVol 388 with capture volume-weighted VWAP ~67,775.46. These are capture/context quality statistics only, not independent predictive samples or accuracy evidence.
+
+The rollup source-rows hash is `5d37db2a67ad912b4d5a2a8bb9f1e42a0742db9a3ef2075efd031155260c7b2c`. Predictive gain, calibrated probability and trading edge claims remain hard false. Focused regression=`45 passed, 1 deselected`; runtime source/config build remains `a0ac8fdb8f218c39`.
+
+
+### 2026-09-30 append-only JNU closed-window research dataset
+
+Added `research/jnu_capture_window_dataset.json` as a semantic append-only dataset for **CLOSED verified capture windows only**. ACTIVE windows are never promoted into this long-term dataset. Each row is keyed by `window_id` and carries the immutable closed-window timing, window-delta metrics, sampled microstructure quality context, per-session context snapshot, and research-use gates. Existing rows are never updated; if a later summary proposes different content for an existing window ID, the updater returns `IMMUTABILITY_CONFLICT` and leaves the stored dataset unchanged.
+
+To make closed rows stable, the coverage ledger now stores `session_context_latest` at each verified healthy sample. The research summary uses that interval-local snapshot and marks `session_context_snapshot_source=INTERVAL_LAST_VERIFIED_HEALTHY`. Therefore a later reconnect in the same official NIGHT/DAY session cannot retroactively change an older closed capture window's latest price, label-ready state, or boundary status. Legacy closed windows without an interval-local context snapshot are not promoted; they remain available in the live summary only.
+
+Live adoption on 2026-09-30 correctly produced dataset `row_count=0` while the current capture window remained ACTIVE. This is expected: the first immutable row will be appended only after the current window becomes CLOSED, normally when a future healthy watchdog sample observes a >8-minute gap and closes the old interval at its previous `last_healthy_at`. Recorder PID remained 16204 and healthy. Focused regression=`41 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
+### 2026-09-30 JNU human-readable live capture brief
+
+The 5-minute watchdog now also writes a user-facing pair under the recorder research root: `jnu_live_capture_brief.json` and `jnu_live_capture_brief_zh_tw.md`. These are generated from the governed capture-window summary, not from an independent rescan, so they inherit the same no-backfill and window-delta semantics.
+
+The brief is designed for a nontechnical operator. It states whether capture is active/closed, the verified window start/last healthy time, whether the delta baseline covers the whole window, microstructure/drop/persistence health, and per-instrument window trade count, DealVol, window VWAP plus clearly labelled session-level latest price/range/VWAP context. It lists why a session is not `FULL_SESSION_LABEL_READY`, what can be researched now, and what cannot be claimed. It hard-codes `predictive_gain=false`, `calibrated_probability=false`, `trading_edge=false`, `order_action=false`, and never emits personalized entry/exit/size instructions.
+
+Live verification at ~18:35 Asia/Taipei kept the same recorder PID 16204 and showed healthy microstructure, dropped_records=0 and persistence_error=null. Because the delta baseline was adopted at 18:27:23 after the window began, the brief explicitly says earlier metrics are not back-calculated. At that snapshot JNU2612 window delta was 652 trades / DealVol 3,446 / window VWAP ~67,196.14, with session latest price 67,210 and session observed range 67,080–67,510; JNU2703 window delta was 26 trades / DealVol 43 / window VWAP ~67,424.19. These remain descriptive/context facts only. Focused regression=`37 passed, 1 deselected`; runtime build unchanged at `a0ac8fdb8f218c39`.
+
+
+### 2026-09-30 JNU capture-window research/quality summary
+
+The existing variable-PC coverage ledger now records per-window materializer counter baselines and latest snapshots so research metrics are computed as **window deltas**, not whole-session totals. For a newly created capture window the baseline is taken at the verified window start. For a window that was already active before this feature was deployed, the code adopts the first available baseline at deployment time and explicitly sets `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`; it never retroactively attributes earlier session trades to that window.
+
+The same 5-minute watchdog now writes `research/jnu_capture_window_summary.json`. Each window includes exact verified start/last-healthy/close times, gap from the previous verified window, observed minutes, sampled microstructure status/callbacks/drop/persistence state, and per-session delta trade count, DealVol, delta VWAP and new 5-minute-bar count. Session price/volume profiles are exposed only as cumulative session context (`SESSION_CUMULATIVE_CONTEXT_NOT_WINDOW_SPECIFIC`) unless a true window-specific delta is available. Missing official open/close boundaries are listed as explicit label-block reasons. Partial windows remain research/context only; predictive-gain, calibrated-probability and trading-edge claims are all hard false.
+
+Restart semantics remain truthful: if the PC was off long enough that the next healthy sample is >8 minutes after the previous one, the old ACTIVE interval is closed at its previous `last_healthy_at`, not at restart time, and a new interval starts at the new verified sample. Shutdown time is therefore never invented.
+
+Live adoption did not restart the recorder: PID stayed 16204 and owner remained `SAFE_DEFAULT_OWNER_HEALTHY`. The first production baseline for the already-active 2026-09-30 window was adopted at 18:27:23 Asia/Taipei, so its metrics are explicitly incomplete from the original 18:13 window start. About 34 seconds later, the delta summary reported JNU2612 +24 trades / DealVol +101 / window VWAP ~67,178.86 and JNU2703 +2 trades / DealVol +5, while preserving the session-level profile context and microstructure live verification. Focused regression=`35 passed, 1 deselected`; runtime source/config build remains `a0ac8fdb8f218c39`.
+
+
+### 2026-09-30 JNU variable-PC capture-window policy
+
+The user clarified that the PC is **not** expected to stay on for a full OSE session. The normal habit is roughly 18:55 Asia/Taipei power-on and about 22:00 shutdown, but either side may be earlier or later. This is now a durable operating rule, not a hard schedule. The recorder/watchdog must capture whenever the PC is actually available and must never require overnight operation.
+
+Added a local zero-cost capture coverage ledger at `automation/jnu_capture_coverage.json`, updated by the existing 5-minute JNU watchdog. The preferred 18:55–22:00 window is stored as `informational_only=true`; early/late capture is explicitly allowed. Each verified healthy-owner interval records its actual start/last-healthy time and splits after a >8-minute health-sample gap. Nonhealthy owner states close the verified interval. Missing time is never backfilled.
+
+Materialized session summaries are classified as either `PARTIAL_WINDOW` or `FULL_SESSION_LABEL_READY`. Partial windows remain `usable_as_context=true` whenever real ticks exist; they are not discarded simply because the official session open/close was not observed. Full-session label readiness remains opportunistic and requires the materializer's real open+close boundary proof. This means the user's ordinary 18:55–22:00 use is valid research/context evidence without any requirement to run the PC through 05:00.
+
+The new ledger is monitoring only and does not change recorder runtime/config build. Actual live verification after deployment: recorder PID remained 16204, classification=`SAFE_DEFAULT_OWNER_HEALTHY`, runtime/disk build=`a0ac8fdb8f218c39`, no independent owner and no broker action. Coverage tests/watchdog regression=`31 passed, 1 deselected`. The ledger correctly exposes the user's preferred window, no-backfill policy, and 2026-09-30 JNU2612/JNU2703 as partial-but-usable context.
+
+User-facing reporting rule: every construction report must end by explicitly stating (1) whether construction is continuing or stopped, (2) the next action, and (3) whether new user authorization is required.
+
+
+### 2026-09-30 zero-cost JNU live adoption + incremental session materializer
+
+User set a permanent **zero-paid-service** constraint: assume no AWS account is ever created and no paid cloud/data service is ever purchased. AWS/EventBridge is therefore optional research/ops infrastructure only and is not required for MARKET_AI_HUB to continue its original evidence-accumulation purpose. The default continuity path is local Windows scheduling when the PC is on plus existing free/public-source fallbacks; cloud absence is recorded as an availability limitation, not an engineering failure.
+
+The old local `MARKET_AI_HUB_JNU_Capture_Watchdog` task was still pointing at an 18:55–22:00 wrapper. It has now been replaced in-place by the source-controlled `register_jnu_capture_watchdog.ps1` definition: Interactive/Limited, `StartWhenAvailable`, every 5 minutes, `MultipleInstances=IgnoreNew`, action=`ensure_jnu_data_capture.ps1`. This task is local-only and does not require AWS. At 16:33:18 Asia/Taipei the task itself (not WebCodex) successfully restored one current-build recorder owner; preflight=`SAFE_DEFAULT_OWNER_HEALTHY`, no independent matching PID, heartbeat ~2s, broker_action_performed=false.
+
+The previously implemented bounded reconnect lifecycle is now explicitly adopted for the quote-only recorder because the user authorized unattended zero-cost capture. `config/yuanta_live_recorder.yaml` version is `2026-09-30`, `auto_reconnect.enabled=true`, max_attempts=3, bounded 5/10/20s backoff (capped at 30s). Recovery remains full-runtime replacement only; tick-detail maintenance and auto reconnect remain mutually exclusive. No account/position/balance/order API is used.
+
+The in-progress JNU session materializer is integrated into the live StockTick callback path. It incrementally persists exact-contract DAY/NIGHT facts, 5-minute bars, trade count/DealVol, VWAP, observed high/low, price/volume profiles, MFE/MAE and boundary coverage without rescanning all Parquet. It is descriptive evidence only. A session becomes label-ready only when both open and close boundaries are observed; missing boundaries stay partial and are never backfilled.
+
+For 2026-09-30 JNU night session, the machine was available only after the 16:00 Asia/Taipei open. The first retained JNU2612 event is 16:05:53 Asia/Taipei, so `open_boundary_observed=false`, `coverage_complete=false`, `label_ready=false`. This is a real coverage miss, not repaired history. A 16:33 live snapshot had verified exact-Micro callbacks, fresh single owner, JNU2612 materialized structure with 577 verified StockTick trades, DealVol 2435, range 67,350–67,510 and VWAP ~67,413.46; these are descriptive live facts, not probabilities or trading edge.
+
+A live freshness race was also fixed in `build_jnu_trading_path_context()`: live calls now evaluate materialized-artifact freshness at the actual read time, while explicit `now=` remains pinned for deterministic replay/tests. Before the fix a concurrently updated artifact could appear a few seconds "in the future" versus function-entry time and be incorrectly marked STALE; after the fix live verification returned `artifact_status=FRESH`, `used=true`, `fallback_to_bounded_parquet=false`, source=`INCREMENTAL_VERIFIED_STOCKTICK_MATERIALIZATION`.
+
+Current source/config build=`a0ac8fdb8f218c39`. Validation: freshness/reconnect/materializer focused=`30 passed`; build-freeze=`3 passed`; affected JNU/Yuanta/credibility/evidence selector=`107 passed, 1 deselected`. No full suite repeated. `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-09-28 P5 public-source cloud automation package
 
 User authorized construction of a P5/JPX path that does not require the home Windows/Yuanta runtime at 08:05. The implementation is isolated from the dirty primary checkout. `.github/workflows/p5-cloud-public-forward.yml` uses a minimal CPU/public-data dependency set, an ephemeral `MARKET_AI_DATA_ROOT`, JPX public-history bootstrap, and the existing frozen P5 engine. The workflow defines **smoke-only** behavior for pull-request events and cannot create canonical predictions or production state there; however, this first PR that introduces the brand-new workflow did not receive a separate P5-cloud workflow run, so pre-merge evidence is the empty-root live smoke plus the repository's existing CI. After manual merge to the default branch, scheduled runs are defined at **07:40 Asia/Taipei** for public-data pre-warm before the frozen 08:05 origin and **08:15 Asia/Taipei** as the existing in-window backup. GitHub schedule execution remains default-branch-only; no automatic merge is performed.

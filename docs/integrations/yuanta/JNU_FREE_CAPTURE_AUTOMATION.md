@@ -2,6 +2,172 @@
 
 狀態：ACTIVE / QUOTE-ONLY / NO-PAID-DATA
 
+## 可變開機時段（重要）
+
+## Market-session 累積 Readiness
+
+系統會從 `jnu_market_session_view.json` 自動產生：
+
+- `research/jnu_market_session_readiness.json`
+- `research/jnu_market_session_readiness_zh_tw.md`
+
+這個 gate 只看「獨立 market session」，不看 capture-window 數。
+
+目前規則：
+
+1. 少於 2 個 eligible distinct market sessions：`ACCUMULATING_MARKET_SESSIONS`。
+2. 達到 2 個：只開放建立**描述性的** cross-session pairing table。
+3. 達到 2 個仍不代表可以調模型、選模型、宣稱方向準確率、預測增益、校準機率或 trading edge。
+4. 真正模型比較仍需另外預先固定 chronological split / inner-fold / OOF / purge / trial cap 等 Accuracy v2 protocol。
+
+目前只有 `NIGHT|2026-09-30` 這 1 個 eligible market session，因此還在累積階段。
+
+## 背景執行，不再跳出終端機
+
+Windows Task Scheduler 仍每 5 分鐘檢查一次 JNU recorder 健康狀態，但啟動方式已改成：
+
+`wscript.exe -> run-hidden.vbs -> PowerShell -WindowStyle Hidden`
+
+因此正常情況下不會再看到每隔幾分鐘開啟又關閉的 PowerShell / Windows Terminal 視窗。5 分鐘 cadence 保留，因為它同時負責 single-owner 健康檢查、capture coverage 與研究 artifact 更新。
+
+18:55–22:00 仍只是慣用開機區段，不是硬門檻：
+
+- 約 18:55 才開機沒有問題。
+- 若提早開機，系統可提早累積真實資料。
+- 若 22:00 後仍保持開機，系統可繼續累積；不會因固定時間硬切資料。
+- 你直接關機時，資料自然停止，缺失時間不補造。
+
+舊的 `MARKET_AI_HUB_JNU_Capture_Stop_2205` 已淘汰，避免 22:05 強制停掉後又被 watchdog 重新啟動。
+
+## 研究 Artifact 刷新狀態
+
+`automation_watchdog.json` 現在會另外寫入 `artifact_refresh`，讓研究輸出失敗不再被靜默忽略。
+
+刷新順序固定為：
+
+`coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`
+
+若某一步失敗：
+
+- `artifact_refresh.status = ERROR`
+- 記錄 `failed_step` 與 `failed_exit_code`（或 exception type）
+- 所有依賴該上游的後續步驟列入 `skipped_steps`
+- recorder 本身不會因此停止、logout、relogin 或執行 broker action
+
+如果整條鏈成功，`artifact_refresh.status = PASS`。若刷新途中程序被中斷，先前寫入的 `RUNNING` 狀態會留下，避免舊 artifact 被誤認成剛更新成功。
+
+## 一個 market session 一列的研究 View
+
+系統現在也會自動更新：
+
+- `research/jnu_market_session_view.json`
+- `research/jnu_market_session_view_zh_tw.md`
+
+這份 view 是後續跨日研究的主要入口。規則：
+
+1. 以 `NIGHT/DAY + session_start_date` 合併同一市場 session。
+2. PC 開關造成的多段 capture 只記錄成 `capture_window_count` 與 inter-window gap，不會變成多個獨立樣本。
+3. 各 window 的 trades、DealVol、capture VWAP、5m bars 會在同一 market session 內聚合。
+4. segmented capture 不會因為拼接多段資料而升格成 `FULL_SESSION_LABEL_READY`。
+5. last verified context 只取該 market session 最後一個 verified window 的 context。
+6. 這仍是資料/context view，不評估方向準確率、校準機率或 trading edge。
+
+目前 2026-09-30 NIGHT：2 個 CLOSED windows -> 1 個 market-session row。
+
+## 跨 capture window 品質摘要
+
+系統現在會從 immutable CLOSED-window dataset 自動更新：
+
+- `research/jnu_capture_window_rollup.json`
+- `research/jnu_capture_window_rollup_zh_tw.md`
+
+這個 rollup 特別避免一個常見誤判：**window 數量不等於獨立市場樣本數。** 如果同一個 NIGHT/DAY session 因為電腦開關被切成多段，系統會以 `session + session_start_date` 合併成同一個 market-session group。
+
+因此目前 2026-09-30 NIGHT 有 2 個 CLOSED capture windows，但只算 1 個 unique market session。rollup 會累積：
+
+- verified capture 分鐘與 baseline 完整度。
+- microstructure verified、dropped records、persistence error、broker-action 品質欄位。
+- 每個 JNU 合約的 capture trades、DealVol、volume-weighted capture VWAP、5m bars。
+- FULL_SESSION_LABEL_READY 視窗數。
+- 同一市場 session 被切成多 windows 的警示。
+
+這些是資料品質/覆蓋統計，不是方向準確率、校準機率或 trading edge。
+
+## Closed window 長期研究資料集
+
+系統現在另外維護：
+
+`research/jnu_capture_window_dataset.json`
+
+規則很簡單：
+
+1. **正在錄製中的 ACTIVE window 不會進長期資料集。**
+2. 只有 window 已被誠實判定 CLOSED 才 append 一筆。
+3. 關閉時間使用最後一次 verified healthy 時間，不用下次開機時間假裝前次關機時間。
+4. 每一筆 closed row 固定保存當時最後一次 verified session context；同一夜盤之後的新行情不能回頭改寫舊 row。
+5. 既有 `window_id` 若內容想被改寫，系統回報 `IMMUTABILITY_CONFLICT`，不覆寫原資料。
+6. 舊格式若沒有足夠的 interval-local snapshot，只留在即時 summary，不硬升格進長期資料集。
+
+因此目前你電腦還開著、JNU 還在錄製時，dataset 的 `row_count=0` 是正確的；等這段 capture window 真正結束後才會產生第一筆 immutable row。
+
+## 給你直接看的 Live Brief
+
+watchdog 會同步更新兩份檔案：
+
+- `research/jnu_live_capture_brief.json`
+- `research/jnu_live_capture_brief_zh_tw.md`
+
+繁中 brief 會直接整理：
+
+- 現在是否仍在錄製，以及 verified 開始/最後健康時間。
+- 差分基準是否涵蓋整段 window；若中途才上線，會寫明「不倒算、不補造」。
+- 目前這段新增 trades、DealVol、window VWAP、5 分鐘 bars。
+- session 最新價、observed range、session VWAP（明確標成 session context，不冒充 window-specific）。
+- microstructure 是否 live verified、dropped records、persistence error。
+- 為什麼尚未 `FULL_SESSION_LABEL_READY`。
+- 現在可以研究什麼、不能宣稱什麼。
+
+這份 brief 不會自行補勝率、機率、精準進出場、口數或下單建議。
+
+## Capture window 研究摘要
+
+除了 coverage ledger，watchdog 也會自動更新：
+
+`research/jnu_capture_window_summary.json`
+
+這份摘要只計算「該 capture window 基準之後新增的資料」，不會把你開機前已累積的整晚數字灌進來。它會列出：
+
+- 實際 verified 開始、最後健康時間、關閉原因與和上一段的 gap。
+- 這段期間新增的 trade count、DealVol、window VWAP、new 5-minute bars。
+- microstructure 是否 live verified、callback 數、dropped records、persistence error。
+- session price/volume profile 是否可用；若只是整個 session 的累積 profile，會明確標示不是 window-specific。
+- 為何目前不是 `FULL_SESSION_LABEL_READY`，例如缺官方 open 或 close boundary。
+
+若功能在一個已經進行中的 window 中途才上線，第一個 baseline 只從上線時開始，會標 `metrics_complete_from_window_start=false`，不會倒算。下次重新開機時，前一段 window 只關到最後一次 verified healthy 時間，不會把重開機時刻假裝成前次關機時間。
+
+日常不要求整夜開機。你的慣用時段約為 **18:55 開機、22:00 關機**，但可以提早、延後或提早關機；系統會以實際 availability 為準。
+
+每 5 分鐘 watchdog 會把 verified healthy recorder availability 寫到：
+
+`automation/jnu_capture_coverage.json`
+
+規則：
+
+1. 18:55–22:00 只是慣用參考，`informational_only=true`，不是硬 gate。
+2. 提早開機就提早開始累積；晚開機就從晚開那一刻開始。
+3. 健康樣本中斷超過 8 分鐘，視為新的 capture window；缺的時間不補造。
+4. 有真實 StockTick 的 window 即使不含官方開盤或收盤，仍保留為 `PARTIAL_WINDOW` 並可做 context/微結構研究。
+5. 只有實際觀察到官方 session open + close 邊界時，才可標 `FULL_SESSION_LABEL_READY`。這是額外證據，不是要求你整夜開電腦。
+
+## 2026-09-30 零成本採用狀態
+
+- 本機擷取不需要 AWS，也不需要任何付費行情服務；AWS 永久視為 optional。
+- Windows task `MARKET_AI_HUB_JNU_Capture_Watchdog` 現在每 5 分鐘執行一次 `ensure_jnu_data_capture.ps1`，不再等固定 18:55。只要 Windows 已登入且主機開著，task 會維持 single-owner quote-only recorder；主機關機時資料自然缺失，不做 backfill。
+- recorder 已正式採用 bounded auto reconnect（最多 3 次）；若 runtime build 改變，watchdog 先 graceful stop，再重啟唯一 owner；只有 heartbeat stale 且 fail-closed 條件成立才允許獨立 force-stop helper。
+- JNU StockTick 會同步增量產生 `data/live/yuanta/materialized/jnu_sessions.json`（實際根目錄由 `MARKET_AI_DATA_ROOT`/runtime path 決定），供研究層直接讀取 5m bars、VWAP、range/profile 與 session coverage。這不是預測結果。
+- 必須從開盤邊界一路觀察到收盤邊界，該 session 才可成為 label-ready。晚開機、斷線或缺邊界的 session 只保留 partial/context，不能事後補成完整樣本。
+
+
 ## 目的
 
 在不購買 JPX/OSE 付費 tick/L2 的前提下，優先使用既有元大 SPARK 行情權限，自動擷取 exact JNU 個別月份行情。

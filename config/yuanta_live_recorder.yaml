@@ -1,4 +1,4 @@
-version: "2026-09-24"
+version: "2026-09-30"
 enabled: true
 provider: SPARK_SECURITIES_PROFILE
 mode: QUOTE_ONLY_PERSISTENT
@@ -19,7 +19,7 @@ durable_spool:
   max_bytes: 268435456
   max_records: 100000
 auto_reconnect:
-  enabled: false
+  enabled: true
   max_attempts: 3
   initial_delay_seconds: 5
   max_delay_seconds: 30

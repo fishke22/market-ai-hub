@@ -1,5 +1,100 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-10-01 可替換快照：JNU market-session 累積 readiness
+
+- 新增 `research/jnu_market_session_readiness.json` 與繁中 markdown，來源只使用「一個 market session 一列」的 governed view；capture-window 數永遠不能替代 market-session 樣本數。
+- 目前真實狀態為 `ACCUMULATING_MARKET_SESSIONS`：eligible distinct sessions=1（`NIGHT|2026-09-30`），還差 1 個獨立 session 才能建立描述性的 cross-session pairing table。
+- 2 個 session 只是建立描述性 pairing 的數學最低條件，不代表可以做模型挑選、預測績效驗證、校準機率或 trading edge。這些仍需另外預先固定 chronological protocol 與更多 forward evidence。
+- 目前 `cross_session_descriptive_pairing_ready=false`、`chronological_model_selection_ready=false`、`predictive_performance_evaluation_ready=false`；predictive/calibrated/edge claims 維持 false。
+- watchdog fail-honest artifact chain 現在最後接 `market_session_readiness`。focused regression=`38 passed, 1 deselected`；diff check PASS。
+
+
+## 2026-10-01 可替換快照：JNU 背景排程不再跳終端機
+
+- 每 5 分鐘跳出的終端機來源已確認是 `MARKET_AI_HUB_JNU_Capture_Watchdog` 直接啟動 Interactive PowerShell；不是 recorder 每 5 分鐘被重啟。
+- JNU watchdog 現改為 `wscript.exe -> run-hidden.vbs -> PowerShell -WindowStyle Hidden`，保留 5 分鐘健康檢查但不建立可見 console/Windows Terminal。C2.3 registration source 同步採相同 hidden runner。
+- 18:55–22:00 仍是使用者慣用開機時段、只作 informational preference；提早或延後開機時仍可誠實累積真實 capture。
+- 淘汰舊 `MARKET_AI_HUB_JNU_Capture_Stop_2205`，避免 22:05 強制停止後又被 5 分鐘 watchdog 啟回、造成非使用者造成的 artificial gap。
+- live adoption 未停止/重登 recorder：前後 PID=7440；06:51:06 隱藏 task 自動執行 result=0，watchdog=`KEEP_EXISTING_OWNER`，artifact refresh 全 PASS，`broker_order_action=false`。
+- focused validation=`35 passed, 1 deselected`；diff check PASS；預測/校準/edge claims 不變。
+
+
+## 2026-10-01 可替換快照：JNU research artifact refresh fail-honest
+
+- watchdog 的研究 artifact chain 改為明確依賴順序：`coverage -> research_summary -> live_brief -> closed_window_dataset -> window_rollup -> market_session_view`。
+- 不再以空白 `catch {}` 吞掉研究輸出錯誤；`automation_watchdog.json` 新增 `artifact_refresh`，記錄 RUNNING/PASS/ERROR、completed steps、failed step、exit code/exception type 與 skipped downstream steps。
+- 任一上游失敗後，下游不再使用舊 artifact 繼續刷新；但這個 fail-closed 僅作用於研究輸出，**不停止、不 logout、不 relogin recorder**。
+- 負測試刻意讓 `research_summary` exit 7：實際只執行 coverage 與 summary，brief/dataset/rollup/session-view 全部 skipped；state 正確記 `failed_step=research_summary`、`failed_exit_code=7`，且 `broker_order_action=false`。
+- PowerShell parser PASS；focused regression=`51 passed, 1 deselected`；不改 predictive/calibrated/edge claims。
+
+
+## 2026-10-01 可替換快照：JNU market-session research view
+
+- 新增 `research/jnu_market_session_view.json` 與繁中 view；來源只使用 immutable CLOSED-window dataset。
+- 以 `session + session_start_date` 產生「一個 market session 一列」的研究 view，PC 開關切段只保留成 window/gap metadata，不增加獨立樣本數。
+- 真實資料目前為 2 capture windows -> 1 個 `NIGHT|2026-09-30` market-session row；verified capture=109.77 分鐘；兩段間 gap=11,413.84 秒；`segmented_capture=true`；不假設兩段統計獨立。
+- JNU2612 聚合 capture trades=8,393 / DealVol=48,376 / VWAP≈67,555.38；JNU2703=260 / 388 / ≈67,775.46。兩者 `market_session_full_session_label_ready=false`，不因多段資料拼接而升格完整 session。
+- 實機 direct CLI 曾抓到 `scripts.*` import path 問題，已改成 script 內聚的小 helper 並重新通過；focused regression=`50 passed, 1 deselected`。predictive/calibrated/edge claims 仍 false。
+
+
+## 2026-10-01 可替換快照：JNU closed-window rollup
+
+- 真實 immutable dataset 已有 2 筆 CLOSED rows，兩筆都逐筆用 governed summary 重建並取得相同 canonical hash，沒有資料漂移。
+- 第一段為 18:13:21–18:58:21 Asia/Taipei，因 owner degraded 關閉，且 baseline 在中途才採用；第二段為 22:08:35–23:13:21，window-start baseline 完整。2026-10-01 觀察到 `NO_RUNNING_OWNER` 與 stale heartbeat 後，只把第二段封在舊 `last_healthy_at`，沒有啟動/重登 recorder，也沒有把今早時間假裝成昨晚關機時間。
+- 新增 `research/jnu_capture_window_rollup.json` 與繁中 markdown；以 `session + session_start_date` 分組，因此現在的 **2 windows 只算 1 個 2026-09-30 NIGHT market session**，禁止把 PC 開關切段當獨立樣本數膨脹。
+- live rollup：109.77 verified capture minutes；1 個完整 baseline、1 個中途 baseline；microstructure verified=2/2；dropped=0；persistence error=0；broker action=0；FULL_SESSION_LABEL_READY=0。
+- JNU2612 capture trades=8,393 / DealVol=48,376 / volume-weighted VWAP≈67,555.38；JNU2703=260 / 388 / ≈67,775.46。只屬 capture/context 品質，不是方向準確率或OOS增益證據。
+- source rows hash=`5d37db2a67ad912b4d5a2a8bb9f1e42a0742db9a3ef2075efd031155260c7b2c`；focused regression=`45 passed, 1 deselected`；build=`a0ac8fdb8f218c39`；predictive/calibrated/edge claims 仍 false。
+
+
+## 2026-09-30 可替換快照：append-only JNU closed-window dataset
+
+- 新增 `research/jnu_capture_window_dataset.json`，只收 **CLOSED verified capture windows**；ACTIVE window 絕不提前定案。
+- coverage ledger 每次 verified healthy sample 都保存 `session_context_latest`，research summary 對 closed window 固定使用 `INTERVAL_LAST_VERIFIED_HEALTHY`。因此同一官方夜盤之後重新開機、繼續收到新 tick，也不能回頭改寫舊 capture window 的 latest/context/label 狀態。
+- dataset 以 `window_id` 做 semantic append-only；既有 row 若遇到不同內容，回報 `IMMUTABILITY_CONFLICT` 並保持檔案不變。沒有 interval-local snapshot 的 legacy closed window 不升格入庫。
+- 實機目前 window 仍 ACTIVE，因此 dataset 已建立但 `row_count=0`；這是正確結果。等未來 watchdog 看到 >8 分鐘 gap，舊 window 只在舊 `last_healthy_at` 關閉後才 append 第一筆。
+- recorder PID 仍 16204；focused regression=`41 passed, 1 deselected`；build=`a0ac8fdb8f218c39`。不改 predictive/calibrated/edge claims。
+
+
+## 2026-09-30 可替換快照：JNU human-readable live brief
+
+- watchdog 現在從 governed capture-window summary 自動產生 `research/jnu_live_capture_brief.json` 與繁中 `research/jnu_live_capture_brief_zh_tw.md`，不另掃全量 Parquet，因此沿用相同 no-backfill / window-delta 語義。
+- 給非技術使用者的 brief 會直接說明：目前錄製中或已結束、verified window 時間、差分基準是否覆蓋整段、microstructure/drop/persistence 健康、每個 JNU 合約的 window trades/DealVol/VWAP，以及明確標成 session-level 的最新價/range/VWAP context。
+- brief 會用繁中列出 full-session label blockers、目前可做的研究與不能宣稱/不能做的事項；硬鎖 `predictive_gain=false / calibrated_probability=false / trading_edge=false / order_action=false`，不產生個人化進出場/部位/下單指令。
+- 約 18:35 Asia/Taipei 實機仍為 PID 16204、microstructure verified、dropped=0、persistence_error=null。基準 18:27:23 晚於 window start，因此 brief 明寫不倒算。當時 JNU2612 window delta=652 trades / DealVol 3446 / VWAP≈67,196.14、session latest=67,210；JNU2703 delta=26 / volume 43 / VWAP≈67,424.19。只屬 descriptive/context。
+- focused regression=`37 passed, 1 deselected`；build=`a0ac8fdb8f218c39`。
+
+
+## 2026-09-30 可替換快照：JNU capture-window research summary
+
+- 每個 verified capture window 現在記錄 materializer counter baseline/latest，研究數值採**視窗差分**，不把開機前的整個夜盤累積誤算進 18:55–22:00 或其他實際開機區段。
+- 新 window 在 verified start 建 baseline；若功能上線時 window 已經進行中，僅從上線時採 baseline，並標 `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`，不倒推或補造早先資料。
+- 5 分鐘 watchdog 同步寫 `research/jnu_capture_window_summary.json`：exact start/last healthy/close、前一 verified window gap、observed minutes、window trade/DealVol/VWAP/new 5m bars、microstructure callbacks/drop/persistence、session profile availability、以及 open/close boundary label blockers。
+- session price/volume profile 若非 window-specific delta，只能標 `SESSION_CUMULATIVE_CONTEXT_NOT_WINDOW_SPECIFIC`；partial window 仍可研究，但不得升格 predictive gain/calibrated probability/trading edge。
+- 下次開機若健康樣本 gap >8 分鐘，舊 ACTIVE window 在舊 `last_healthy_at` 關閉，新 window 從新健康樣本開始；不把重開機時間假裝成前次關機時間。
+- 實機 recorder PID 維持 16204。既有 window 於 18:27:23 才採第一個新 baseline，因此誠實標 incomplete-from-window-start；約 34 秒後差分為 JNU2612 +24 trades / DealVol +101 / VWAP≈67,178.86，JNU2703 +2 trades / DealVol +5。focused regression=`35 passed, 1 deselected`，build=`a0ac8fdb8f218c39`。
+
+
+## 2026-09-30 可替換快照：JNU variable-PC capture windows
+
+- 使用者不會整夜開機。平常約 18:55 開機、約 22:00 關機，但可能提早或延後；此時段只作慣用參考，不是硬門檻。系統必須在實際開機期間自動抓取，不能要求整夜維持電腦。
+- 既有 5 分鐘 watchdog 現在同步維護 `automation/jnu_capture_coverage.json`。只有 `SAFE_DEFAULT_OWNER_HEALTHY` 算 verified capture interval；健康樣本間隔 >8 分鐘就切新 window，degraded/unverified 會結束 verified window；缺失時間絕不 backfill。
+- 有真實 tick 的不完整區段保留為 `PARTIAL_WINDOW / usable_as_context=true`，可供 5m/VWAP/profile/微結構/context 分析；不因沒有官方 session open/close 就丟棄。只有 materializer 真正觀察到 open+close boundary 才升格 `FULL_SESSION_LABEL_READY`，完整 session 是 opportunistic，不是日常開機要求。
+- 實機施工未重啟 recorder：PID=16204、owner healthy、runtime/disk build=`a0ac8fdb8f218c39`、無 independent owner、無 broker action。focused coverage/watchdog regression=`31 passed, 1 deselected`。
+- 每次施工回報結尾固定寫清楚：現在繼續或停止、下一步、是否需要使用者新授權。
+
+
+## 2026-09-30 可替換快照：zero-cost JNU live evidence path
+
+- 使用者新增永久硬限制：**永不付費**，並要求假設永遠不建立 AWS 帳戶時系統仍可達成原始目的。因此 AWS/EventBridge 降級為 optional；本機 Windows Task Scheduler、既有 GitHub/public-source fallback 與 quote-only SPARK 才是預設 continuity path。雲端缺席只影響 punctuality/availability，不得阻塞本機 forward/context evidence 累積。
+- `MARKET_AI_HUB_JNU_Capture_Watchdog` 已由舊 18:55–22:00 wrapper 改成 source-controlled 每 5 分鐘 task（Interactive/Limited、StartWhenAvailable、IgnoreNew），action=`ensure_jnu_data_capture.ps1`。2026-09-30 16:33:18 Asia/Taipei 由 Windows Task Scheduler 自行恢復 single owner，preflight=`SAFE_DEFAULT_OWNER_HEALTHY`，沒有 duplicate owner、沒有 broker action。
+- quote-only bounded reconnect 正式 live adoption：`yuanta_live_recorder.yaml version=2026-09-30`、`auto_reconnect.enabled=true`、max_attempts=3、bounded backoff；仍是 full-runtime replacement，且與 tick-detail maintenance 互斥。
+- 新增／接續 `JNU.SESSION.MATERIALIZED.2`：StockTick callback 直接增量物化 exact-contract DAY/NIGHT session、5m bars、DealVol/trade count、VWAP、range/profile、MFE/MAE、boundary coverage。只有 open+close boundary 都觀察到才 `label_ready=true`；partial session 不得回填、不得升格正式 label。
+- 今日主機晚於 16:00 開盤才可用；JNU2612 first retained night event=16:05:53 Asia/Taipei，所以 `open_boundary_observed=false / coverage_complete=false / label_ready=false`。16:33 descriptive snapshot：577 verified StockTick trades、DealVol=2435、range=67,350–67,510、VWAP≈67,413.46；只作 live research context。
+- 修正 live materializer freshness race：production live call 用實際 artifact read time 評估 freshness，顯式 `now=` replay 維持 pinned。修正前可能因 concurrent persist 產生負 age 而誤判 STALE；修正後實機=`FRESH / used=true / fallback_to_bounded_parquet=false`。
+- build=`a0ac8fdb8f218c39`；驗收：focused `30 passed`、build-freeze `3 passed`、affected selector `107 passed, 1 deselected`。不重跑 full suite。維持 `PREDICTIVE_GAIN=false`、`CALIBRATED=false`、`TRADING_EDGE=false`，無 account/position/balance/order action。
+
+
 版本：2026-09-27 Accuracy v2。文件性質：研究與施工規劃＋可替換實作快照。**P0/P1/P2/P3-A/P3-B/P4/P5/P7 已完成目前可施工的工程落地；P2 development 是 NO_IMPROVEMENT、保留 baseline；P3-A past-only covariate 工程 PASS；P3-B 已取得 REAL receipt-time-causal P1 DATA_READY packet；P4 已讓系統在沒有新 forward outcome 時仍能以 baseline＋波動＋conformal區間＋拒答作有效分析；P5 forward monitor 與 P7 independent-engine acceptance 已完成工程，但未把 development interval、quantile challenger、forward monitor 或 execution parity 冒充預測增益／校準機率／交易 edge。P6 保持 conditional，不是工程 closeout blocker。** 本文件取代同日 vNext 的模型優先序與下一包設計；保留既有修復、資料治理、quote-only、安全與搬移規範。不要並列兩份互相矛盾的「最新版」指示。
 
 ## 2026-09-28 P5 public-source cloud automation
