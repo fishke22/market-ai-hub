@@ -67,6 +67,7 @@ def test_agent_entry_scripts_exist():
     for name in (
         "start_yuanta_live_recorder.ps1",
         "stop_yuanta_live_recorder.ps1",
+        "force_stop_stale_yuanta_recorder.ps1",
         "request_yuanta_quote.ps1",
         "request_yuanta_tick_detail_measurement.ps1",
         "get_yuanta_live_status.ps1",
@@ -144,6 +145,28 @@ def test_maintenance_scripts_keep_measurement_runtime_only_and_shutdown_graceful
     assert "YUANTA_LIVE_START_TIMEOUT_NO_FRESH_STATUS" in start
     assert 'action = "shutdown"' in stop
     assert "Stop-Process" not in stop
+
+
+def test_stale_owner_force_stop_is_separate_and_fail_closed():
+    force = (ROOT / "scripts" / "force_stop_stale_yuanta_recorder.ps1").read_text(
+        encoding="utf-8"
+    )
+    watchdog = (ROOT / "scripts" / "ensure_jnu_data_capture.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert "HEARTBEAT_STALE" in force
+    assert "independent_matching_pids" in force
+    assert "owner_invocation_pids" in force
+    assert "Stop-Process" in force
+    assert "BLOCKED_MEASUREMENT_GATE" in force
+    assert "broker_action=false" in force
+    assert "stop_yuanta_live_recorder.ps1" in watchdog
+    assert "force_stop_stale_yuanta_recorder.ps1" in watchdog
+    graceful_call = '& (Join-Path $PSScriptRoot "stop_yuanta_live_recorder.ps1")'
+    force_call = "& $ForceStopScript"
+    assert graceful_call in watchdog
+    assert force_call in watchdog
+    assert watchdog.index(graceful_call) < watchdog.index(force_call)
 
 
 def test_owner_preflight_is_read_only_parent_child_aware_and_fail_closed():

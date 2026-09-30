@@ -2,6 +2,23 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 zero-cost JNU live adoption + incremental session materializer
+
+User set a permanent **zero-paid-service** constraint: assume no AWS account is ever created and no paid cloud/data service is ever purchased. AWS/EventBridge is therefore optional research/ops infrastructure only and is not required for MARKET_AI_HUB to continue its original evidence-accumulation purpose. The default continuity path is local Windows scheduling when the PC is on plus existing free/public-source fallbacks; cloud absence is recorded as an availability limitation, not an engineering failure.
+
+The old local `MARKET_AI_HUB_JNU_Capture_Watchdog` task was still pointing at an 18:55–22:00 wrapper. It has now been replaced in-place by the source-controlled `register_jnu_capture_watchdog.ps1` definition: Interactive/Limited, `StartWhenAvailable`, every 5 minutes, `MultipleInstances=IgnoreNew`, action=`ensure_jnu_data_capture.ps1`. This task is local-only and does not require AWS. At 16:33:18 Asia/Taipei the task itself (not WebCodex) successfully restored one current-build recorder owner; preflight=`SAFE_DEFAULT_OWNER_HEALTHY`, no independent matching PID, heartbeat ~2s, broker_action_performed=false.
+
+The previously implemented bounded reconnect lifecycle is now explicitly adopted for the quote-only recorder because the user authorized unattended zero-cost capture. `config/yuanta_live_recorder.yaml` version is `2026-09-30`, `auto_reconnect.enabled=true`, max_attempts=3, bounded 5/10/20s backoff (capped at 30s). Recovery remains full-runtime replacement only; tick-detail maintenance and auto reconnect remain mutually exclusive. No account/position/balance/order API is used.
+
+The in-progress JNU session materializer is integrated into the live StockTick callback path. It incrementally persists exact-contract DAY/NIGHT facts, 5-minute bars, trade count/DealVol, VWAP, observed high/low, price/volume profiles, MFE/MAE and boundary coverage without rescanning all Parquet. It is descriptive evidence only. A session becomes label-ready only when both open and close boundaries are observed; missing boundaries stay partial and are never backfilled.
+
+For 2026-09-30 JNU night session, the machine was available only after the 16:00 Asia/Taipei open. The first retained JNU2612 event is 16:05:53 Asia/Taipei, so `open_boundary_observed=false`, `coverage_complete=false`, `label_ready=false`. This is a real coverage miss, not repaired history. A 16:33 live snapshot had verified exact-Micro callbacks, fresh single owner, JNU2612 materialized structure with 577 verified StockTick trades, DealVol 2435, range 67,350–67,510 and VWAP ~67,413.46; these are descriptive live facts, not probabilities or trading edge.
+
+A live freshness race was also fixed in `build_jnu_trading_path_context()`: live calls now evaluate materialized-artifact freshness at the actual read time, while explicit `now=` remains pinned for deterministic replay/tests. Before the fix a concurrently updated artifact could appear a few seconds "in the future" versus function-entry time and be incorrectly marked STALE; after the fix live verification returned `artifact_status=FRESH`, `used=true`, `fallback_to_bounded_parquet=false`, source=`INCREMENTAL_VERIFIED_STOCKTICK_MATERIALIZATION`.
+
+Current source/config build=`a0ac8fdb8f218c39`. Validation: freshness/reconnect/materializer focused=`30 passed`; build-freeze=`3 passed`; affected JNU/Yuanta/credibility/evidence selector=`107 passed, 1 deselected`. No full suite repeated. `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
+
 ### 2026-09-28 P5 first-origin operational miss + runner clock hotfix
 
 The first real P5 canonical window exposed an operational timing defect without weakening any evidence gate. The one-shot 08:05 Asia/Taipei automation recorded a run at 08:08, but by 08:16 the immutable ledger still had 0 canonical predictions. A manual cycle at 08:17 refreshed the public JPX settlement file after `run_p5_cycle()` had already frozen `as_of`; because current receipt provenance is the persisted file mtime, the newly written receipt appeared a few seconds later than that frozen forecast origin and precommit failed closed with `REFERENCE_RECEIVED_AFTER_ORIGIN`. A subsequent no-collection retry was correctly blocked by preregistered `MAX_ATTEMPTS_PER_LOCAL_DATE`. **No 2026-09-28 canonical prediction was backfilled or fabricated; this origin remains a real missing-origin operational failure.**

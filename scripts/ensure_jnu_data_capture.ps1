@@ -4,6 +4,7 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $StartScript = Join-Path $PSScriptRoot "start_yuanta_live_recorder.ps1"
 $PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
+$ForceStopScript = Join-Path $PSScriptRoot "force_stop_stale_yuanta_recorder.ps1"
 
 $RecorderRoot = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root; print(recorder_root())"
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve recorder root" }
@@ -59,8 +60,24 @@ try {
     $class = [string]$pre.classification
 
     if ($class -eq "BLOCKED_RUNTIME_BUILD_STALE") {
-        & (Join-Path $PSScriptRoot "stop_yuanta_live_recorder.ps1") | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "STALE_OWNER_STOP_FAILED" }
+        $gracefulStopped = $false
+        try {
+            & (Join-Path $PSScriptRoot "stop_yuanta_live_recorder.ps1") | Out-Host
+            $gracefulStopped = ($LASTEXITCODE -eq 0)
+        } catch {
+            $gracefulStopped = $false
+        }
+        if (-not $gracefulStopped) {
+            $freshRaw = & $PreflightScript
+            if ($LASTEXITCODE -ne 0) { throw "STALE_OWNER_RECHECK_FAILED" }
+            $fresh = ($freshRaw -join [Environment]::NewLine) | ConvertFrom-Json
+            if (@($fresh.preflight_reasons) -contains "HEARTBEAT_STALE") {
+                & $ForceStopScript | Out-Host
+                if ($LASTEXITCODE -ne 0) { throw "STALE_OWNER_FORCE_STOP_FAILED" }
+            } else {
+                throw "STALE_OWNER_GRACEFUL_STOP_FAILED_HEARTBEAT_LIVE"
+            }
+        }
         Start-Sleep -Seconds 1
         $class = "NO_RUNNING_OWNER"
     }

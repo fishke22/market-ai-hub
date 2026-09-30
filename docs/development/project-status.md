@@ -1,5 +1,16 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 zero-cost JNU live capture / materializer adoption
+
+- Permanent policy: **zero paid services**. AWS account/paid cloud is not required; system must keep operating if AWS is never created. AWS external scheduler work is optional only. Local Windows scheduler + public/free fallbacks remain the default continuity design.
+- Replaced the stale 18:55 local task definition with the source-controlled 5-minute `MARKET_AI_HUB_JNU_Capture_Watchdog` task. At 16:33 the Windows task independently restored one current-build quote-only owner; no second login, broker/account/position/balance/order action.
+- Authorized live adoption of bounded reconnect: config version `2026-09-30`, `auto_reconnect.enabled=true`, max 3 attempts, bounded backoff. Tick-detail maintenance remains mutually exclusive.
+- Incremental `JNU.SESSION.MATERIALIZED.2` StockTick materializer is live and consumed by `jnu_trading_path`. Live freshness uses artifact read time; explicit replay `now=` remains pinned. Verified live consumer: `FRESH / used=true / no bounded-Parquet fallback`.
+- 2026-09-30 night open was missed before the machine was available. First JNU2612 retained event=16:05:53 Asia/Taipei, therefore open boundary/coverage/label eligibility are false and remain so; no backfill.
+- 16:33 snapshot (descriptive only): JNU2612 exact-Micro 577 verified StockTick trades, DealVol 2435, observed range 67,350–67,510, VWAP~67,413.46. Claims remain `PREDICTIVE_GAIN=false / CALIBRATED=false / TRADING_EDGE=false`.
+- source/config build=`a0ac8fdb8f218c39`; validation=`30 passed` focused + `3 passed` build-freeze + `107 passed, 1 deselected` affected selector. No full suite rerun.
+
+
 ## 2026-09-28 P5 first canonical-origin operational miss / hotfix
 
 - 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.

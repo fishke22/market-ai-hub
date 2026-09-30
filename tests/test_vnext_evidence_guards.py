@@ -31,6 +31,33 @@ def test_quantile_missing_bounds_does_not_hide_infinite_median():
     validate_price_path({"p10": [1], "p50": [2], "p90": [3]}, 1)
 
 
+def test_direct_model_preserves_full_settlement_path_with_non_intraday_semantics():
+    class Adapter:
+        def predict(self, series, horizon):
+            assert horizon == 3
+            return {
+                "path": {
+                    "p10": [90.0, 91.0, 92.0],
+                    "p50": [100.0, 101.0, 102.0],
+                    "p90": [110.0, 111.0, 112.0],
+                }
+            }
+
+    out = _model_result(
+        Adapter(),
+        "test",
+        pd.Series([100.0]),
+        3,
+        ["2026-09-29", "2026-09-30", "2026-10-01"],
+    )
+    assert out["p50"] == 102.0
+    assert out["forecast_path"]["p50"] == [100.0, 101.0, 102.0]
+    assert out["forecast_path"]["target_dates"] == ["2026-09-29", "2026-09-30", "2026-10-01"]
+    assert out["forecast_path"]["not_intraday_high_low"] is True
+    assert out["forecast_path"]["not_support_resistance"] is True
+    assert out["forecast_path"]["not_touch_probability"] is True
+
+
 def test_sealed_identity_cannot_hide_changed_forecasts(tmp_path):
     first = {"status": "OK", "evidence_id": "same", "prediction": 1}
     path = hp.save_one_use_evidence(first, tmp_path)

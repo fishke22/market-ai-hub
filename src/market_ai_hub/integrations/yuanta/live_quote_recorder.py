@@ -40,10 +40,12 @@ from market_ai_hub.integrations.yuanta.durable_spool import (
     DurableQuoteSpool, DurableSpoolError, canonical_bytes,
     durable_json_replace, durable_replace, sha256_hex,
 )
+from market_ai_hub.services.jnu_session_materializer import JNUSessionMaterializer
 
 CONFIG_PATH = project_root() / "config" / "yuanta_live_recorder.yaml"
 _SYMBOL_RE = re.compile(r"^[A-Za-z0-9_./-]{1,40}$")
 _JNU_CONTRACT_RE = re.compile(r"^JNU\d{4}$")
+_JNU_SESSION_QUOTE_RE = re.compile(r"^JNU(?:PM)?\d{4}$")
 _DURABLE_BATCH_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}$")
 _QUOTE_FIELDS = (
     "YstPrice", "OpenRefPrice", "UpStopPrice", "DownStopPrice", "YstVol",
@@ -491,13 +493,21 @@ def _jnu_microstructure_pairs(cfg: dict, pairs: list[tuple[int, str, str]]) -> l
     market_no = int(mc.get("market_no", 207))
     prefix = str(mc.get("code_prefix", "JNU")).upper()
     limit = max(1, min(int(mc.get("max_contracts", 2)), 8))
-    selected = [
+    eligible = [
         (m, code, key)
         for m, code, key in pairs
         if int(m) == market_no and str(code).upper().startswith(prefix)
-        and _JNU_CONTRACT_RE.fullmatch(str(code).upper())
+        and _JNU_SESSION_QUOTE_RE.fullmatch(str(code).upper())
     ]
-    return selected[:limit]
+    months: list[str] = []
+    for _, code, _ in eligible:
+        month = str(code).upper()[-4:]
+        if month not in months:
+            months.append(month)
+        if len(months) >= limit:
+            break
+    chosen = set(months)
+    return [(m, code, key) for m, code, key in eligible if str(code).upper()[-4:] in chosen]
 
 
 def _subscribe_jnu_microstructure(
@@ -1058,6 +1068,15 @@ def _run_locked(
     }
     microstructure_callbacks = {"stock_tick": 0, "five_tick": 0}
     microstructure_pairs: list[tuple[int, str, str]] = []
+    materializer_state = {"error": None}
+    try:
+        jnu_session_materializer = JNUSessionMaterializer(
+            root,
+            runtime_build_id=runtime_build_id,
+        )
+    except Exception as exc:
+        jnu_session_materializer = None
+        materializer_state["error"] = type(exc).__name__
     startup_stage = "PRE_BROKER_READY"
     fatal_error = None
     login_msg_code = None
@@ -1126,6 +1145,12 @@ def _run_locked(
             payload["subscription_key"] = subscription_key
             if callback_type == "SubscribeStockTick":
                 microstructure_callbacks["stock_tick"] += 1
+                if jnu_session_materializer is not None:
+                    try:
+                        jnu_session_materializer.ingest(payload)
+                        materializer_state["error"] = None
+                    except Exception as exc:
+                        materializer_state["error"] = type(exc).__name__
             elif callback_type == "SubscribeFiveTickA":
                 microstructure_callbacks["five_tick"] += 1
             buffer.append(payload)
@@ -1247,6 +1272,8 @@ def _run_locked(
                     reasons.append("NO_RECENT_CALLBACK_SESSION_UNCHECKED")
                 if revalidation_error:
                     reasons.append("CONTRACT_REVALIDATION_FAILED")
+                if materializer_state["error"]:
+                    reasons.append("JNU_SESSION_MATERIALIZER_ERROR")
                 _atomic_json(status_path, {
                     "status": "DEGRADED" if reasons else "RUNNING", "pid": os.getpid(), "provider": "SPARK_SECURITIES_PROFILE",
                     "login_msg_code": login_msg_code, "subscriptions": len(subscribed),
@@ -1288,6 +1315,14 @@ def _run_locked(
                     "jnu_microstructure_live_verified": bool(
                         microstructure_callbacks["stock_tick"] or microstructure_callbacks["five_tick"]
                     ),
+                    "jnu_session_materializer": {
+                        "enabled": jnu_session_materializer is not None,
+                        "path": (
+                            str(jnu_session_materializer.path)
+                            if jnu_session_materializer is not None else None
+                        ),
+                        "error": materializer_state["error"],
+                    },
                     "heartbeat_at": _utcnow().isoformat(), "runtime_build_id": runtime_build_id,
                 })
                 last_status = now
@@ -1318,6 +1353,11 @@ def _run_locked(
             write_error = None
         except Exception as exc:
             write_error = type(exc).__name__
+        if jnu_session_materializer is not None:
+            try:
+                jnu_session_materializer.flush()
+            except Exception as exc:
+                materializer_state["error"] = type(exc).__name__
         durability = buffer.durability_status()
         _atomic_json(status_path, {
             "status": (
@@ -1352,6 +1392,14 @@ def _run_locked(
             "jnu_microstructure_live_verified": bool(
                 microstructure_callbacks["stock_tick"] or microstructure_callbacks["five_tick"]
             ),
+            "jnu_session_materializer": {
+                "enabled": jnu_session_materializer is not None,
+                "path": (
+                    str(jnu_session_materializer.path)
+                    if jnu_session_materializer is not None else None
+                ),
+                "error": materializer_state["error"],
+            },
             "pending_records": buffer.snapshot()[1], "dropped_records": buffer.snapshot()[2],
             "persistence_error": write_error,
         })

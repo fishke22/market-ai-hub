@@ -2,6 +2,15 @@
 
 狀態：ACTIVE / QUOTE-ONLY / NO-PAID-DATA
 
+## 2026-09-30 零成本採用狀態
+
+- 本機擷取不需要 AWS，也不需要任何付費行情服務；AWS 永久視為 optional。
+- Windows task `MARKET_AI_HUB_JNU_Capture_Watchdog` 現在每 5 分鐘執行一次 `ensure_jnu_data_capture.ps1`，不再等固定 18:55。只要 Windows 已登入且主機開著，task 會維持 single-owner quote-only recorder；主機關機時資料自然缺失，不做 backfill。
+- recorder 已正式採用 bounded auto reconnect（最多 3 次）；若 runtime build 改變，watchdog 先 graceful stop，再重啟唯一 owner；只有 heartbeat stale 且 fail-closed 條件成立才允許獨立 force-stop helper。
+- JNU StockTick 會同步增量產生 `data/live/yuanta/materialized/jnu_sessions.json`（實際根目錄由 `MARKET_AI_DATA_ROOT`/runtime path 決定），供研究層直接讀取 5m bars、VWAP、range/profile 與 session coverage。這不是預測結果。
+- 必須從開盤邊界一路觀察到收盤邊界，該 session 才可成為 label-ready。晚開機、斷線或缺邊界的 session 只保留 partial/context，不能事後補成完整樣本。
+
+
 ## 目的
 
 在不購買 JPX/OSE 付費 tick/L2 的前提下，優先使用既有元大 SPARK 行情權限，自動擷取 exact JNU 個別月份行情。
