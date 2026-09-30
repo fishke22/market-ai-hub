@@ -4,6 +4,22 @@
 
 ## 可變開機時段（重要）
 
+## Capture window 研究摘要
+
+除了 coverage ledger，watchdog 也會自動更新：
+
+`research/jnu_capture_window_summary.json`
+
+這份摘要只計算「該 capture window 基準之後新增的資料」，不會把你開機前已累積的整晚數字灌進來。它會列出：
+
+- 實際 verified 開始、最後健康時間、關閉原因與和上一段的 gap。
+- 這段期間新增的 trade count、DealVol、window VWAP、new 5-minute bars。
+- microstructure 是否 live verified、callback 數、dropped records、persistence error。
+- session price/volume profile 是否可用；若只是整個 session 的累積 profile，會明確標示不是 window-specific。
+- 為何目前不是 `FULL_SESSION_LABEL_READY`，例如缺官方 open 或 close boundary。
+
+若功能在一個已經進行中的 window 中途才上線，第一個 baseline 只從上線時開始，會標 `metrics_complete_from_window_start=false`，不會倒算。下次重新開機時，前一段 window 只關到最後一次 verified healthy 時間，不會把重開機時刻假裝成前次關機時間。
+
 日常不要求整夜開機。你的慣用時段約為 **18:55 開機、22:00 關機**，但可以提早、延後或提早關機；系統會以實際 availability 為準。
 
 每 5 分鐘 watchdog 會把 verified healthy recorder availability 寫到：

@@ -84,6 +84,40 @@ def _materialized_sessions(root: Path) -> dict[str, Any]:
     return raw.get("sessions") if isinstance(raw.get("sessions"), dict) else {}
 
 
+def _session_counters(sessions: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for key, session in sessions.items():
+        if not isinstance(session, dict):
+            continue
+        out[key] = {
+            "trade_count": int(session.get("trade_count") or 0),
+            "total_volume": float(session.get("total_volume") or 0.0),
+            "sum_price_volume": float(session.get("sum_price_volume") or 0.0),
+            "bar_count": len(session.get("bars") or {}),
+            "price_volume_bin_count": len(session.get("price_volume_bins") or {}),
+            "price_trade_bin_count": len(session.get("price_trade_bins") or {}),
+            "last_event_at": session.get("last_event_at"),
+        }
+    return out
+
+
+def _runtime_context(root: Path) -> dict[str, Any]:
+    path = Path(root) / "status.json"
+    if not path.exists():
+        return {}
+    try:
+        status = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return {
+        "jnu_microstructure_live_verified": bool(status.get("jnu_microstructure_live_verified")),
+        "jnu_microstructure_callbacks": dict(status.get("jnu_microstructure_callbacks") or {}),
+        "dropped_records": status.get("dropped_records"),
+        "persistence_error": status.get("persistence_error"),
+        "connection_event_state": status.get("connection_event_state"),
+    }
+
+
 def _session_summary(session: dict[str, Any]) -> dict[str, Any]:
     trade_count = int(session.get("trade_count") or 0)
     label_ready = bool(session.get("label_ready"))
@@ -122,6 +156,9 @@ def update_coverage(
     path.parent.mkdir(parents=True, exist_ok=True)
     state = _load(path)
     now = _utc(checked_at)
+    materialized = _materialized_sessions(root)
+    counters = _session_counters(materialized)
+    runtime_context = _runtime_context(root)
     intervals = state["intervals"]
     active = intervals[-1] if intervals and intervals[-1].get("status") == "ACTIVE" else None
 
@@ -147,10 +184,25 @@ def update_coverage(
                 "runtime_build_id": runtime_build_id or None,
                 "quote_only": True,
                 "broker_order_action": False,
+                "metrics_baseline_at": now.isoformat(),
+                "metrics_latest_at": now.isoformat(),
+                "metrics_complete_from_window_start": True,
+                "metrics_baseline_reason": "WINDOW_START_COUNTER_SNAPSHOT",
+                "session_baseline": deepcopy(counters),
+                "session_latest": deepcopy(counters),
+                "latest_runtime_context": deepcopy(runtime_context),
             }
             intervals.append(active)
         else:
+            if not isinstance(active.get("session_baseline"), dict):
+                active["metrics_baseline_at"] = now.isoformat()
+                active["metrics_complete_from_window_start"] = False
+                active["metrics_baseline_reason"] = "BASELINE_ADOPTED_AFTER_WINDOW_START"
+                active["session_baseline"] = deepcopy(counters)
             active["last_healthy_at"] = now.isoformat()
+            active["metrics_latest_at"] = now.isoformat()
+            active["session_latest"] = deepcopy(counters)
+            active["latest_runtime_context"] = deepcopy(runtime_context)
             if runtime_build_id:
                 active["runtime_build_id"] = runtime_build_id
     elif active is not None:
@@ -167,7 +219,7 @@ def update_coverage(
     state["intervals"] = intervals[-MAX_INTERVALS:]
     state["sessions"] = {
         key: _session_summary(value)
-        for key, value in _materialized_sessions(root).items()
+        for key, value in materialized.items()
         if isinstance(value, dict)
     }
     state["updated_at"] = now.isoformat()

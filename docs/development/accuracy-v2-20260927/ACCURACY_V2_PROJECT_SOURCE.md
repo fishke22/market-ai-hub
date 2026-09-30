@@ -1,5 +1,15 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：JNU capture-window research summary
+
+- 每個 verified capture window 現在記錄 materializer counter baseline/latest，研究數值採**視窗差分**，不把開機前的整個夜盤累積誤算進 18:55–22:00 或其他實際開機區段。
+- 新 window 在 verified start 建 baseline；若功能上線時 window 已經進行中，僅從上線時採 baseline，並標 `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`，不倒推或補造早先資料。
+- 5 分鐘 watchdog 同步寫 `research/jnu_capture_window_summary.json`：exact start/last healthy/close、前一 verified window gap、observed minutes、window trade/DealVol/VWAP/new 5m bars、microstructure callbacks/drop/persistence、session profile availability、以及 open/close boundary label blockers。
+- session price/volume profile 若非 window-specific delta，只能標 `SESSION_CUMULATIVE_CONTEXT_NOT_WINDOW_SPECIFIC`；partial window 仍可研究，但不得升格 predictive gain/calibrated probability/trading edge。
+- 下次開機若健康樣本 gap >8 分鐘，舊 ACTIVE window 在舊 `last_healthy_at` 關閉，新 window 從新健康樣本開始；不把重開機時間假裝成前次關機時間。
+- 實機 recorder PID 維持 16204。既有 window 於 18:27:23 才採第一個新 baseline，因此誠實標 incomplete-from-window-start；約 34 秒後差分為 JNU2612 +24 trades / DealVol +101 / VWAP≈67,178.86，JNU2703 +2 trades / DealVol +5。focused regression=`35 passed, 1 deselected`，build=`a0ac8fdb8f218c39`。
+
+
 ## 2026-09-30 可替換快照：JNU variable-PC capture windows
 
 - 使用者不會整夜開機。平常約 18:55 開機、約 22:00 關機，但可能提早或延後；此時段只作慣用參考，不是硬門檻。系統必須在實際開機期間自動抓取，不能要求整夜維持電腦。

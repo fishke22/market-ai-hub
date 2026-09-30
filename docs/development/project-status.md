@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 JNU capture-window research summary
+
+- The watchdog now snapshots materializer counters per verified capture window and emits `research/jnu_capture_window_summary.json`. Window metrics are deltas from that window's baseline, so earlier whole-session trades/volume are not misattributed.
+- For windows already active before this feature, baseline adoption is explicit: `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`. No retroactive estimates are made.
+- Summary fields include verified interval/gap/observed minutes, delta trade count/DealVol/window VWAP/new 5m-bar count, sampled microstructure callbacks/drop/persistence state, cumulative session profile availability and exact full-label blockers.
+- Next-start behavior is fail-honest: a stale ACTIVE interval closes at its prior `last_healthy_at`; restart time is not used as a fabricated shutdown time.
+- Live proof: recorder PID remained 16204; baseline adopted 18:27:23 Asia/Taipei; ~34s later JNU2612 delta=24 trades / DealVol 101 / VWAP~67,178.86 and JNU2703 delta=2 / volume 5. Focused regression=`35 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
 ## 2026-09-30 JNU variable-PC capture windows
 
 - The PC does **not** need to remain on for a full OSE session. Normal availability is roughly 18:55–22:00 Asia/Taipei, but earlier/later start or shutdown is allowed and recorded truthfully.
