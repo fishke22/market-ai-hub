@@ -1,5 +1,15 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-10-01 可替換快照：JNU closed-window rollup
+
+- 真實 immutable dataset 已有 2 筆 CLOSED rows，兩筆都逐筆用 governed summary 重建並取得相同 canonical hash，沒有資料漂移。
+- 第一段為 18:13:21–18:58:21 Asia/Taipei，因 owner degraded 關閉，且 baseline 在中途才採用；第二段為 22:08:35–23:13:21，window-start baseline 完整。2026-10-01 觀察到 `NO_RUNNING_OWNER` 與 stale heartbeat 後，只把第二段封在舊 `last_healthy_at`，沒有啟動/重登 recorder，也沒有把今早時間假裝成昨晚關機時間。
+- 新增 `research/jnu_capture_window_rollup.json` 與繁中 markdown；以 `session + session_start_date` 分組，因此現在的 **2 windows 只算 1 個 2026-09-30 NIGHT market session**，禁止把 PC 開關切段當獨立樣本數膨脹。
+- live rollup：109.77 verified capture minutes；1 個完整 baseline、1 個中途 baseline；microstructure verified=2/2；dropped=0；persistence error=0；broker action=0；FULL_SESSION_LABEL_READY=0。
+- JNU2612 capture trades=8,393 / DealVol=48,376 / volume-weighted VWAP≈67,555.38；JNU2703=260 / 388 / ≈67,775.46。只屬 capture/context 品質，不是方向準確率或OOS增益證據。
+- source rows hash=`5d37db2a67ad912b4d5a2a8bb9f1e42a0742db9a3ef2075efd031155260c7b2c`；focused regression=`45 passed, 1 deselected`；build=`a0ac8fdb8f218c39`；predictive/calibrated/edge claims 仍 false。
+
+
 ## 2026-09-30 可替換快照：append-only JNU closed-window dataset
 
 - 新增 `research/jnu_capture_window_dataset.json`，只收 **CLOSED verified capture windows**；ACTIVE window 絕不提前定案。

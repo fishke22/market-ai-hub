@@ -2,6 +2,17 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-01 JNU closed-window rollup + first real immutable rows
+
+The long-term capture dataset now has **2 real CLOSED rows** from the 2026-09-30 NIGHT market session. Both rows were independently re-derived from the governed window summary and their canonical hashes matched exactly, confirming the append-only dataset has not drifted. Window 1 is 18:13:21–18:58:21 Asia/Taipei, closed because the owner became `SAFE_DEFAULT_OWNER_DEGRADED`; its delta baseline was adopted after the window started, so `metrics_complete_from_window_start=false`. Window 2 is 22:08:35–23:13:21, with a true window-start counter snapshot and `metrics_complete_from_window_start=true`.
+
+At 2026-10-01 startup the recorder owner check returned `NO_RUNNING_OWNER` with stale heartbeat. No recorder start/relogin was performed. The stale second interval was truthfully closed at its prior `last_healthy_at=23:13:21`, not at the 2026-10-01 observation time, and the brief moved to `CLOSED_CAPTURE`.
+
+Added `research/jnu_capture_window_rollup.json` and `research/jnu_capture_window_rollup_zh_tw.md`. The rollup explicitly separates capture-window count from market-session count, grouping by `session + session_start_date` so multiple PC-on segments from one official NIGHT/DAY session do not inflate the effective sample count. Current live rollup: 2 CLOSED windows but **1 unique market session**, 109.77 verified capture minutes, 1 complete-baseline window + 1 mid-window-baseline window, 2/2 microstructure-verified, dropped records=0, persistence error windows=0, broker order action windows=0, FULL_SESSION_LABEL_READY windows=0. JNU2612 captured 8,393 trades / DealVol 48,376 with capture volume-weighted VWAP ~67,555.38; JNU2703 captured 260 trades / DealVol 388 with capture volume-weighted VWAP ~67,775.46. These are capture/context quality statistics only, not independent predictive samples or accuracy evidence.
+
+The rollup source-rows hash is `5d37db2a67ad912b4d5a2a8bb9f1e42a0742db9a3ef2075efd031155260c7b2c`. Predictive gain, calibrated probability and trading edge claims remain hard false. Focused regression=`45 passed, 1 deselected`; runtime source/config build remains `a0ac8fdb8f218c39`.
+
+
 ### 2026-09-30 append-only JNU closed-window research dataset
 
 Added `research/jnu_capture_window_dataset.json` as a semantic append-only dataset for **CLOSED verified capture windows only**. ACTIVE windows are never promoted into this long-term dataset. Each row is keyed by `window_id` and carries the immutable closed-window timing, window-delta metrics, sampled microstructure quality context, per-session context snapshot, and research-use gates. Existing rows are never updated; if a later summary proposes different content for an existing window ID, the updater returns `IMMUTABILITY_CONFLICT` and leaves the stored dataset unchanged.

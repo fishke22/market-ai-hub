@@ -1,5 +1,15 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-01 JNU closed-window rollup
+
+- The first real immutable dataset evidence is now present: `jnu_capture_window_dataset.json` has 2 CLOSED rows from one 2026-09-30 NIGHT market session. Both row hashes exactly match the current governed summary.
+- Window 1: 18:13:21–18:58:21 Asia/Taipei, close reason `OWNER_SAFE_DEFAULT_OWNER_DEGRADED`, baseline incomplete from start. Window 2: 22:08:35–23:13:21, closed at the old last-healthy time after a 2026-10-01 `NO_RUNNING_OWNER` observation, with a complete window-start baseline. No recorder start/relogin was performed.
+- Added `research/jnu_capture_window_rollup.json` + Traditional-Chinese markdown. Rollup groups windows by `session + session_start_date`, so 2 PC-on windows in the same NIGHT session count as 1 market session rather than 2 independent samples.
+- Current rollup: 2 CLOSED windows / 1 unique market session / 109.77 verified minutes; 2 microstructure-verified; dropped=0; persistence errors=0; broker actions=0; full-session-label-ready windows=0.
+- JNU2612 capture totals: 8,393 trades / DealVol 48,376 / capture VWAP~67,555.38. JNU2703: 260 / 388 / ~67,775.46. These are descriptive capture/context facts only.
+- Focused regression=`45 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
 ## 2026-09-30 append-only JNU capture-window dataset
 
 - Added `research/jnu_capture_window_dataset.json`; only CLOSED verified windows are appended. ACTIVE windows are never frozen early.

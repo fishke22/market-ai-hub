@@ -9,6 +9,7 @@ $CoverageScript = Join-Path $PSScriptRoot "update_jnu_capture_coverage.py"
 $ResearchSummaryScript = Join-Path $PSScriptRoot "update_jnu_capture_research_summary.py"
 $BriefScript = Join-Path $PSScriptRoot "update_jnu_capture_brief.py"
 $DatasetScript = Join-Path $PSScriptRoot "update_jnu_capture_dataset.py"
+$RollupScript = Join-Path $PSScriptRoot "update_jnu_capture_window_rollup.py"
 
 $RecorderRoot = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root; print(recorder_root())"
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve recorder root" }
@@ -42,6 +43,7 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
         & $Python -B $ResearchSummaryScript --recorder-root $RecorderRoot | Out-Null
         & $Python -B $BriefScript --recorder-root $RecorderRoot | Out-Null
         & $Python -B $DatasetScript --recorder-root $RecorderRoot | Out-Null
+        & $Python -B $RollupScript --recorder-root $RecorderRoot | Out-Null
     } catch {}
 }
 
