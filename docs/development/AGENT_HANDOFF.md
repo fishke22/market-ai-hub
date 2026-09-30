@@ -2,6 +2,19 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-09-30 JNU variable-PC capture-window policy
+
+The user clarified that the PC is **not** expected to stay on for a full OSE session. The normal habit is roughly 18:55 Asia/Taipei power-on and about 22:00 shutdown, but either side may be earlier or later. This is now a durable operating rule, not a hard schedule. The recorder/watchdog must capture whenever the PC is actually available and must never require overnight operation.
+
+Added a local zero-cost capture coverage ledger at `automation/jnu_capture_coverage.json`, updated by the existing 5-minute JNU watchdog. The preferred 18:55–22:00 window is stored as `informational_only=true`; early/late capture is explicitly allowed. Each verified healthy-owner interval records its actual start/last-healthy time and splits after a >8-minute health-sample gap. Nonhealthy owner states close the verified interval. Missing time is never backfilled.
+
+Materialized session summaries are classified as either `PARTIAL_WINDOW` or `FULL_SESSION_LABEL_READY`. Partial windows remain `usable_as_context=true` whenever real ticks exist; they are not discarded simply because the official session open/close was not observed. Full-session label readiness remains opportunistic and requires the materializer's real open+close boundary proof. This means the user's ordinary 18:55–22:00 use is valid research/context evidence without any requirement to run the PC through 05:00.
+
+The new ledger is monitoring only and does not change recorder runtime/config build. Actual live verification after deployment: recorder PID remained 16204, classification=`SAFE_DEFAULT_OWNER_HEALTHY`, runtime/disk build=`a0ac8fdb8f218c39`, no independent owner and no broker action. Coverage tests/watchdog regression=`31 passed, 1 deselected`. The ledger correctly exposes the user's preferred window, no-backfill policy, and 2026-09-30 JNU2612/JNU2703 as partial-but-usable context.
+
+User-facing reporting rule: every construction report must end by explicitly stating (1) whether construction is continuing or stopped, (2) the next action, and (3) whether new user authorization is required.
+
+
 ### 2026-09-30 zero-cost JNU live adoption + incremental session materializer
 
 User set a permanent **zero-paid-service** constraint: assume no AWS account is ever created and no paid cloud/data service is ever purchased. AWS/EventBridge is therefore optional research/ops infrastructure only and is not required for MARKET_AI_HUB to continue its original evidence-accumulation purpose. The default continuity path is local Windows scheduling when the PC is on plus existing free/public-source fallbacks; cloud absence is recorded as an availability limitation, not an engineering failure.

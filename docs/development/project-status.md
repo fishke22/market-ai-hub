@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-09-30 JNU variable-PC capture windows
+
+- The PC does **not** need to remain on for a full OSE session. Normal availability is roughly 18:55–22:00 Asia/Taipei, but earlier/later start or shutdown is allowed and recorded truthfully.
+- Existing 5-minute watchdog now updates `automation/jnu_capture_coverage.json`. Healthy samples extend the active capture interval; >8-minute gaps split intervals; degraded/unverified owner state closes verified coverage. No missing minutes are backfilled.
+- Preferred 18:55–22:00 is informational only. Partial windows with real StockTick data are `PARTIAL_WINDOW / usable_as_context=true`; full label readiness remains strictly open+close-boundary dependent and therefore opportunistic.
+- Live adoption did not restart the recorder: PID 16204 stayed healthy, runtime/disk build `a0ac8fdb8f218c39`, broker_action_performed=false. Focused coverage/watchdog validation=`31 passed, 1 deselected`.
+- Reporting UX rule: all construction closeouts must explicitly say continue/stop, next step, and whether user authorization is needed.
+
+
 ## 2026-09-30 zero-cost JNU live capture / materializer adoption
 
 - Permanent policy: **zero paid services**. AWS account/paid cloud is not required; system must keep operating if AWS is never created. AWS external scheduler work is optional only. Local Windows scheduler + public/free fallbacks remain the default continuity design.
