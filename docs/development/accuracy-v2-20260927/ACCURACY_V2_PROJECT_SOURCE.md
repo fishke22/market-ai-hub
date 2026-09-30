@@ -1,5 +1,14 @@
 # MARKET_AI_HUB Accuracy v2：預測能力提升與施工契約
 
+## 2026-09-30 可替換快照：JNU variable-PC capture windows
+
+- 使用者不會整夜開機。平常約 18:55 開機、約 22:00 關機，但可能提早或延後；此時段只作慣用參考，不是硬門檻。系統必須在實際開機期間自動抓取，不能要求整夜維持電腦。
+- 既有 5 分鐘 watchdog 現在同步維護 `automation/jnu_capture_coverage.json`。只有 `SAFE_DEFAULT_OWNER_HEALTHY` 算 verified capture interval；健康樣本間隔 >8 分鐘就切新 window，degraded/unverified 會結束 verified window；缺失時間絕不 backfill。
+- 有真實 tick 的不完整區段保留為 `PARTIAL_WINDOW / usable_as_context=true`，可供 5m/VWAP/profile/微結構/context 分析；不因沒有官方 session open/close 就丟棄。只有 materializer 真正觀察到 open+close boundary 才升格 `FULL_SESSION_LABEL_READY`，完整 session 是 opportunistic，不是日常開機要求。
+- 實機施工未重啟 recorder：PID=16204、owner healthy、runtime/disk build=`a0ac8fdb8f218c39`、無 independent owner、無 broker action。focused coverage/watchdog regression=`31 passed, 1 deselected`。
+- 每次施工回報結尾固定寫清楚：現在繼續或停止、下一步、是否需要使用者新授權。
+
+
 ## 2026-09-30 可替換快照：zero-cost JNU live evidence path
 
 - 使用者新增永久硬限制：**永不付費**，並要求假設永遠不建立 AWS 帳戶時系統仍可達成原始目的。因此 AWS/EventBridge 降級為 optional；本機 Windows Task Scheduler、既有 GitHub/public-source fallback 與 quote-only SPARK 才是預設 continuity path。雲端缺席只影響 punctuality/availability，不得阻塞本機 forward/context evidence 累積。

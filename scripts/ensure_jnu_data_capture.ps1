@@ -5,6 +5,7 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $StartScript = Join-Path $PSScriptRoot "start_yuanta_live_recorder.ps1"
 $PreflightScript = Join-Path $PSScriptRoot "check_yuanta_recorder_owner.ps1"
 $ForceStopScript = Join-Path $PSScriptRoot "force_stop_stale_yuanta_recorder.ps1"
+$CoverageScript = Join-Path $PSScriptRoot "update_jnu_capture_coverage.py"
 
 $RecorderRoot = & $Python -B -c "from market_ai_hub.integrations.yuanta.live_quote_recorder import recorder_root; print(recorder_root())"
 if ($LASTEXITCODE -ne 0) { throw "Cannot resolve recorder root" }
@@ -27,6 +28,15 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
     $tmp = $StatePath + ".tmp"
     $payload | ConvertTo-Json -Depth 4 | Set-Content -Path $tmp -Encoding UTF8
     Move-Item -Force -LiteralPath $tmp -Destination $StatePath
+    try {
+        $runtimeBuild = ""
+        if (Test-Path (Join-Path $RecorderRoot "status.json")) {
+            try {
+                $runtimeBuild = [string]((Get-Content (Join-Path $RecorderRoot "status.json") -Raw -Encoding UTF8 | ConvertFrom-Json).runtime_build_id)
+            } catch {}
+        }
+        & $Python -B $CoverageScript --recorder-root $RecorderRoot --classification $Classification --runtime-build-id $runtimeBuild | Out-Null
+    } catch {}
 }
 
 if (Test-Path $C23StatePath) {

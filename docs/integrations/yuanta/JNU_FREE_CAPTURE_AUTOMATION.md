@@ -2,6 +2,22 @@
 
 狀態：ACTIVE / QUOTE-ONLY / NO-PAID-DATA
 
+## 可變開機時段（重要）
+
+日常不要求整夜開機。你的慣用時段約為 **18:55 開機、22:00 關機**，但可以提早、延後或提早關機；系統會以實際 availability 為準。
+
+每 5 分鐘 watchdog 會把 verified healthy recorder availability 寫到：
+
+`automation/jnu_capture_coverage.json`
+
+規則：
+
+1. 18:55–22:00 只是慣用參考，`informational_only=true`，不是硬 gate。
+2. 提早開機就提早開始累積；晚開機就從晚開那一刻開始。
+3. 健康樣本中斷超過 8 分鐘，視為新的 capture window；缺的時間不補造。
+4. 有真實 StockTick 的 window 即使不含官方開盤或收盤，仍保留為 `PARTIAL_WINDOW` 並可做 context/微結構研究。
+5. 只有實際觀察到官方 session open + close 邊界時，才可標 `FULL_SESSION_LABEL_READY`。這是額外證據，不是要求你整夜開電腦。
+
 ## 2026-09-30 零成本採用狀態
 
 - 本機擷取不需要 AWS，也不需要任何付費行情服務；AWS 永久視為 optional。
