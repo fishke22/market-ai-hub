@@ -4,6 +4,23 @@
 
 ## 可變開機時段（重要）
 
+## 背景執行，不再跳出終端機
+
+Windows Task Scheduler 仍每 5 分鐘檢查一次 JNU recorder 健康狀態，但啟動方式已改成：
+
+`wscript.exe -> run-hidden.vbs -> PowerShell -WindowStyle Hidden`
+
+因此正常情況下不會再看到每隔幾分鐘開啟又關閉的 PowerShell / Windows Terminal 視窗。5 分鐘 cadence 保留，因為它同時負責 single-owner 健康檢查、capture coverage 與研究 artifact 更新。
+
+18:55–22:00 仍只是慣用開機區段，不是硬門檻：
+
+- 約 18:55 才開機沒有問題。
+- 若提早開機，系統可提早累積真實資料。
+- 若 22:00 後仍保持開機，系統可繼續累積；不會因固定時間硬切資料。
+- 你直接關機時，資料自然停止，缺失時間不補造。
+
+舊的 `MARKET_AI_HUB_JNU_Capture_Stop_2205` 已淘汰，避免 22:05 強制停掉後又被 watchdog 重新啟動。
+
 ## 研究 Artifact 刷新狀態
 
 `automation_watchdog.json` 現在會另外寫入 `artifact_refresh`，讓研究輸出失敗不再被靜默忽略。

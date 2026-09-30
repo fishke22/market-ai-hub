@@ -1,5 +1,16 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-01 background-only JNU scheduler
+
+- Root cause of the recurring terminal flash: `MARKET_AI_HUB_JNU_Capture_Watchdog` directly launched interactive PowerShell every 5 minutes.
+- Task registration now uses `wscript.exe -> run-hidden.vbs -> PowerShell -WindowStyle Hidden`; the 5-minute health cadence is preserved with no visible console.
+- C2.3 registration source is aligned to the same hidden runner.
+- 18:55–22:00 remains an informational PC-availability preference, not a hard schedule. Earlier/later capture is still accepted when the PC is on.
+- Removed legacy `MARKET_AI_HUB_JNU_Capture_Stop_2205`, which otherwise created an artificial 22:05 stop followed by possible watchdog restart.
+- Live hidden-task run at 06:51:06 returned 0; recorder PID remained 7440 healthy, action=`KEEP_EXISTING_OWNER`, artifact refresh PASS, broker action=false.
+- Focused validation=`35 passed, 1 deselected`; diff check PASS.
+
+
 ## 2026-10-01 fail-honest JNU artifact refresh
 
 - Watchdog research refresh is now dependency-ordered and observable: coverage -> summary -> brief -> immutable dataset -> rollup -> market-session view.
