@@ -2,6 +2,15 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-01 JNU distinct-market-session readiness gate
+
+Added `research/jnu_market_session_readiness.json` and `research/jnu_market_session_readiness_zh_tw.md`, derived only from the one-row-per-market-session view. This gate prevents capture-window count from leaking back into sample-count decisions.
+
+The gate uses a deliberately narrow rule: at least **2 distinct eligible market-session rows** are required before the system may even build a descriptive cross-session pairing table. Reaching 2 sessions does **not** unlock model selection, predictive-performance evaluation, calibrated probability, or trading-edge claims; those still require a separately predeclared chronological protocol and materially more forward evidence.
+
+Current live state is `ACCUMULATING_MARKET_SESSIONS`: one eligible row (`NIGHT|2026-09-30`), one more distinct market session needed for descriptive pairing, `cross_session_descriptive_pairing_ready=false`, `chronological_model_selection_ready=false`, and `predictive_performance_evaluation_ready=false`. The readiness updater is appended after `market_session_view` in the fail-honest watchdog artifact chain.
+
+
 ### 2026-10-01 hidden/background JNU watchdog + legacy 22:05 stop retirement
 
 The user's recurring terminal flashes were traced to the actual Windows Task Scheduler action for `MARKET_AI_HUB_JNU_Capture_Watchdog`: it launched interactive `powershell.exe` directly every 5 minutes. This was a UI/launch-mode issue, not evidence that the recorder itself was being restarted every 5 minutes.

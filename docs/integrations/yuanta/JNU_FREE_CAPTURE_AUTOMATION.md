@@ -4,6 +4,24 @@
 
 ## 可變開機時段（重要）
 
+## Market-session 累積 Readiness
+
+系統會從 `jnu_market_session_view.json` 自動產生：
+
+- `research/jnu_market_session_readiness.json`
+- `research/jnu_market_session_readiness_zh_tw.md`
+
+這個 gate 只看「獨立 market session」，不看 capture-window 數。
+
+目前規則：
+
+1. 少於 2 個 eligible distinct market sessions：`ACCUMULATING_MARKET_SESSIONS`。
+2. 達到 2 個：只開放建立**描述性的** cross-session pairing table。
+3. 達到 2 個仍不代表可以調模型、選模型、宣稱方向準確率、預測增益、校準機率或 trading edge。
+4. 真正模型比較仍需另外預先固定 chronological split / inner-fold / OOF / purge / trial cap 等 Accuracy v2 protocol。
+
+目前只有 `NIGHT|2026-09-30` 這 1 個 eligible market session，因此還在累積階段。
+
 ## 背景執行，不再跳出終端機
 
 Windows Task Scheduler 仍每 5 分鐘檢查一次 JNU recorder 健康狀態，但啟動方式已改成：
