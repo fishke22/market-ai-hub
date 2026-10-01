@@ -14,7 +14,7 @@ import duckdb
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from market_ai_hub.config.settings import project_root
+from market_ai_hub.config.runtime_paths import data_root
 
 
 class OfficialEvent(BaseModel):
@@ -82,8 +82,10 @@ def event_visible(events: list[OfficialEvent], information_cutoff: datetime) -> 
 
 class EventStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or project_root()
-        self.dir = self.root / "data" / "events"
+        # data_root 是 runtime 可覆寫的資料根；固定 project_root 會與
+        # capability_registry 的 dated_event_store_ready 檢查不一致。
+        self.root = root or data_root()
+        self.dir = self.root / "events"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.dir / "events.duckdb"
 
@@ -111,6 +113,61 @@ class EventStore:
                  e.source, e.importance_class, _naive(avail) if avail else None],
             )
 
+    def replace_scheduled(self, events: list[OfficialEvent]) -> int:
+        """以新的未發布(scheduled)事件取代舊的 scheduled 列；已發布(released)歷史保留。"""
+        self.init()
+        with self._conn() as con:
+            con.execute("DELETE FROM events WHERE released_at IS NULL")
+        count = 0
+        for e in events:
+            if e.released_at is None:
+                self.save(e)
+                count += 1
+        return count
+
+    def replace_scheduled_for(self, source: str, events: list[OfficialEvent]) -> int:
+        """只取代單一來源的 scheduled 列。
+
+        來源階層 fail-honest：某來源本次抓取失敗時，其他來源的最後已知列
+        不會被連帶清除（calendar 資料寧可舊、不可無）。
+        """
+        self.init()
+        with self._conn() as con:
+            con.execute("DELETE FROM events WHERE released_at IS NULL AND source = ?", [source])
+        count = 0
+        for e in events:
+            if e.released_at is None and (e.source or "") == source:
+                self.save(e)
+                count += 1
+        return count
+
+    def upcoming(self, top_n: int = 10) -> list[OfficialEvent]:
+        """最接近現在、尚未發布的事件；store 不可用時回空清單（fail-soft）。"""
+        try:
+            with self._conn() as con:
+                rows = con.execute(
+                    "SELECT event_name, scheduled_at, source, importance_class"
+                    " FROM events WHERE released_at IS NULL"
+                    " ORDER BY scheduled_at LIMIT ?",
+                    [top_n],
+                ).fetchall()
+        except Exception:
+            return []
+        out = []
+        for r in rows:
+            try:
+                out.append(
+                    OfficialEvent(
+                        event_name=str(r[0]),
+                        scheduled_at=_utc(r[1]),
+                        source=str(r[2] or ""),
+                        importance_class=str(r[3] or ""),
+                    )
+                )
+            except Exception:
+                continue
+        return out
+
 
 def _naive(dt: datetime) -> datetime:
     t = pd.Timestamp(dt)
@@ -119,3 +176,8 @@ def _naive(dt: datetime) -> datetime:
     else:
         t = t.tz_convert("UTC")
     return t.tz_localize(None).to_pydatetime()
+
+
+def _utc(dt: datetime | None) -> datetime:
+    """已存值為 naive-UTC（見 _naive）；還原為 tz-aware UTC。"""
+    return pd.Timestamp(dt).tz_localize("UTC").to_pydatetime()

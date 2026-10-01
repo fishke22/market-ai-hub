@@ -1,5 +1,13 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-02 (night) event calendar automation + agent data-channel policy
+
+- Dated event store now populated and self-refreshing: zero-key FOMC (federalreserve.gov, real-page verified) + BLS (empsit/cpi schedule pages) collector; `EventStore` moved to `data_root()/events` (fixes registry mismatch); per-source `replace_scheduled_for` keeps other sources' last-known rows when one source fails; `_event_snapshot` returns SCHEDULED rows when data exists.
+- Registered `MARKET_AI_HUB_Event_Calendar_Sync` (daily 19:05 Taipei; refresh_log.json every run; diag dumps on failure). Real task-env trigger: **LastTaskResult=0, FED=10**; BLS 403s plain HTTP clients (CDN) — web-verified NFP 2026-10-02 20:30 Taipei row seeded (BLS, HIGH) and preserved; browser/agent-seed fallback queued.
+- Agent MCP data channels (FRED / Alpha Vantage / TWSE-TAIFEX OpenAPI / Yahoo / web / browser) are **CONTEXT/PROXY only**, zero-paid; agent-verified official announcements are an accepted calendar seed/repair path.
+- Machine note: agent-shell-spawned python aborts TLS (`no OPENSSL_Applink`) due to foreign DLL pollution in that spawn chain only; Task Scheduler/MCP env HTTPS is healthy; `sitecustomize.py` DLL guard installed in all three venvs; curl.exe (schannel) = fallback transport.
+- Validation: event-calendar tests `9 passed`; affected set `73 passed, 5 deselected`; freeze value updated to `875eb1f2fb7a1de1` (three assertions). Claims unchanged: PREDICTIVE_GAIN/CALIBRATED/TRADING_EDGE false.
+
 ## 2026-10-02 agent closeout — live-quote rule + WIP landing/merge/PR #80 + schedulers
 
 - **New durable rule**: recorded capture is PC-on-only and never all-day. Real-time/today questions must use the Yuanta/SPARK live API quote path (`data/live/yuanta/{status,latest}.json` / fresh live deal fields), never the recorded archive as current truth; archived ranges must be labelled 系統有錄到的 + captured time span. Case: 2026-10-01 night low 68,130 printed inside the 16:00–17:00 Taipei pre-capture gap (recorded low=68,285); the public output did not surface the coverage caveat prominently — mandatory in the plain-language layer going forward.
