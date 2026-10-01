@@ -169,6 +169,37 @@ class EventStore:
         return out
 
 
+
+def event_refresh_status(root: Path | None = None) -> dict:
+    """Freshness of the dated event store: which sources the last refresh actually updated.
+
+    A source that is absent or BLOCKED_OR_FAILED means its stored dates are from an
+    earlier refresh and must not be presented as current.
+    """
+    import json
+
+    store_dir = Path(root) if root is not None else EventStore().dir
+    path = store_dir / "refresh_log.json"
+    if not path.exists():
+        return {"status": "NO_REFRESH_LOG", "refreshed_sources": [], "blocked_sources": []}
+    try:
+        entry = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"status": "REFRESH_LOG_UNREADABLE", "refreshed_sources": [], "blocked_sources": []}
+    status_map = entry.get("source_status") or {}
+    refreshed = sorted(s for s, v in status_map.items() if v == "REFRESHED")
+    blocked = sorted(s for s, v in status_map.items() if v == "BLOCKED_OR_FAILED")
+    if not status_map:  # older log without per-source detail
+        refreshed = sorted(entry.get("sources") or [])
+    return {
+        "status": "OK" if entry.get("ok") else "LAST_REFRESH_FAILED",
+        "as_of": entry.get("generated_at"),
+        "refreshed_sources": refreshed,
+        "blocked_sources": blocked,
+        "note": "dates from sources not listed in refreshed_sources may be stale",
+    }
+
+
 def _naive(dt: datetime) -> datetime:
     t = pd.Timestamp(dt)
     if t.tzinfo is None:

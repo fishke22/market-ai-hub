@@ -78,6 +78,50 @@ _MARKET_TIMEZONES = {
 }
 _DEFAULT_SUBSCRIPTION_REVALIDATION_SECONDS = 300.0
 
+# Yuanta market_no -> session_truth venue_id. Session truth stays the single source of
+# session state; the recorder does not re-implement sessions.
+_MARKET_SESSION_VENUE = {
+    1: "XTAI", 2: "XTAI", 3: "TAIFEX_DERIVATIVES",
+    203: "CME", 204: "CME", 207: "OSE_DERIVATIVES", 215: "CBOE",
+}
+# A connected-but-silent feed is a fault only when a subscribed venue is verified OPEN.
+_DEFAULT_STALE_RECOVERY_SECONDS = 180.0
+_DEFAULT_STALE_RECOVERY_COOLDOWN_SECONDS = 300.0
+
+
+def _feed_stalled(
+    *, reconnect_enabled: bool, session_open: bool, silence_seconds: float,
+    stale_seconds: float, since_last_recovery: float, cooldown_seconds: float,
+) -> bool:
+    """Single decision point: escalate only on verified-open + silence + cooldown."""
+    return bool(
+        reconnect_enabled
+        and session_open
+        and silence_seconds >= stale_seconds
+        and since_last_recovery >= cooldown_seconds
+    )
+
+
+def _subscribed_market_open(markets, asof: datetime) -> bool:
+    """True only when session_truth verifies >= 1 subscribed venue is open at asof."""
+    try:
+        from market_ai_hub.research.v2 import session_truth as _session_truth
+    except Exception:
+        return False
+    venues = {
+        _MARKET_SESSION_VENUE[int(m)]
+        for m in markets
+        if int(m) in _MARKET_SESSION_VENUE
+    }
+    for venue in venues:
+        try:
+            ctx = _session_truth.resolve_venue_session(venue, asof)
+        except Exception:
+            continue
+        if getattr(ctx, 'market_open', False):
+            return True
+    return False
+
 
 def _market_local_date(market: int, asof: date | datetime) -> date:
     """Resolve a venue-local calendar date; never use UTC date as trading-date proxy."""
@@ -130,17 +174,42 @@ def _within(root: Path, relative: str) -> Path:
     return path
 
 
+SPARK_OWNER_MUTEX_NAME = "Local\\MARKET_AI_HUB_SPARK_QUOTE_OWNER"
+
+
+def _create_spark_owner_mutex() -> tuple[bool, object]:
+    """(exists, handle) for the process-global SPARK quote-owner mutex."""
+    import ctypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    kernel.CreateMutexW.restype = ctypes.c_void_p
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel.CreateMutexW(None, False, SPARK_OWNER_MUTEX_NAME)
+    exists = ctypes.get_last_error() == 183
+    return exists, (kernel, handle)
+
+
+def spark_owner_present() -> bool:
+    """True when another live process already owns the single SPARK quote owner."""
+    if os.name != "nt":
+        return False
+    try:
+        exists, (kernel, handle) = _create_spark_owner_mutex()
+    except Exception:
+        return False
+    if handle:
+        kernel.CloseHandle(handle)
+    return bool(exists)
+
+
 @contextmanager
 def _single_instance(root: Path):
     # Windows mutex is independent of DATA_ROOT: only one SPARK owner per session.
     if os.name == "nt":
-        import ctypes
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-        kernel.CreateMutexW.restype = ctypes.c_void_p
-        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-        handle = kernel.CreateMutexW(None, False, "Local\\MARKET_AI_HUB_SPARK_QUOTE_OWNER")
-        exists = ctypes.get_last_error() == 183
+        try:
+            exists, (kernel, handle) = _create_spark_owner_mutex()
+        except Exception as exc:
+            raise RuntimeError(f"YUANTA_LIVE_OWNER_MUTEX_UNAVAILABLE: {type(exc).__name__}") from exc
         if not handle or exists:
             if handle:
                 kernel.CloseHandle(handle)
@@ -157,6 +226,22 @@ def _single_instance(root: Path):
                 yield
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def _flush_until_drained(buffer: "QuoteBuffer", root: Path, *, deadline_seconds: float = 60.0) -> str | None:
+    """Drain the buffer with a hard bound.
+
+    The loop condition (stats().pending_records) and flush() (spool.peek) can disagree;
+    when they do, flush() returns None forever and an unbounded loop spins at 100% CPU and
+    never lets the process stop. Bound it and report the reason instead.
+    """
+    deadline = time.monotonic() + max(1.0, float(deadline_seconds))
+    while buffer.snapshot()[1]:
+        if time.monotonic() >= deadline:
+            return "FLUSH_DEADLINE_EXCEEDED"
+        if buffer.flush(root) is None:
+            return "FLUSH_PENDING_COUNT_MISMATCH"
+    return None
 
 
 class QuoteBuffer:
@@ -264,14 +349,25 @@ def _merge_quote(previous: dict, payload: dict) -> dict:
     return merged
 
 
+# Vendor "no value" is encoded as an absurd magnitude (observed ~6.7e38 on CBOT
+# ZF/ZN). Real prices/volumes/amounts for these instruments stay below 1e15, so any
+# value at or above this ceiling is a sentinel, not data. ponytail: single magnitude
+# ceiling; if a venue ever legitimately exceeds it, replace with per-field bounds.
+_MAX_ABS_QUOTE_VALUE = 1e30
+
+
 def _scalar(v: Any) -> Any:
-    if isinstance(v, float) and not math.isfinite(v):
-        return None
-    if v is None or isinstance(v, (str, int, float, bool)):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        if not math.isfinite(v) or abs(v) >= _MAX_ABS_QUOTE_VALUE:
+            return None
+        return v
+    if v is None or isinstance(v, str):
         return v
     try:
         number = float(v)
-        return number if math.isfinite(number) else None
+        return number if (math.isfinite(number) and abs(number) < _MAX_ABS_QUOTE_VALUE) else None
     except Exception:
         try:
             return int(v)
@@ -1084,6 +1180,16 @@ def _run_locked(
     if rec.get("raw_jsonl") or not rec.get("normalized_parquet"):
         raise ValueError("persistent recorder requires Parquet; raw_jsonl is unsupported")
     last_latest = last_parquet = last_status = 0.0
+    liveness = {"last_callback_monotonic": time.monotonic()}
+    stale_recovery_seconds = float(
+        rec.get("stale_recovery_seconds", _DEFAULT_STALE_RECOVERY_SECONDS))
+    if not math.isfinite(stale_recovery_seconds) or stale_recovery_seconds < 30:
+        raise ValueError("stale_recovery_seconds must be finite and >= 30")
+    stale_recovery_cooldown_seconds = float(
+        rec.get("stale_recovery_cooldown_seconds", _DEFAULT_STALE_RECOVERY_COOLDOWN_SECONDS))
+    last_stall_recovery_at = 0.0
+    stall_recoveries = 0
+    session_open = False
 
     def write_startup_status(stage: str) -> None:
         durability = buffer.durability_status()
@@ -1111,8 +1217,7 @@ def _run_locked(
         if spool is not None and buffer.snapshot()[1]:
             startup_stage = "SPOOL_REPLAY"
             write_startup_status(startup_stage)
-            while buffer.snapshot()[1]:
-                buffer.flush(root)
+            _flush_until_drained(buffer, root)
         startup_stage = "INSTANTIATE"
         write_startup_status(startup_stage)
         rt.instantiate()
@@ -1134,6 +1239,7 @@ def _run_locked(
         if not outcome.received or outcome.msg_code not in ("0001", "00001"):
             raise RuntimeError(f"SPARK login failed: {outcome.msg_code}")
         def on_quote(_mark, str_index, obj):
+            liveness["last_callback_monotonic"] = time.monotonic()
             callback_type = str(str_index)
             payload = _extract_payload(obj, callback_type)
             if payload is None:
@@ -1171,14 +1277,33 @@ def _run_locked(
             if durability.get("spool_error"):
                 startup_stage = "RUNNING_SPOOL_FAULT"
                 raise OSError("durable quote spool append/ack failed")
-            if connection["faulted"]:
+            monotonic_now = time.monotonic()
+            callback_silence = monotonic_now - liveness["last_callback_monotonic"]
+            subscribed_markets = {m for (m, _code) in subscribed}
+            session_open = _subscribed_market_open(subscribed_markets, _utcnow())
+            stalled_feed = _feed_stalled(
+                reconnect_enabled=reconnect_policy.enabled,
+                session_open=session_open,
+                silence_seconds=callback_silence,
+                stale_seconds=stale_recovery_seconds,
+                since_last_recovery=monotonic_now - last_stall_recovery_at,
+                cooldown_seconds=stale_recovery_cooldown_seconds,
+            )
+            if connection["faulted"] or stalled_feed:
                 if not reconnect_policy.enabled:
                     startup_stage = "RUNNING_CONNECTION_FAULT"
                     raise ConnectionError("SPARK connection fault")
+                if stalled_feed:
+                    # Connected but silent while a venue is verifiably open: the venue
+                    # stopped pushing for this session. Force a bounded full runtime
+                    # replacement, which re-subscribes from scratch.
+                    last_stall_recovery_at = monotonic_now
+                    stall_recoveries += 1
                 startup_stage = "RUNNING_RECONNECT_FLUSH"
                 try:
-                    while buffer.snapshot()[1]:
-                        buffer.flush(root)
+                    drain_error = _flush_until_drained(buffer, root)
+                    if drain_error:
+                        raise RuntimeError(f"pre-reconnect flush incomplete: {drain_error}")
                 except Exception:
                     startup_stage = "RUNNING_RECONNECT_PRECONDITION_FAILED"
                     raise
@@ -1209,6 +1334,7 @@ def _run_locked(
                 last_reconnect_retry_error = reconnect_result.last_error_type
                 last_reconnect_error = None
                 last_reconnect_at = _utcnow().isoformat()
+                liveness["last_callback_monotonic"] = time.monotonic()
                 microstructure_subscription = _subscribe_jnu_microstructure(
                     rt, cred.username, desired_subscriptions, cfg
                 )
@@ -1280,6 +1406,10 @@ def _run_locked(
                     "dynamic_subscriptions": len(dynamic_subscribed),
                     "last_quote_at": last_quote, "quote_age_seconds": age,
                     "health_reasons": reasons, "pending_records": pending, "dropped_records": dropped,
+                    "session_open": session_open, "callback_silence_seconds": (
+                        None if not last_quote else round(
+                            (time.monotonic() - liveness["last_callback_monotonic"]), 3)),
+                    "stall_recoveries": stall_recoveries,
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "connection_event_state": connection["state"],
@@ -1348,9 +1478,7 @@ def _run_locked(
         except Exception:
             pass
         try:
-            while buffer.snapshot()[1]:
-                buffer.flush(root)
-            write_error = None
+            write_error = _flush_until_drained(buffer, root)
         except Exception as exc:
             write_error = type(exc).__name__
         if jnu_session_materializer is not None:

@@ -2,6 +2,44 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-02 (night) live-recorder liveness + provider-block honesty + test isolation
+
+Verified repo first: `codex/vnext-audit-handoff`, HEAD `871eb00`, origin/main `93a1230`
+(14 ahead / 3 behind), build_id `875eb1f2fb7a1de1` at start.
+
+- **Live recorder was silently dead for 74 min while `CONNECTED`.** Last callback 29/29
+  instruments at `2026-10-01T14:28:56Z`; reconnect succeeded 6 s later; zero callbacks after.
+  TAIFEX was verifiably `AFTER_HOURS_SESSION / market_open=true` at that instant, so this was
+  data loss, not a closed market. Root gap: health used a hardcoded 60 s rule with **no session
+  awareness**, and recovery only triggered on `connection["faulted"]` — a connected-but-silent
+  feed was never recovered (heartbeat-based watchdog cannot see it either).
+- **Fix (recorder)**: session-aware liveness via `_subscribed_market_open()` (reuses
+  `research/v2/session_truth`, no parallel session model) + `_feed_stalled()` single decision
+  point + bounded full-runtime replacement on verified-open silence (default 180 s, 300 s
+  cooldown). Additive status only — `health_reasons` contract string is unchanged because the
+  C23 maintenance preflight whitelists it. New fields: `session_open`, `callback_silence_seconds`,
+  `stall_recoveries`.
+- **Second recorder defect (newly found)**: the flush loops were unbounded, and `flush()`
+(spool.peek) can disagree with the loop condition (`stats().pending_records`) — that spins at
+  ~60 % CPU and makes the process unable to stop (`YUANTA_LIVE_STOP_TIMEOUT`). Fixed with a
+  bounded `_flush_until_drained()` applied to spool replay, pre-reconnect and shutdown.
+- **Third (data integrity)**: vendor "no value" is encoded as an absurd magnitude (~6.7e38 on
+  CBOT ZF/ZN) and was recorded as a price. `_scalar()` now rejects `abs(v) >= 1e30` as a sentinel.
+- **BLS event calendar is NOT a code bug**: bls.gov returns 403 `Access Denied` (AkamaiGHost)
+  for *every* path and client here — BLS states bot retrieval is prohibited by policy. Do NOT
+  evade it. `_fetch` now raises the typed `EVENT_ACCESS_DENIED_PROVIDER_BOT_POLICY`; FED keeps
+  working and per-source degradation is unchanged. NFP/CPI scheduled dates remain UNAVAILABLE.
+- **Model registry is NOT a bug either**: moirai-2 / kronos-tw / sundial / tinytimemixer are
+  deliberate license records with `supported=False`; fincast is an optional `.venv-fincast`
+  bridge. Verified nhits/nbeatsx now genuinely run (neuralforecast 3.2.2, GPU, real point output).
+- **Test isolation**: `test_single_instance_lock_releases_after_error` needs the process-global
+  SPARK mutex; it now skips via new `spark_owner_present()` when a live owner holds it.
+- Verified: full offline profile **2280 passed, 2 skipped, 35 deselected, exit 0**; recorder
+  restarted and confirmed `RUNNING` with `quote_age_seconds ~0.01` after the fix.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+  Recorded tick data still feeds session/context materialization only — no tick→label→train loop
+  exists yet; building one needs its own pre-registered work package.
+
 ### 2026-10-02 (night) official event calendar automation + agent data-channel policy
 
 - **Dated event store is now populated and self-refreshing.** New zero-key collector `providers/event_calendar.py`: FOMC meetings parsed from the official federalreserve.gov calendar (real-page verified — 10 future meetings incl. 2026-10-27/28 and 2026-12-08/09 parsed correctly; parsers are unit-tested against the real markup shape) plus BLS release schedules (Employment Situation / CPI) from bls.gov schedule pages. `EventStore` now lives under `data_root()/events` (fixed the mismatch with the capability registry's `dated_event_store_ready` check) and gains `replace_scheduled_for(source, …)` (per-source fail-honest replace: a failing source no longer wipes other sources' last-known rows) and `upcoming()`. `packet/builder._event_snapshot` returns SCHEDULED rows when the store has data and falls back to the CALENDAR_AVAILABLE framework list otherwise; the JNU trading-path event context consumes it automatically.

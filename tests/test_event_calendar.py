@@ -1,6 +1,7 @@
 """Event calendar collector（零付費公開來源）— offline tests。"""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -173,3 +174,73 @@ def test_event_snapshot_fallback_when_store_empty(monkeypatch):
     out = builder._event_snapshot(top_n=3)
     assert all(row["status"] == "CALENDAR_AVAILABLE" for row in out)
     assert len(out) == 3
+
+
+def test_provider_bot_policy_block_is_typed_not_a_parse_error(monkeypatch):
+    """BLS blocks automated retrieval by policy (Akamai 'Access Denied').
+
+    The collector must surface a typed provider block instead of pretending the page
+    was parsed empty, and must never treat the block page as event data.
+    """
+    import httpx
+
+    url = "https://www.bls.gov/schedule/news_release/empsit.htm"
+
+    def _fake_get(_url, **_kw):
+        req = httpx.Request("GET", _url)
+        resp = httpx.Response(403, request=req,
+                              text="<h2>Access Denied</h2><p>bot activity ... is prohibited</p>")
+        raise httpx.HTTPStatusError("403 Forbidden", request=req, response=resp)
+
+    monkeypatch.setattr(ec.httpx, "get", _fake_get)
+    with pytest.raises(ProviderError, match="EVENT_ACCESS_DENIED_PROVIDER_BOT_POLICY"):
+        ec._fetch(url)
+
+
+def test_collect_events_degrades_when_one_source_is_blocked(monkeypatch):
+    """One blocked source must not erase another source's events, and must not fake events."""
+    from market_ai_hub.targets.events import OfficialEvent as _OE
+
+    good = _OE(event_name="FOMC Meeting", scheduled_at=datetime(2026, 10, 27, 18, 0, tzinfo=timezone.utc),
+               source="FED", importance_class="HIGH")
+    monkeypatch.setattr(ec, "fetch_fomc_meetings", lambda *a, **k: [good])
+    monkeypatch.setattr(ec, "fetch_bls_schedule",
+                        lambda *a, **k: (_ for _ in ()).throw(
+                            ProviderError("EVENT_ACCESS_DENIED_PROVIDER_BOT_POLICY")))
+    out = ec.collect_events(now=datetime(2026, 10, 1, tzinfo=timezone.utc))
+    assert [e.source for e in out] == ["FED"]
+
+
+def test_event_refresh_status_surfaces_blocked_sources(tmp_path):
+    """A blocked source must be visible so its stored dates are not read as current."""
+    from market_ai_hub.targets.events import event_refresh_status
+
+    (tmp_path / "refresh_log.json").write_text(json.dumps({
+        "ok": True, "generated_at": "2026-10-01T16:00:00+00:00",
+        "sources": {"FED": 10},
+        "source_status": {"FED": "REFRESHED", "BLS": "BLOCKED_OR_FAILED"},
+    }), encoding="utf-8")
+    st = event_refresh_status(tmp_path)
+    assert st["refreshed_sources"] == ["FED"]
+    assert st["blocked_sources"] == ["BLS"]
+    assert st["status"] == "OK"
+    assert "stale" in st["note"]
+
+
+def test_event_refresh_status_without_log(tmp_path):
+    from market_ai_hub.targets.events import event_refresh_status
+
+    assert event_refresh_status(tmp_path)["status"] == "NO_REFRESH_LOG"
+
+
+def test_collect_events_records_per_source_status(monkeypatch):
+    from market_ai_hub.targets.events import OfficialEvent as _OE
+
+    good = _OE(event_name="FOMC", scheduled_at=datetime(2026, 10, 27, 18, 0, tzinfo=timezone.utc),
+               source="FED", importance_class="HIGH")
+    monkeypatch.setattr(ec, "fetch_fomc_meetings", lambda *a, **k: [good])
+    monkeypatch.setattr(ec, "fetch_bls_schedule",
+                        lambda *a, **k: (_ for _ in ()).throw(ProviderError("blocked")))
+    ec.collect_events(now=datetime(2026, 10, 1, tzinfo=timezone.utc))
+    assert ec.LAST_SOURCE_STATUS["FED"] == "REFRESHED"
+    assert ec.LAST_SOURCE_STATUS["BLS"] == "BLOCKED_OR_FAILED"

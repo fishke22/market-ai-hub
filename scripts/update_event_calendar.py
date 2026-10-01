@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timezone
 
 from market_ai_hub.providers.base import ProviderError
-from market_ai_hub.providers.event_calendar import DIAG, collect_events
+from market_ai_hub.providers.event_calendar import DIAG, LAST_SOURCE_STATUS, collect_events
 from market_ai_hub.targets.events import EventStore
 
 
@@ -37,6 +37,7 @@ def main() -> int:
             )
         entry["ok"] = True
         entry["sources"] = by_source
+        entry["source_status"] = dict(LAST_SOURCE_STATUS)   # REFRESHED vs BLOCKED_OR_FAILED
         entry["stored"] = stored
         entry["upcoming_top5"] = [e.event_name for e in store.upcoming(top_n=5)]
         code = 0

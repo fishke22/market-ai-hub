@@ -300,6 +300,11 @@ def test_control_rejects_action_limit_and_traversal(tmp_path, monkeypatch):
 
 
 def test_single_instance_lock_releases_after_error(tmp_path):
+    if R.spark_owner_present():
+        pytest.skip(
+            "a live SPARK quote owner holds the process-global mutex; "
+            "this test needs exclusive ownership"
+        )
     with pytest.raises(ValueError):
         with R._single_instance(tmp_path):
             with pytest.raises((RuntimeError, OSError)):
@@ -441,3 +446,55 @@ def test_installer_native_failure_is_fatal():
     result = subprocess.run(["powershell", "-NoProfile", "-Command",
         function + '\n$LASTEXITCODE = 17; Assert-NativeSuccess "mock"; exit 0'], capture_output=True)
     assert result.returncode != 0
+
+
+# ── C1: connected-but-silent feed must be escalated only on a verified-open venue ──
+def test_feed_stalled_requires_verified_open_session():
+    kw = dict(reconnect_enabled=True, silence_seconds=200, stale_seconds=180,
+              since_last_recovery=9999, cooldown_seconds=300)
+    assert R._feed_stalled(session_open=True, **kw)                     # open + silent -> escalate
+    assert not R._feed_stalled(session_open=False, **kw)                # closed -> normal quiet
+    assert not R._feed_stalled(session_open=True, **{**kw, "silence_seconds": 10})
+    assert not R._feed_stalled(session_open=True, **{**kw, "since_last_recovery": 1})
+    assert not R._feed_stalled(session_open=True, **{**kw, "reconnect_enabled": False})
+
+
+def test_subscribed_market_open_uses_session_truth():
+    ts = datetime(2026, 10, 1, 14, 28, 56, tzinfo=timezone.utc)   # 22:28 Taipei / 23:28 JST
+    assert R._subscribed_market_open({3}, ts) is True             # TAIFEX after-hours
+    assert R._subscribed_market_open({207}, ts) is True           # OSE night
+    assert R._subscribed_market_open({9999}, ts) is False         # unmapped -> never assumed open
+    assert R._subscribed_market_open(set(), ts) is False
+
+
+def test_recorder_wires_stall_recovery_into_the_main_loop():
+    src = (Path(__file__).resolve().parents[1] / "src" / "market_ai_hub" / "integrations"
+           / "yuanta" / "live_quote_recorder.py").read_text(encoding="utf-8")
+    assert "_feed_stalled(" in src
+    assert 'connection["faulted"] or stalled_feed' in src
+    assert "stall_recoveries" in src
+    assert "session_open" in src
+
+
+def test_spark_owner_present_is_boolean_and_matches_mutex():
+    v = R.spark_owner_present()
+    assert isinstance(v, bool)
+    if os.name != "nt":
+        assert v is False
+        return
+    if v:
+        # the helper must agree with the mutex the recorder itself uses
+        with pytest.raises(RuntimeError):
+            with R._single_instance(Path(__file__).resolve().parent):
+                pass
+
+
+def test_scalar_drops_nonfinite_and_vendor_sentinel_values():
+    assert R._scalar(66500.0) == 66500.0
+    assert R._scalar(1000) == 1000
+    assert R._scalar(True) is True
+    assert R._scalar(0.0) == 0.0
+    for bad in (float("nan"), float("inf"), float("-inf"), 6.755378e+38, -6.82e38):
+        assert R._scalar(bad) is None
+    assert R._scalar(None) is None
+    assert R._scalar("abc") == "abc"

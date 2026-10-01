@@ -45,6 +45,9 @@ _MEETING_RE = re.compile(
 
 # 供 fail-honest 診斷：來源解析為空時留下原始 HTML 前段（update 腳本會 dump 成檔）。
 DIAG: dict[str, str] = {}
+# Per-source outcome of the most recent collect_events() call. Lets consumers tell a
+# refreshed source from one that is currently blocked (e.g. BLS bot policy).
+LAST_SOURCE_STATUS: dict[str, str] = {}
 _MONTHS = {
     "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
     "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12,
@@ -72,6 +75,12 @@ def _fetch(url: str) -> str:
                 DIAG[url] = resp.text[:3000]
         except Exception:
             pass
+        # BLS blocks automated retrieval by policy (Akamai 'Access Denied').
+        # Report it as a typed provider block: do not retry-loop and never treat the
+        # block page as data. Scheduled dates stay UNAVAILABLE for that source.
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        if status == 403:
+            raise ProviderError(f"EVENT_ACCESS_DENIED_PROVIDER_BOT_POLICY {url}") from exc
         raise ProviderError(f"EVENT_FETCH_FAILED {url}: {type(exc).__name__}") from exc
     if not resp.text:
         raise ProviderError(f"EVENT_FETCH_EMPTY {url}")
@@ -161,15 +170,20 @@ def collect_events(now: datetime | None = None) -> list[OfficialEvent]:
     """彙整所有免金鑰來源；部分來源失敗仍保留其他來源的結果，全部失敗才 raise。"""
     events: list[OfficialEvent] = []
     errors: list[str] = []
+    LAST_SOURCE_STATUS.clear()
     try:
         events.extend(fetch_fomc_meetings())
+        LAST_SOURCE_STATUS["FED"] = "REFRESHED"
     except ProviderError as exc:
         errors.append(str(exc))
+        LAST_SOURCE_STATUS["FED"] = "BLOCKED_OR_FAILED"
     for name, (url, source, importance, hm) in BLS_SCHEDULES.items():
         try:
             events.extend(fetch_bls_schedule(name, url, source, importance, hm))
+            LAST_SOURCE_STATUS[source] = "REFRESHED"
         except ProviderError as exc:
             errors.append(str(exc))
+            LAST_SOURCE_STATUS[source] = "BLOCKED_OR_FAILED"
     if not events:
         raise ProviderError("EVENT_COLLECT_ALL_FAILED: " + " | ".join(errors[:3]))
     return _future_filter(events, now=now)
