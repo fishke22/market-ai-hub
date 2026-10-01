@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-02 agent closeout — live-quote rule + WIP landing/merge/PR #80 + schedulers
+
+- **New durable rule**: recorded capture is PC-on-only and never all-day. Real-time/today questions must use the Yuanta/SPARK live API quote path (`data/live/yuanta/{status,latest}.json` / fresh live deal fields), never the recorded archive as current truth; archived ranges must be labelled 系統有錄到的 + captured time span. Case: 2026-10-01 night low 68,130 printed inside the 16:00–17:00 Taipei pre-capture gap (recorded low=68,285); the public output did not surface the coverage caveat prominently — mandatory in the plain-language layer going forward.
+- Landed the uncommitted JNU WIP as `03ed7cf` (contract-alias normalization + microstructure fail-closed + quote-status schema symmetry), frozen build `d540bd60bdbc7d49`; merged the remote P5-cloud package as `f5175c9` (both handoff sides preserved verbatim), pushed fast-forward; **PR #80 → main is open, not merged**.
+- Registered `MARKET_AI_HUB_AccuracyV2_P5_PublicForward` (weekdays 08:05/08:15 Taipei, public-source only) and `MARKET_AI_HUB_JPX_Micro_Direct_Sync` (daily 19:00). First canonical-origin attempt 2026-10-02 08:05 Taipei; requires PC on; cloud P5 schedule is default-branch-only (activates after PR #80 merge).
+- Forward state: `expected_canonical_origins=4 / canonical=0 / settled=0`; W3.2-EP1 registered=1 / settled=0.
+- Multi-model combination remains gated behind the ≥20-origin forward exam; fake-consensus voting remains prohibited; TimesFM stays research-only.
+- Validation: affected scope `260 passed, 3 deselected`. Environmental-only exceptions: recorder owner-mutex test while the live recorder holds the mutex; chronos reproducibility smoke native abort in the review sandbox; model-load smoke files deselected by design.
+
 ## 2026-10-01 JNU market-session accumulation readiness
 
 - Added `jnu_market_session_readiness.json` + zh-TW markdown, sourced only from the governed one-row-per-market-session view.
