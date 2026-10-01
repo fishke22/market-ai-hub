@@ -1,0 +1,192 @@
+# MICROSTRUCTURE NIGHT-SESSION FEATURE PRE-REGISTRATION v1
+#
+# FROZEN BEFORE ANY MODELLING OR RESULT. Nothing in this file may be edited after a
+# feature/label statistic has been produced from it; a change requires protocol_version 2
+# and a new file. This follows the same discipline as
+# research/phase2/protocols/DIRECT_MICRO_BAR_OOS_PROTOCOL.yaml.
+
+protocol_version: 1
+protocol_id: AV2.MICROSTRUCTURE.NIGHT_WINDOW.v1
+frozen_at: "2026-10-02"
+owner_package: microstructure_feature_extraction_only
+
+# The data-source section below was corrected ONCE, before any feature statistic existed, after
+# inspecting the recorded store: the price-bearing tape is SubscribeStockTick, not
+# SubscribeWatchlistAll. Only the source definition and the field list changed; no feature was
+# added or tuned in response to a result. Recorded here for auditability.
+data_source_revision:
+  revision: 1
+  corrected_at: "2026-10-02"
+  what_changed: >
+    trade_rows.callback_type SubscribeWatchlistAll -> SubscribeStockTick; the tape field list
+    became [DealPrice, DealVol, InOutFlag, BuyPrice, SellPrice]; one feature
+    (quoted_spread_mean) was added because BuyPrice/SellPrice are present on the tape.
+  why: >
+    SubscribeWatchlistAll carries a last-trade snapshot (deal/vol) plus cumulative totals, while
+    SubscribeStockTick carries one row per trade with the traded price, size, the quote at trade
+    time and a side flag. The tape is the correct microstructure source and avoids double
+    counting the snapshot.
+  result_statistics_existed_before_correction: false
+
+purpose: >
+  Freeze, before looking at any result, (a) which features may be computed from the recorded
+  SPARK tick stream, (b) exactly how they are computed and bounded, and (c) which evidence
+  channel may ever validate a model that consumes them. This package extracts features and
+  reports coverage. It does NOT fit a model, does NOT produce a probability, and does NOT
+  create a holdout.
+
+status:
+  validation_status: HYPOTHESIS_ONLY
+  is_probability: false
+  calibrated_probability: FORBIDDEN
+  predictive_gain: NOT_ESTABLISHED
+  trading_edge: NOT_ESTABLISHED
+
+# ── Source data ────────────────────────────────────────────────────────────────
+data_source:
+  provider: YUANTA_SPARK_SECURITIES_PROFILE
+  store: data/live/yuanta/parquet/<YYYY-MM-DD>/*.parquet
+  reader_requirement: union_by_name=true
+  reader_requirement_reason: >
+    Parts drift: some carry microstructure_kind/depth_index_flag, some do not, and older
+    partitions have no tape columns at all. A plain glob fails with a schema-mismatch error,
+    so every reader must union by name and must verify that the tape columns exist.
+  binding_clock: received_at
+  binding_clock_stored_type: VARCHAR_ISO8601_UTC_OFFSET   # lexicographic == chronological
+  binding_clock_reason: >
+    Receipt time is the only clock that cannot move backwards when a venue timestamp is
+    missing, repeated or replayed. source_time_of_day is venue-local and is used for session
+    slicing only, never as the evidence clock.
+  venue_time_field: source_time_of_day   # venue-local "HH:MM:SS.mmm"
+  venue_time_semantics: VENUE_LOCAL_OSE_JST_FOR_MARKET_207
+  trade_rows:
+    callback_type: SubscribeStockTick
+    microstructure_kind: TRADE_TICK
+    required_fields: [DealPrice, DealVol, InOutFlag, BuyPrice, SellPrice]
+    order_by: [received_at, _wal_seq]
+  not_used:
+    SubscribeWatchlistAll.deal_vol: >
+      last-trade snapshot plus cumulative totals; a different view of the same market and NOT
+      combined with the tape, so a trade can never be counted twice.
+  inout_flag_semantics:
+    verified: true
+    method: >
+      Measured on recorded 2026-10-01 JNUPM2612 tape rows against the quote at trade time:
+      InOutFlag=1 rows occur at or above the ask (92.1%) and never at or below the bid;
+      InOutFlag=0 rows occur at or below the bid (100%) and never at or above the ask.
+    mapping:
+      "1": BUYER_INITIATED_AT_OR_ABOVE_ASK
+      "0": SELLER_INITIATED_AT_OR_BELOW_BID
+    rule: re-verify if the vendor changes the field; do not assume this mapping
+  depth_rows:
+    callback_type: SubscribeFiveTickA
+    microstructure_kind: DEPTH
+    used_in_v1: false
+    used_in_v1_reason: >
+      DEPTH rows carry value/index_flag/depth_index_flag whose level encoding is not verified as
+      bid/ask ladders. Inventing a depth feature from an unverified encoding is forbidden, so v1
+      registers no depth feature. A future version may add them only after the encoding is
+      verified against the vendor contract.
+
+# ── Target (reuse, do not fork) ────────────────────────────────────────────────
+target:
+  id: OSE_NIKKEI225_MICRO_FUTURES
+  semantic: NEXT_PUBLISHED_SETTLEMENT_OBSERVATION
+  authority: JPX_OSE_OFFICIAL_SETTLEMENT
+  exact_contract_required: true
+  proxy_substitution: FORBIDDEN
+  existing_protocol_reused: research/phase2/protocols/DIRECT_MICRO_BAR_OOS_PROTOCOL.yaml
+
+# ── Window definition ──────────────────────────────────────────────────────────
+feature_window:
+  name: NIGHT_SESSION_CAPTURE
+  definition: >
+    The captured OSE night-session segment belonging to trading date D, expressed in the
+    binding receipt clock: received_at in [08:00Z, 21:00Z) on trading date D. That interval is
+    exactly the OSE night session (17:00 JST on D .. 06:00 JST on D+1) converted to UTC, so a
+    single clock defines the window. It is further restricted to the records actually present
+    in the store (capture is not all-day; the PC is not always on).
+  cutoff_rule: >
+    window_cutoff = received_at of the LAST record in the window. Every feature uses only
+    records with received_at <= window_cutoff.
+  minimum_usable_trade_rows: 200
+  minimum_window_minutes: 20
+  below_minimum_status: INSUFFICIENT_WINDOW
+
+# ── Frozen feature list (v1) ──────────────────────────────────────────────────
+features:
+  - name: trade_count
+    definition: number of usable tape rows in the window
+  - name: trade_volume
+    definition: sum(DealVol) over usable tape rows
+  - name: window_minutes
+    definition: (last received_at - first received_at) in minutes
+  - name: trades_per_minute
+    definition: trade_count / window_minutes
+  - name: window_log_return
+    definition: ln(last DealPrice / first DealPrice)
+  - name: realized_vol
+    definition: population stdev of ln(DealPrice_t / DealPrice_{t-1}) over consecutive rows
+  - name: vwap_deviation
+    definition: ln(last DealPrice / VWAP), VWAP = sum(DealPrice*DealVol)/sum(DealVol)
+  - name: signed_volume_imbalance
+    definition: (buy_volume - sell_volume) / (buy_volume + sell_volume) using the verified InOutFlag mapping
+  - name: max_runup
+    definition: max over the window of ln(DealPrice / first DealPrice)
+  - name: max_drawdown
+    definition: min over the window of ln(DealPrice / first DealPrice)
+  - name: mean_trade_size
+    definition: mean(DealVol) over usable tape rows
+  - name: quoted_spread_mean
+    definition: mean(SellPrice - BuyPrice) over rows where SellPrice > BuyPrice > 0
+feature_list_is_closed: true
+feature_list_change_requires: protocol_version_bump
+
+# ── Leakage rules (machine-enforced in the extractor) ─────────────────────────
+leakage_rules:
+  - id: RECEIPT_CLOCK_ONLY
+    rule: features use received_at as the ordering and cutoff clock
+  - id: NO_FUTURE_RECORD
+    rule: no record with received_at > window_cutoff may contribute to any feature
+  - id: TARGET_AFTER_CUTOFF
+    rule: >
+      the target settlement observation must be published strictly AFTER window_cutoff; a
+      settlement already known at the cutoff is rejected as leakage
+  - id: NO_CROSS_INSTRUMENT_FILL
+    rule: a window uses one instrument_code only; missing rows are never filled from another
+  - id: NO_DOUBLE_COUNT
+    rule: the tape is the only trade source; the snapshot view is never combined with it
+  - id: NO_RETRO_FILL
+    rule: a window is never backfilled from a later capture; absent capture stays absent
+  - id: NON_FINITE_REJECTED
+    rule: NaN/Inf/sentinel values are dropped before any arithmetic, never imputed
+
+# ── Evidence channel (explicitly NOT created here) ────────────────────────────
+holdout:
+  new_holdout: NONE
+  new_evidence_channel: NONE
+  rule: >
+    This package creates no holdout and no evidence channel. Any model that consumes these
+    features must be validated through the EXISTING forward protocol of the 1d settlement
+    family (P5 canonical origins + W3.2-EP1), exactly like every other 1d model.
+  historical_tick_sample_status: DEVELOPMENT_ONLY_NEVER_OOS
+  historical_tick_sample_reason: >
+    The tick sample is a handful of captured nights with partial session coverage (4 usable
+    windows at v1 registration). It can never be reported as out-of-sample evidence and never
+    substitutes for real forward evidence.
+
+# ── Explicitly out of scope for this package ──────────────────────────────────
+forbidden_in_this_package:
+  - model fitting or training of any kind
+  - probability output or calibration
+  - any claim of predictive gain, signal or edge from feature statistics
+  - building a second evaluator, leaderboard, performance store or calibration system
+  - backfilling missed canonical forward origins
+  - using source_time_of_day as the receipt clock
+  - changing the existing 1d target, horizon or forward protocol
+
+acceptance_for_this_package:
+  - deterministic extraction: identical input -> identical feature vector and window id
+  - all leakage_rules enforced and covered by a runnable check
+  - coverage diagnostics reported honestly, including unusable nights
+  - no model artifact, no probability, no ranking produced
