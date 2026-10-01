@@ -343,6 +343,32 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     assert "status" not in out
 
 
+def test_analyze_jnu_mcp_normalizes_common_contract_aliases(monkeypatch):
+    import market_ai_hub.mcp.server as server
+    import market_ai_hub.services.data_continuity as dc
+    import market_ai_hub.services.jnu_direct as d
+
+    seen = []
+    monkeypatch.setattr(d, "refresh_jnu_direct_data", lambda: {"status": "OK"})
+
+    def fake_continuity(contract_month=""):
+        seen.append(("continuity", contract_month))
+        return {"mode": "NORMAL_TARGET_DATA", "context_only": False}
+
+    def fake_analyze(*, horizon, contract_month, validate_history):
+        seen.append(("direct", contract_month))
+        return {"status": "OK"}
+
+    monkeypatch.setattr(dc, "jnu_data_continuity_status", fake_continuity)
+    monkeypatch.setattr(d, "analyze_jnu_direct", fake_analyze)
+
+    for alias in ("2612", "202612", "JNU2612", "JNUPM2612"):
+        seen.clear()
+        out = server.analyze_jnu(contract_month=alias, view="audit")
+        assert out["status"] == "OK"
+        assert seen == [("continuity", "202612"), ("direct", "202612")]
+
+
 def test_analyze_jnu_mcp_continuity_mode_does_not_call_direct_model(monkeypatch):
     import market_ai_hub.mcp.server as server
     import market_ai_hub.services.data_continuity as dc
@@ -395,3 +421,44 @@ def test_analysis_packet_accepts_jnu_alias(monkeypatch):
     out = server.get_analysis_packet(target="JNU")
     assert out["execution_target"] == EXECUTION_TARGET
     assert seen["target"] == EXECUTION_TARGET
+
+
+def test_validate_history_degrades_when_a_model_is_governance_blocked(monkeypatch):
+    """TimesFM-3 weights are RESEARCH-only; the serving historical-validation loop must
+    record the model UNAVAILABLE and keep validating with the remaining models instead of
+    raising and taking the whole analysis packet down."""
+    import numpy as np
+
+    from market_ai_hub.services import jnu_direct as jd
+    from market_ai_hub.services.model_governance import ModelUsageBlocked
+
+    n = jd.DIRECT_VALIDATION_HISTORY_LEN + jd.DIRECT_VALIDATION_ORIGINS + 5
+    idx = pd.date_range("2026-05-01", periods=n, freq="D", tz="UTC")
+    series = pd.Series([60000.0 + i for i in range(n)], index=idx)
+    meta = {"status": "OK", "quote_code": "JNU2610", "contract_month": "202610",
+            "latest_date": str(idx[-1].date()), "latest_settlement": float(series.iloc[-1])}
+    monkeypatch.setattr(jd, "load_direct_micro_settlements", lambda cm="": (series, meta))
+
+    class _Ok:
+        def predict(self, ctx, horizon=1):
+            last = float(np.asarray(ctx, dtype=float)[-1])
+            return {"path": {"p50": [last], "p10": [last * 0.99], "p90": [last * 1.01]}}
+
+    class _GovernanceBlocked:
+        def predict(self, ctx, horizon=1):
+            raise ModelUsageBlocked(
+                "timesfm-3.0: PURPOSE_SERVING_NOT_ALLOWED (allowed=['RESEARCH'])")
+
+    monkeypatch.setattr(jd, "get_chronos", lambda: _Ok())
+    monkeypatch.setattr(jd, "get_timesfm", lambda: _GovernanceBlocked())
+
+    out = jd.validate_jnu_direct_history("202610", force=True)
+    assert out["status"] == "OK"
+    avail = {row["model"]: row for row in out["model_availability"]}
+    assert avail["chronos-2"]["status"] == "AVAILABLE"
+    assert avail["timesfm-3.0"]["status"] == "UNAVAILABLE"
+    assert avail["timesfm-3.0"]["reason"] == "ModelUsageBlocked"
+    assert out["models"]["timesfm-3.0"]["status"] == "MODEL_UNAVAILABLE"
+    assert out["models"]["timesfm-3.0"]["mase"] is None
+    assert out["overall"] == "HISTORICAL_UNVALIDATED"
+    assert out["all_models_beat_last_price_naive"] is False

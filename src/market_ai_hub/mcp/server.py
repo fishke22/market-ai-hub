@@ -768,8 +768,11 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
     from market_ai_hub.services.jnu_direct import (
         analyze_jnu_direct,
         jnu_user_summary,
+        normalize_jnu_contract_month,
         refresh_jnu_direct_data,
     )
+
+    contract_month = normalize_jnu_contract_month(contract_month)
 
     try:
         refresh = refresh_jnu_direct_data()
@@ -1002,8 +1005,13 @@ def get_system_completion_status() -> dict:
 def get_event_calendar(days: int = 14, top_n: int = 10) -> dict:
     """近期重要官方事件日曆（BOJ/Fed/CPI/NFP/PCE/GDP/MOF），只回 Top-N。"""
     from market_ai_hub.packet.builder import _event_snapshot
+    from market_ai_hub.targets.events import event_refresh_status
 
-    return {"events": _event_snapshot(top_n=top_n), "days": days}
+    return {
+        "events": _event_snapshot(top_n=top_n),
+        "days": days,
+        "source_refresh": event_refresh_status(),
+    }
 
 
 @mcp.tool()

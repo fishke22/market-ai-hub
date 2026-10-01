@@ -4,8 +4,8 @@ Naive baselines（與模型共用同一 symbol / window / horizon）：
 - last_price_naive / drift_baseline / moving_average_baseline
 
 V1.1 OOS validation pipeline（rolling origins, no look-ahead, calendar-aware）：
-- 多個 rolling origins，每個 origin 用固定 history 預測下一 bar
-- 比較 3 個 baselines：MAE / RMSE / MASE
+- 多個 rolling origins，每個 origin 用固定 history 預測 requested N-step terminal bar
+- 模型與 baselines 使用同一 origin / 同一 horizon：MAE / RMSE / MASE
 - predictive interval（p10-p90 nominal 80%）empirical coverage / width / calibration_error
 - 輸出決定 promotion：deterministic thresholds 寫在 PROMOTION_RULES（不是 LLM 臨時決定）
 """
@@ -22,7 +22,7 @@ import pandas as pd
 from market_ai_hub.config.settings import project_root
 from market_ai_hub.research.paired_uncertainty import paired_block_bootstrap_ci
 
-TS_VALIDATION_SCHEMA_VERSION = "2"
+TS_VALIDATION_SCHEMA_VERSION = "3"
 
 # ── deterministic promotion rules（code 內，禁止 LLM 臨時改）──
 PROMOTION_RULES: dict = {
@@ -135,37 +135,51 @@ def run_ts_oos_validation(
     closes: pd.Series,
     n_origins: int = 5,
     history_len: int = 128,
+    horizon_steps: int = 1,
 ) -> dict:
     """Rolling-origin OOS validation（no look-ahead）。
 
-    每個 origin：用 origin 前 history_len 根 bars 預測下一根；
-    interval 用該次預測的 p10/p90 檢查 coverage。
+    每個 origin：用 origin 前 history_len 根 bars 預測 horizon_steps 根之後的
+    terminal target；model / baselines / interval coverage 全部使用同一 origin
+    與同一 horizon，禁止用 1-step 驗證冒充 5d/10d 驗證。
     """
+    steps = int(horizon_steps)
+    if steps < 1:
+        raise ValueError("horizon_steps must be >= 1")
     n = len(closes)
-    if n < history_len + n_origins + 2:
-        return {"status": "INSUFFICIENT_DATA", "symbol": symbol, "n_bars": n}
+    minimum_bars = history_len + steps + n_origins - 1
+    if n < minimum_bars:
+        return {
+            "status": "INSUFFICIENT_DATA",
+            "symbol": symbol,
+            "n_bars": n,
+            "horizon_steps": steps,
+            "minimum_bars": minimum_bars,
+        }
 
-    positions = np.linspace(history_len - 1, n - 2, n_origins, dtype=int)
+    positions = np.linspace(history_len - 1, n - steps - 1, n_origins, dtype=int)
     forecasts, actuals, prevs, p10s, p90s = [], [], [], [], []
     drift_preds, ma20_preds = [], []
     for pos in positions:
         ctx = closes.iloc[pos - history_len + 1:pos + 1]
-        r = adapter.predict(ctx, horizon=1)
+        r = adapter.predict(ctx, horizon=steps)
         path = r["path"]
+        if any(len(list(path.get(k) or [])) < steps for k in ("p10", "p50", "p90")):
+            raise ValueError("model returned incomplete validation path")
         forecasts.append(path["p50"][-1])
         p10s.append(path["p10"][-1])
         p90s.append(path["p90"][-1])
-        actuals.append(float(closes.iloc[pos + 1]))
+        actuals.append(float(closes.iloc[pos + steps]))
         prevs.append(float(closes.iloc[pos]))
-        drift_preds.append(drift_baseline(ctx, 1))
-        ma20_preds.append(moving_average_baseline(ctx, 1, window=min(20, len(ctx))))
+        drift_preds.append(drift_baseline(ctx, steps))
+        ma20_preds.append(moving_average_baseline(ctx, steps, window=min(20, len(ctx))))
 
     ev = evaluate_against_baselines(
         symbol,
         np.asarray(actuals),
         np.asarray(prevs),
         forecasts,
-        steps=1,
+        steps=steps,
         drift_forecasts=drift_preds,
         moving_average_forecasts=ma20_preds,
     )
@@ -175,7 +189,7 @@ def run_ts_oos_validation(
     paired = paired_block_bootstrap_ci(
         np.abs(actual_arr - forecast_arr) - np.abs(actual_arr - prev_arr),
         [int(x) for x in positions],
-        steps=1,
+        steps=steps,
     )
     paired.update({
         "metric": "mae",
@@ -202,6 +216,8 @@ def run_ts_oos_validation(
         "validation_schema_version": TS_VALIDATION_SCHEMA_VERSION,
         "model": model,
         "symbol": symbol,
+        "horizon_steps": steps,
+        "target_semantics": "N_STEP_TERMINAL_PRICE_FROM_SAME_ORIGIN",
         "n_origins": int(len(positions)),
         "history_len": history_len,
         "window": {"start": str(closes.index[0].date()), "end": str(closes.index[-1].date())},

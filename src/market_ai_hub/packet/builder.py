@@ -543,7 +543,27 @@ def _coverage_summary(family: str = "OSAKA_MICRO") -> list[dict]:
 
 
 def _event_snapshot(top_n: int = 5) -> list[dict]:
-    """近期最重要 Top-N 官方事件（BOJ/Fed/CPI/NFP/PCE/GDP/MOF），遵守 info cutoff。"""
+    """近期最重要 Top-N 官方事件（BOJ/Fed/CPI/NFP/PCE/GDP/MOF），遵守 info cutoff。
+
+    dated event store 有資料時回 SCHEDULED（含時間）列；store 為空時回框架快照。
+    """
+    try:
+        from market_ai_hub.targets.events import EventStore
+        upcoming = EventStore().upcoming(top_n=top_n)
+    except Exception:
+        upcoming = []
+    if upcoming:
+        out = []
+        for e in upcoming:
+            out.append({
+                "source": e.source or "OFFICIAL",
+                "event": e.event_name,
+                "status": "SCHEDULED",
+                "scheduled_at": e.scheduled_at.isoformat() if e.scheduled_at else None,
+                "importance_class": e.importance_class or "",
+                "note": "scheduled time from official public calendar",
+            })
+        return out[:top_n]
     providers = [
         ("BOJ", "BOJ MPM/release"), ("Fed", "FOMC"), ("CPI", "US CPI"),
         ("NFP", "US Employment"), ("PCE", "US PCE"), ("GDP", "US GDP"), ("MOF", "FX intervention"),

@@ -2,17 +2,22 @@ param([switch]$DryRun, [switch]$PreserveExisting)
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Script = (Resolve-Path (Join-Path $PSScriptRoot "run_c23_terminal_close_maintenance.ps1")).Path
+$HiddenRunner = (Resolve-Path (Join-Path $PSScriptRoot "run-hidden.vbs")).Path
 $TaskName = "MARKET_AI_HUB_C23_Terminal_Close_Measurement"
 $PowerShell = (Get-Command powershell.exe).Source
-$Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $Script + '"'
+$WScript = Join-Path $env:WINDIR "System32\wscript.exe"
+$Arguments = '"' + $HiddenRunner + '" "' + $PowerShell + '" "-NoProfile" "-WindowStyle" "Hidden" "-ExecutionPolicy" "Bypass" "-File" "' + $Script + '"'
 $User = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 if ($DryRun) {
     [ordered]@{
-        schema = "C23_TERMINAL_CLOSE_TASK_PLAN_V1"
+        schema = "C23_TERMINAL_CLOSE_TASK_PLAN_V2"
         task_name = $TaskName
-        execute = $PowerShell
+        execute = $WScript
         arguments = $Arguments
+        child_execute = $PowerShell
+        hidden_runner = $HiddenRunner
+        hidden_window = $true
         user = $User
         interval_minutes = 5
         schedule = "CONTINUOUS_POLL"
@@ -31,9 +36,9 @@ if ($Existing -and $PreserveExisting) {
     exit 0
 }
 
-$Action = New-ScheduledTaskAction -Execute $PowerShell -Argument $Arguments -WorkingDirectory $Root
+$Action = New-ScheduledTaskAction -Execute $WScript -Argument $Arguments -WorkingDirectory $Root
 $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
 $Principal = New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Limited
 $Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Force | Out-Null
-Write-Host "REGISTERED $TaskName user=$User interval=5m window=OSE_CLOSE_CONTROLLED"
+Write-Host "REGISTERED $TaskName user=$User interval=5m hidden=true window=OSE_CLOSE_CONTROLLED"

@@ -1,5 +1,118 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-02 (night) event calendar automation + agent data-channel policy
+
+- Dated event store now populated and self-refreshing: zero-key FOMC (federalreserve.gov, real-page verified) + BLS (empsit/cpi schedule pages) collector; `EventStore` moved to `data_root()/events` (fixes registry mismatch); per-source `replace_scheduled_for` keeps other sources' last-known rows when one source fails; `_event_snapshot` returns SCHEDULED rows when data exists.
+- Registered `MARKET_AI_HUB_Event_Calendar_Sync` (daily 19:05 Taipei; refresh_log.json every run; diag dumps on failure). Real task-env trigger: **LastTaskResult=0, FED=10**; BLS 403s plain HTTP clients (CDN) — web-verified NFP 2026-10-02 20:30 Taipei row seeded (BLS, HIGH) and preserved; browser/agent-seed fallback queued.
+- Agent MCP data channels (FRED / Alpha Vantage / TWSE-TAIFEX OpenAPI / Yahoo / web / browser) are **CONTEXT/PROXY only**, zero-paid; agent-verified official announcements are an accepted calendar seed/repair path.
+- Machine note: agent-shell-spawned python aborts TLS (`no OPENSSL_Applink`) due to foreign DLL pollution in that spawn chain only; Task Scheduler/MCP env HTTPS is healthy; `sitecustomize.py` DLL guard installed in all three venvs; curl.exe (schannel) = fallback transport.
+- Validation: event-calendar tests `9 passed`; affected set `73 passed, 5 deselected`; freeze value updated to `875eb1f2fb7a1de1` (three assertions). Claims unchanged: PREDICTIVE_GAIN/CALIBRATED/TRADING_EDGE false.
+
+## 2026-10-02 agent closeout — live-quote rule + WIP landing/merge/PR #80 + schedulers
+
+- **New durable rule**: recorded capture is PC-on-only and never all-day. Real-time/today questions must use the Yuanta/SPARK live API quote path (`data/live/yuanta/{status,latest}.json` / fresh live deal fields), never the recorded archive as current truth; archived ranges must be labelled 系統有錄到的 + captured time span. Case: 2026-10-01 night low 68,130 printed inside the 16:00–17:00 Taipei pre-capture gap (recorded low=68,285); the public output did not surface the coverage caveat prominently — mandatory in the plain-language layer going forward.
+- Landed the uncommitted JNU WIP as `03ed7cf` (contract-alias normalization + microstructure fail-closed + quote-status schema symmetry), frozen build `d540bd60bdbc7d49`; merged the remote P5-cloud package as `f5175c9` (both handoff sides preserved verbatim), pushed fast-forward; **PR #80 → main is open, not merged**.
+- Registered `MARKET_AI_HUB_AccuracyV2_P5_PublicForward` (weekdays 08:05/08:15 Taipei, public-source only) and `MARKET_AI_HUB_JPX_Micro_Direct_Sync` (daily 19:00). First canonical-origin attempt 2026-10-02 08:05 Taipei; requires PC on; cloud P5 schedule is default-branch-only (activates after PR #80 merge).
+- Forward state: `expected_canonical_origins=4 / canonical=0 / settled=0`; W3.2-EP1 registered=1 / settled=0.
+- Multi-model combination remains gated behind the ≥20-origin forward exam; fake-consensus voting remains prohibited; TimesFM stays research-only.
+- Validation: affected scope `260 passed, 3 deselected`. Environmental-only exceptions: recorder owner-mutex test while the live recorder holds the mutex; chronos reproducibility smoke native abort in the review sandbox; model-load smoke files deselected by design.
+
+## 2026-10-01 JNU market-session accumulation readiness
+
+- Added `jnu_market_session_readiness.json` + zh-TW markdown, sourced only from the governed one-row-per-market-session view.
+- Current live status: `ACCUMULATING_MARKET_SESSIONS`; eligible distinct sessions=1 (`NIGHT|2026-09-30`); sessions still needed for descriptive cross-session pairing=1.
+- Minimum of 2 distinct eligible market sessions only unlocks **descriptive pairing**, not model selection or predictive-performance evaluation.
+- `chronological_model_selection_ready=false`, `predictive_performance_evaluation_ready=false`, and predictive/calibrated/edge claims remain false.
+- Watchdog artifact order now ends with `market_session_view -> market_session_readiness`.
+- Focused readiness/session/watchdog regression=`38 passed, 1 deselected`; diff check PASS.
+
+
+## 2026-10-01 background-only JNU scheduler
+
+- Root cause of the recurring terminal flash: `MARKET_AI_HUB_JNU_Capture_Watchdog` directly launched interactive PowerShell every 5 minutes.
+- Task registration now uses `wscript.exe -> run-hidden.vbs -> PowerShell -WindowStyle Hidden`; the 5-minute health cadence is preserved with no visible console.
+- C2.3 registration source is aligned to the same hidden runner.
+- 18:55–22:00 remains an informational PC-availability preference, not a hard schedule. Earlier/later capture is still accepted when the PC is on.
+- Removed legacy `MARKET_AI_HUB_JNU_Capture_Stop_2205`, which otherwise created an artificial 22:05 stop followed by possible watchdog restart.
+- Live hidden-task run at 06:51:06 returned 0; recorder PID remained 7440 healthy, action=`KEEP_EXISTING_OWNER`, artifact refresh PASS, broker action=false.
+- Focused validation=`35 passed, 1 deselected`; diff check PASS.
+
+
+## 2026-10-01 fail-honest JNU artifact refresh
+
+- Watchdog research refresh is now dependency-ordered and observable: coverage -> summary -> brief -> immutable dataset -> rollup -> market-session view.
+- `automation_watchdog.json` records `artifact_refresh.status`, completed steps, failed step/exit code or exception type, and skipped downstream steps. Silent artifact-refresh `catch {}` was removed.
+- Artifact failure never stops or relogs the quote-only recorder; it only prevents downstream research files from being regenerated from stale upstream evidence.
+- Negative validation: forced `research_summary` exit 7 after successful coverage; only the first two steps executed, four dependent steps were skipped, state reported ERROR, and broker_order_action remained false.
+- PowerShell parser PASS; focused regression=`51 passed, 1 deselected`.
+
+
+## 2026-10-01 JNU market-session research view
+
+- Added `research/jnu_market_session_view.json` + Traditional-Chinese markdown, derived only from immutable CLOSED-window rows.
+- Grouping key is `session + session_start_date`; downstream analysis gets one row per market session, not one row per PC-on window.
+- Live result: 2 capture windows -> 1 `NIGHT|2026-09-30` market-session row; verified capture=109.77 min; inter-window gap=11,413.84 sec; segmented_capture=true; independence between windows is not assumed.
+- JNU2612 aggregated capture=8,393 trades / DealVol 48,376 / VWAP~67,555.38; JNU2703=260 / 388 / ~67,775.46. Both market-session full-label flags remain false.
+- Direct CLI execution exposed and fixed a script import-path bug; focused regression=`50 passed, 1 deselected`.
+
+
+## 2026-10-01 JNU closed-window rollup
+
+- The first real immutable dataset evidence is now present: `jnu_capture_window_dataset.json` has 2 CLOSED rows from one 2026-09-30 NIGHT market session. Both row hashes exactly match the current governed summary.
+- Window 1: 18:13:21–18:58:21 Asia/Taipei, close reason `OWNER_SAFE_DEFAULT_OWNER_DEGRADED`, baseline incomplete from start. Window 2: 22:08:35–23:13:21, closed at the old last-healthy time after a 2026-10-01 `NO_RUNNING_OWNER` observation, with a complete window-start baseline. No recorder start/relogin was performed.
+- Added `research/jnu_capture_window_rollup.json` + Traditional-Chinese markdown. Rollup groups windows by `session + session_start_date`, so 2 PC-on windows in the same NIGHT session count as 1 market session rather than 2 independent samples.
+- Current rollup: 2 CLOSED windows / 1 unique market session / 109.77 verified minutes; 2 microstructure-verified; dropped=0; persistence errors=0; broker actions=0; full-session-label-ready windows=0.
+- JNU2612 capture totals: 8,393 trades / DealVol 48,376 / capture VWAP~67,555.38. JNU2703: 260 / 388 / ~67,775.46. These are descriptive capture/context facts only.
+- Focused regression=`45 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
+## 2026-09-30 append-only JNU capture-window dataset
+
+- Added `research/jnu_capture_window_dataset.json`; only CLOSED verified windows are appended. ACTIVE windows are never frozen early.
+- Coverage now snapshots per-session context at every verified healthy sample. Closed-window summaries use `INTERVAL_LAST_VERIFIED_HEALTHY`, so later ticks from the same official session cannot rewrite an older window's context or label state.
+- Existing dataset rows are immutable by `window_id`; content drift returns `IMMUTABILITY_CONFLICT` and does not modify the stored dataset. Legacy closed windows lacking an interval-local snapshot are not promoted.
+- Live proof while current window remained ACTIVE: dataset exists with `row_count=0`, recorder PID 16204 remains healthy. The first row will append only after a future watchdog cycle truthfully closes this window at its prior `last_healthy_at`.
+- Focused regression=`41 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
+## 2026-09-30 JNU human-readable live brief
+
+- Watchdog now emits `research/jnu_live_capture_brief.json` plus `research/jnu_live_capture_brief_zh_tw.md`, derived from the governed window summary.
+- Brief reports active/closed state, verified interval, baseline completeness, data-health flags, window trade/DealVol/VWAP/new-bars, and separately labelled session latest/range/VWAP context.
+- It explains label blockers in Traditional Chinese and lists what can be researched versus what cannot be claimed. Predictive gain/calibrated probability/trading edge/order action remain hard false; no personalized trade instructions are generated.
+- Live proof at ~18:35 Asia/Taipei: same PID 16204, microstructure verified, dropped=0, persistence_error=null; JNU2612 delta=652 trades / DealVol 3,446 / window VWAP~67,196.14, session latest=67,210; JNU2703 delta=26 / volume 43 / window VWAP~67,424.19.
+- Focused regression=`37 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
+## 2026-09-30 JNU capture-window research summary
+
+- The watchdog now snapshots materializer counters per verified capture window and emits `research/jnu_capture_window_summary.json`. Window metrics are deltas from that window's baseline, so earlier whole-session trades/volume are not misattributed.
+- For windows already active before this feature, baseline adoption is explicit: `metrics_complete_from_window_start=false / BASELINE_ADOPTED_AFTER_WINDOW_START`. No retroactive estimates are made.
+- Summary fields include verified interval/gap/observed minutes, delta trade count/DealVol/window VWAP/new 5m-bar count, sampled microstructure callbacks/drop/persistence state, cumulative session profile availability and exact full-label blockers.
+- Next-start behavior is fail-honest: a stale ACTIVE interval closes at its prior `last_healthy_at`; restart time is not used as a fabricated shutdown time.
+- Live proof: recorder PID remained 16204; baseline adopted 18:27:23 Asia/Taipei; ~34s later JNU2612 delta=24 trades / DealVol 101 / VWAP~67,178.86 and JNU2703 delta=2 / volume 5. Focused regression=`35 passed, 1 deselected`; build remains `a0ac8fdb8f218c39`.
+
+
+## 2026-09-30 JNU variable-PC capture windows
+
+- The PC does **not** need to remain on for a full OSE session. Normal availability is roughly 18:55–22:00 Asia/Taipei, but earlier/later start or shutdown is allowed and recorded truthfully.
+- Existing 5-minute watchdog now updates `automation/jnu_capture_coverage.json`. Healthy samples extend the active capture interval; >8-minute gaps split intervals; degraded/unverified owner state closes verified coverage. No missing minutes are backfilled.
+- Preferred 18:55–22:00 is informational only. Partial windows with real StockTick data are `PARTIAL_WINDOW / usable_as_context=true`; full label readiness remains strictly open+close-boundary dependent and therefore opportunistic.
+- Live adoption did not restart the recorder: PID 16204 stayed healthy, runtime/disk build `a0ac8fdb8f218c39`, broker_action_performed=false. Focused coverage/watchdog validation=`31 passed, 1 deselected`.
+- Reporting UX rule: all construction closeouts must explicitly say continue/stop, next step, and whether user authorization is needed.
+
+
+## 2026-09-30 zero-cost JNU live capture / materializer adoption
+
+- Permanent policy: **zero paid services**. AWS account/paid cloud is not required; system must keep operating if AWS is never created. AWS external scheduler work is optional only. Local Windows scheduler + public/free fallbacks remain the default continuity design.
+- Replaced the stale 18:55 local task definition with the source-controlled 5-minute `MARKET_AI_HUB_JNU_Capture_Watchdog` task. At 16:33 the Windows task independently restored one current-build quote-only owner; no second login, broker/account/position/balance/order action.
+- Authorized live adoption of bounded reconnect: config version `2026-09-30`, `auto_reconnect.enabled=true`, max 3 attempts, bounded backoff. Tick-detail maintenance remains mutually exclusive.
+- Incremental `JNU.SESSION.MATERIALIZED.2` StockTick materializer is live and consumed by `jnu_trading_path`. Live freshness uses artifact read time; explicit replay `now=` remains pinned. Verified live consumer: `FRESH / used=true / no bounded-Parquet fallback`.
+- 2026-09-30 night open was missed before the machine was available. First JNU2612 retained event=16:05:53 Asia/Taipei, therefore open boundary/coverage/label eligibility are false and remain so; no backfill.
+- 16:33 snapshot (descriptive only): JNU2612 exact-Micro 577 verified StockTick trades, DealVol 2435, observed range 67,350–67,510, VWAP~67,413.46. Claims remain `PREDICTIVE_GAIN=false / CALIBRATED=false / TRADING_EDGE=false`.
+- source/config build=`a0ac8fdb8f218c39`; validation=`30 passed` focused + `3 passed` build-freeze + `107 passed, 1 deselected` affected selector. No full suite rerun.
+
+
 ## 2026-09-28 P5 first canonical-origin operational miss / hotfix
 
 - 2026-09-28 08:05 Asia/Taipei was the first preregistered P5 canonical window. The one-shot automation recorded a run at 08:08, but no canonical PredictionAuditDB artifact was created; by 08:16 `canonical_prediction_count=0`, `expected_canonical_origins=1`.
@@ -51,6 +164,7 @@
 ## Current override — 2026-09-27 Accuracy v2 product closeout
 
 - Current phase: **DATA_CONTINUITY_READY / CAPABILITY_REGISTRY_READY / GOLDEN_ANSWER_GUARDS_READY / ACCURACY_V2_P7_ENGINEERING_PASS / READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION / P6_CONDITIONAL_BLOCKED_NONBLOCKING / IMMUTABLE_FORWARD_MONITOR_READY / WAITING_FOR_2026-09-28_CANONICAL_ORIGIN / BASELINE_RETAINED / FORWARD_ORIGIN_ACCUMULATION_REQUIRED / AUTO_PROMOTION_BLOCKED / P2_FINAL_NOT_OPENED / HPQ1_SEALED_BLOCKED_HORIZON_MISMATCH**.
+- 2026-10-02 修復：live recorder 連線中斷後的靜默死亡（session-aware liveness + bounded recovery）、無界 flush 迴圈、6.7e38 sentinel 誤判為價格；BLS 403 改為 typed provider block（不繞過）
 - Branch `codex/vnext-audit-handoff`; P7 prereg commit=`3bd723e820b67212673c2ea5d7d83254fd7a11ae`; P7 protocol hash=`bc16ff60e8f9f113d94ce0c400464c32fa1200daaba4b2f0041a9ef4b0af6eb6`; current source/config worktree build is **d16fb05386cdc8ea** before the closeout commit. NautilusTrader 1.231.0 is installed only in isolated `data/lab/nautilus_trader_1_231_0/.venv`; core `.venv` was not mutated. No live runtime handover, recorder/service switch, model fine-tune, order/account action, live Nautilus adapter, task registration, or external order action occurred.
 - P2 target is `NEXT_PUBLISHED_SETTLEMENT_OBSERVATION` return regression, not the blocked HPQ1 next-session label. Primary loss is MAE_RETURN vs ZERO_RETURN; minimum meaningful delta is fixed at 0.0005 (5 bps). Development ends 2026-07-10; 2026-07-11..2026-09-27 is exposed quarantine and cannot be used for fit/selection/claim; new one-use final starts 2026-09-28 and requires 20 origins.
 - Nested causal validation: expanding outer min-train 32/test 10/max 5; expanding inner min-train 20/validation 6/max 3; one-origin embargo plus `train.label_available_at <= evaluation.decision_time`; no future rows; 100% same-origin inner/outer coverage required. Finite search is Ridge alpha `{0.1,1,10}`, four fixed small LightGBM-L1 settings, seed 42, max 300 seconds. Existing LogisticRegression is an independent direction diagnostic and cannot select the return champion.
