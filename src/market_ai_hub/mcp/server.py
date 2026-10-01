@@ -768,8 +768,11 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
     from market_ai_hub.services.jnu_direct import (
         analyze_jnu_direct,
         jnu_user_summary,
+        normalize_jnu_contract_month,
         refresh_jnu_direct_data,
     )
+
+    contract_month = normalize_jnu_contract_month(contract_month)
 
     try:
         refresh = refresh_jnu_direct_data()

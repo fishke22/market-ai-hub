@@ -32,6 +32,22 @@ _REFRESH_TTL_SECONDS = 1800
 _refresh_cache: tuple[float, dict[str, Any]] | None = None
 
 
+def normalize_jnu_contract_month(value: str = "") -> str:
+    """Normalize common JNU contract aliases to canonical YYYYMM form."""
+    text = str(value or "").strip().upper()
+    if not text:
+        return ""
+    if text.startswith("JNUPM") and len(text) == 9 and text[-4:].isdigit():
+        text = text[-4:]
+    elif text.startswith("JNU") and len(text) == 7 and text[-4:].isdigit():
+        text = text[-4:]
+    if len(text) == 4 and text.isdigit():
+        return f"20{text}"
+    if len(text) == 6 and text.isdigit():
+        return text
+    return text
+
+
 def refresh_jnu_direct_data(*, force: bool = False) -> dict[str, Any]:
     """Best-effort public JPX refresh; never uses broker credentials or trading APIs."""
     global _refresh_cache
@@ -264,6 +280,7 @@ def load_current_micro_settlement_receipts(contract_month: str = "") -> pd.DataF
     Archive rows without an observed local receipt timestamp are intentionally excluded:
     P5 uses this narrow view to prove prediction-before-outcome causality.
     """
+    contract_month = normalize_jnu_contract_month(contract_month)
     frame = _current_settlement_frame()
     if frame.empty:
         return frame
@@ -281,6 +298,7 @@ def load_current_micro_settlement_receipts(contract_month: str = "") -> pd.DataF
 
 def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, dict[str, Any]]:
     """Load an exact-contract settlement series from persisted official JPX sources."""
+    contract_month = normalize_jnu_contract_month(contract_month)
     daily = JPXOSEDailyReportProvider().load("Nikkei 225 Micro")
     frames = []
     if daily is not None and not daily.empty:

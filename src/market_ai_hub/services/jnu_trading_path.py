@@ -865,6 +865,9 @@ def _current_quote_status(now: datetime, decision_code: str = "") -> dict[str, A
         "live_now_verified": False,
         "live_price_verified": False,
         "microstructure_live_verified": False,
+        "jnu_microstructure_live_verified": False,
+        "microstructure_runtime_verified": False,
+        "jnu_microstructure_runtime_verified": False,
         "provider_status": "UNKNOWN",
         "health_reasons": [],
     }
@@ -875,12 +878,15 @@ def _current_quote_status(now: datetime, decision_code: str = "") -> dict[str, A
         raw = json.loads(status_path.read_text(encoding="utf-8"))
     except Exception:
         return out
+    microstructure_runtime_verified = bool(raw.get("jnu_microstructure_live_verified"))
     out.update(
         provider_status=str(raw.get("status") or "UNKNOWN"),
         health_reasons=list(raw.get("health_reasons") or []),
         connection_status=str(raw.get("connection_status") or ""),
-        microstructure_live_verified=bool(raw.get("jnu_microstructure_live_verified")),
-        jnu_microstructure_live_verified=bool(raw.get("jnu_microstructure_live_verified")),
+        microstructure_runtime_verified=microstructure_runtime_verified,
+        jnu_microstructure_runtime_verified=microstructure_runtime_verified,
+        microstructure_live_verified=False,
+        jnu_microstructure_live_verified=False,
         last_quote_at=raw.get("last_quote_at") or None,
         runtime_build_id=raw.get("runtime_build_id"),
     )
@@ -928,6 +934,9 @@ def _current_quote_status(now: datetime, decision_code: str = "") -> dict[str, A
             and not out["health_reasons"]
             and 0.0 <= age_seconds <= LIVE_QUOTE_MAX_AGE_SECONDS
         )
+        current_microstructure_verified = bool(
+            microstructure_runtime_verified and live_price_verified
+        )
         out.update(
             live_price=float(quote["deal"]),
             live_instrument_code=str(quote.get("instrument_code") or "").upper(),
@@ -936,6 +945,8 @@ def _current_quote_status(now: datetime, decision_code: str = "") -> dict[str, A
             live_price_age_seconds=age_seconds,
             live_price_source="SubscribeWatchlistAll.deal",
             live_price_verified=live_price_verified,
+            microstructure_live_verified=current_microstructure_verified,
+            jnu_microstructure_live_verified=current_microstructure_verified,
         )
         out["live_now_verified"] = live_price_verified
     return out

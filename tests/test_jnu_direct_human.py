@@ -343,6 +343,32 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     assert "status" not in out
 
 
+def test_analyze_jnu_mcp_normalizes_common_contract_aliases(monkeypatch):
+    import market_ai_hub.mcp.server as server
+    import market_ai_hub.services.data_continuity as dc
+    import market_ai_hub.services.jnu_direct as d
+
+    seen = []
+    monkeypatch.setattr(d, "refresh_jnu_direct_data", lambda: {"status": "OK"})
+
+    def fake_continuity(contract_month=""):
+        seen.append(("continuity", contract_month))
+        return {"mode": "NORMAL_TARGET_DATA", "context_only": False}
+
+    def fake_analyze(*, horizon, contract_month, validate_history):
+        seen.append(("direct", contract_month))
+        return {"status": "OK"}
+
+    monkeypatch.setattr(dc, "jnu_data_continuity_status", fake_continuity)
+    monkeypatch.setattr(d, "analyze_jnu_direct", fake_analyze)
+
+    for alias in ("2612", "202612", "JNU2612", "JNUPM2612"):
+        seen.clear()
+        out = server.analyze_jnu(contract_month=alias, view="audit")
+        assert out["status"] == "OK"
+        assert seen == [("continuity", "202612"), ("direct", "202612")]
+
+
 def test_analyze_jnu_mcp_continuity_mode_does_not_call_direct_model(monkeypatch):
     import market_ai_hub.mcp.server as server
     import market_ai_hub.services.data_continuity as dc

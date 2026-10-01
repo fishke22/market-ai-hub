@@ -309,6 +309,52 @@ def test_running_watchlist_quote_is_live_without_microstructure_callbacks(tmp_pa
     assert out["live_price"] == 65650.0
 
 
+def test_stale_watchlist_price_cannot_keep_microstructure_live_verified(tmp_path, monkeypatch):
+    import json
+
+    root = tmp_path / "live" / "yuanta"
+    root.mkdir(parents=True)
+    now = datetime(2026, 9, 28, 12, 30, 0, tzinfo=UTC)
+    (root / "status.json").write_text(
+        json.dumps(
+            {
+                "status": "RUNNING",
+                "health_reasons": [],
+                "last_quote_at": "2026-09-28T12:29:59+00:00",
+                "jnu_microstructure_live_verified": True,
+                "runtime_build_id": "test",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "latest.json").write_text(
+        json.dumps(
+            {
+                "quotes": {
+                    "207:JNUPM2612": {
+                        "market_no": 207,
+                        "instrument_code": "JNUPM2612",
+                        "deal": 65650.0,
+                        "received_at": "2026-09-28T11:47:59+00:00",
+                        "field_provenance": {
+                            "deal": {"received_at": "2026-09-28T11:47:59+00:00"}
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(tp, "data_root", lambda: tmp_path)
+    out = tp._current_quote_status(now, "JNU2612")
+    assert out["microstructure_runtime_verified"] is True
+    assert out["jnu_microstructure_runtime_verified"] is True
+    assert out["live_price_verified"] is False
+    assert out["live_now_verified"] is False
+    assert out["microstructure_live_verified"] is False
+    assert out["jnu_microstructure_live_verified"] is False
+
+
 def test_trading_path_requests_settlement_for_live_contract_month(monkeypatch):
     _patch_common(monkeypatch, "202612")
     seen = {}
