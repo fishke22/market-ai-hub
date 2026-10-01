@@ -872,6 +872,7 @@ def v2_schema_versions() -> dict[str, str]:
     """Assemble the actual V2 schema versions (no hardcoding)."""
     from market_ai_hub.research.v2 import (
         asof, calibration_evaluation, calibration_fitting, catalyst_response, evaluation_governance, first_passage,
+        microstructure_features,
         extension_exhaustion, factor_representation, forward_cycle, gap_session, labels,
         sequential_update, session_truth, state_machine, tick_detail_source,
     )
@@ -888,6 +889,7 @@ def v2_schema_versions() -> dict[str, str]:
         "sequential_update": sequential_update.V2_SEQUENTIAL_UPDATE_SCHEMA_VERSION,
         "prediction_audit": V2_PREDICTION_AUDIT_SCHEMA_VERSION,
         "calibration_evaluation": calibration_evaluation.V2_CALIBRATION_EVALUATION_SCHEMA_VERSION,
+        "microstructure_features": microstructure_features.V2_MICROSTRUCTURE_SCHEMA_VERSION,
         "evaluation_governance": evaluation_governance.W3_EVALUATION_GOVERNANCE_SCHEMA_VERSION,
         "forward_cycle": forward_cycle.W3_FORWARD_CYCLE_SCHEMA_VERSION,
         "tick_detail_source": tick_detail_source.W3_TICK_DETAIL_SOURCE_SCHEMA_VERSION,

@@ -2,6 +2,32 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-02 (night) microstructure night-window feature pre-registration (extraction only)
+
+- **Pre-registration frozen before any result**:
+  `research/phase3/MICROSTRUCTURE_NIGHT_WINDOW_PREREGISTRATION_v1.yaml`
+  (`AV2.MICROSTRUCTURE.NIGHT_WINDOW.v1`). Window = `received_at` in `[08:00Z, 21:00Z)` on D
+  (= OSE night session 17:00 JST D .. 06:00 JST D+1 in the receipt clock). Frozen 12-feature
+  list; adding a feature requires a protocol version bump.
+- **Extractor** `research/v2/microstructure_features.py` (schema `MS.1`, registered in
+  `v2_schema_versions()`), coverage runner
+  `scripts/microstructure_feature_coverage.py`, report
+  `research/phase3/reports/MICROSTRUCTURE_FEATURE_COVERAGE_v1.md`, 14 tests.
+- **Measured coverage**: 4 usable night windows (09-28..10-01, ~15k-23k tape rows each).
+  09-24/09-25 predate the tape columns, 09-27 has no rows, and `JNU2612` (non-PM) has no
+  tape rows because only the PM contract was subscribed for the tape.
+- **Data-source corrections established before any statistic** (recorded in the protocol's
+  `data_source_revision`): the tape is `SubscribeStockTick`/`TRADE_TICK`
+  (`DealPrice`/`DealVol`/`InOutFlag`/`BuyPrice`/`SellPrice`), not `SubscribeWatchlistAll`;
+  `InOutFlag` 1=buyer-initiated / 0=seller-initiated was **verified** against the quote at
+  trade time; `received_at` is VARCHAR ISO-8601; parquet parts need `union_by_name=true`.
+  The snapshot view is never combined with the tape (no double counting).
+- **No model, no probability, no ranking, no new holdout and no new evidence channel.**
+  Any model consuming these features must be validated through the EXISTING forward protocol
+  (P5 + W3.2-EP1); the 4-night sample is `DEVELOPMENT_ONLY_NEVER_OOS`.
+- Verified: full offline profile **2298 passed, 1 skipped, 35 deselected, exit 0**.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-02 (night) live-recorder liveness + provider-block honesty + test isolation
 
 Verified repo first: `codex/vnext-audit-handoff`, HEAD `871eb00`, origin/main `93a1230`
