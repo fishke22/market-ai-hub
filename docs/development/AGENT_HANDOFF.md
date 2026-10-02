@@ -2,6 +2,30 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-02 (night) capture-gap audit + recorder lifecycle journal
+
+- **Missing capability**: the recorded store has holes, but nothing could tell a hole that
+  was expected (market closed, PC off) from a hole that was a real capture loss. Every hole
+  looked equally bad, and a hole during a thin session looked like a fault.
+- **Recorder now writes a tiny durable lifecycle journal** (`<root>/runtime/lifecycle.jsonl`,
+  one START and one STOP line per run, capped at 5000 lines, failures swallowed so
+  bookkeeping can never break recording).
+- **New `research/v2/capture_gap_audit.py`** (schema `GA.1`) + `scripts/capture_gap_audit.py`
+  classifies every hole >= 120 s as `MARKET_CLOSED_EXPECTED`, `RECORDER_OFF_EXPECTED`,
+  `CAPTURE_LOSS_WHILE_RUNNING`, or `UNCLASSIFIED_NO_LIVENESS_RECORD`. Only the third counts
+  as real loss, and it is never claimed without both a verified-open venue and a running
+  process.
+- **Measured, current store**: 2026-10-01 has 13.18 h of holes and 2026-10-02 has 10.19 h,
+  and every one of them is `UNCLASSIFIED_NO_LIVENESS_RECORD` because the journal did not
+  exist yet. Real provable capture loss is therefore reported as 0.00 h rather than assumed.
+  From the next run onward the same holes become attributable.
+- **Correction to the previous entry's claim**: `quote_age_seconds` was reported as lagging
+  the store. It was measured again and does NOT lag — `latest.json` and the parquet agree to
+  the same instant (all 29 subscribed instruments stop together), so the DEGRADED status was
+  truthful. No code was changed for a non-existent defect.
+- Verified: full offline profile **2310 passed, 2 skipped, 35 deselected, exit 0**.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-02 (night) stall threshold + sustained-health reset (flapping feed)
 
 - **Second-order defect in the same recovery path**: the budget reset on ANY callbacks, so a
