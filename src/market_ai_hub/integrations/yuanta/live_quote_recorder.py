@@ -92,8 +92,17 @@ _DEFAULT_STALE_RECOVERY_COOLDOWN_SECONDS = 300.0
 def _feed_stalled(
     *, reconnect_enabled: bool, session_open: bool, silence_seconds: float,
     stale_seconds: float, since_last_recovery: float, cooldown_seconds: float,
+    recoveries: int = 0, max_recoveries: int = 3,
 ) -> bool:
-    """Single decision point: escalate only on verified-open + silence + cooldown."""
+    """Single decision point for escalating a connected-but-silent feed.
+
+    Escalate only on verified-open + silence + cooldown, and only while the stall budget
+    lasts. A restart cannot repair a venue-side outage, so past the budget the process must
+    stay connected and keep reporting DEGRADED instead of thrashing the session with
+    repeated logins.
+    """
+    if recoveries >= max_recoveries:
+        return False
     return bool(
         reconnect_enabled
         and session_open
@@ -1189,6 +1198,10 @@ def _run_locked(
         rec.get("stale_recovery_cooldown_seconds", _DEFAULT_STALE_RECOVERY_COOLDOWN_SECONDS))
     last_stall_recovery_at = 0.0
     stall_recoveries = 0
+    stall_recovery_exhausted = False
+    max_stall_recoveries = int(rec.get("max_stall_recoveries", 3))
+    if max_stall_recoveries < 1:
+        raise ValueError("max_stall_recoveries must be >= 1")
     session_open = False
 
     def write_startup_status(stage: str) -> None:
@@ -1288,7 +1301,9 @@ def _run_locked(
                 stale_seconds=stale_recovery_seconds,
                 since_last_recovery=monotonic_now - last_stall_recovery_at,
                 cooldown_seconds=stale_recovery_cooldown_seconds,
-            )
+                recoveries=stall_recoveries,
+                max_recoveries=max_stall_recoveries,
+            ) and not stall_recovery_exhausted
             if connection["faulted"] or stalled_feed:
                 if not reconnect_policy.enabled:
                     startup_stage = "RUNNING_CONNECTION_FAULT"
@@ -1299,6 +1314,12 @@ def _run_locked(
                     # replacement, which re-subscribes from scratch.
                     last_stall_recovery_at = monotonic_now
                     stall_recoveries += 1
+                    if stall_recoveries >= max_stall_recoveries:
+                        # A restart cannot fix a venue-side outage. Stop escalating so the
+                        # process does not thrash the session with repeated logins; stay
+                        # connected, keep reporting DEGRADED honestly, and let an operator
+                        # or the watchdog decide.
+                        stall_recovery_exhausted = True
                 startup_stage = "RUNNING_RECONNECT_FLUSH"
                 try:
                     drain_error = _flush_until_drained(buffer, root)
@@ -1387,6 +1408,11 @@ def _run_locked(
             if now - last_status >= 5:
                 last_quote = max((x.get("received_at", "") for x in latest.values()), default="")
                 age = (_utcnow() - datetime.fromisoformat(last_quote)).total_seconds() if last_quote else None
+                if callback_silence < stale_recovery_seconds:
+                    # Callbacks are flowing again: the previous recovery worked, so the
+                    # stall budget is fresh for the next unrelated outage.
+                    stall_recoveries = 0
+                    stall_recovery_exhausted = False
                 reasons = []
                 if write_error:
                     reasons.append("PERSISTENCE_ERROR")
@@ -1410,6 +1436,9 @@ def _run_locked(
                         None if not last_quote else round(
                             (time.monotonic() - liveness["last_callback_monotonic"]), 3)),
                     "stall_recoveries": stall_recoveries,
+                    "max_stall_recoveries": max_stall_recoveries,
+                    "stall_recovery_state": (
+                        "EXHAUSTED" if stall_recovery_exhausted else "IDLE"),
                     "persistence_error": write_error, "started_at": started_at.isoformat(),
                     "connection_status": "NOT_CONTINUOUSLY_VERIFIED", "freshness_semantics": "PER_FIELD_ONLY",
                     "connection_event_state": connection["state"],

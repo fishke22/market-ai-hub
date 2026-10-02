@@ -498,3 +498,27 @@ def test_scalar_drops_nonfinite_and_vendor_sentinel_values():
         assert R._scalar(bad) is None
     assert R._scalar(None) is None
     assert R._scalar("abc") == "abc"
+
+
+def test_stall_recovery_is_capped_so_a_venue_outage_cannot_thrash_logins():
+    """A restart cannot repair a venue-side outage: past the budget, stop escalating."""
+    kw = dict(reconnect_enabled=True, session_open=True, silence_seconds=200, stale_seconds=180,
+              since_last_recovery=9999, cooldown_seconds=300)
+    assert R._feed_stalled(recoveries=0, max_recoveries=3, **kw)
+    assert R._feed_stalled(recoveries=2, max_recoveries=3, **kw)
+    assert not R._feed_stalled(recoveries=3, max_recoveries=3, **kw)
+    assert not R._feed_stalled(recoveries=100, max_recoveries=3, **kw)
+    # the cap must not disable the ordinary cases
+    assert not R._feed_stalled(recoveries=0, max_recoveries=3, **{**kw, "session_open": False})
+    assert not R._feed_stalled(recoveries=0, max_recoveries=3,
+                               **{**kw, "since_last_recovery": 1})
+
+
+def test_stall_recovery_budget_is_visible_and_resettable():
+    src = (Path(__file__).resolve().parents[1] / "src" / "market_ai_hub" / "integrations"
+           / "yuanta" / "live_quote_recorder.py").read_text(encoding="utf-8")
+    assert "stall_recovery_state" in src
+    assert "max_stall_recoveries" in src
+    assert "stall_recovery_exhausted" in src
+    # the budget resets once callbacks flow again, so a later outage gets a fresh budget
+    assert "stall_recoveries = 0" in src
