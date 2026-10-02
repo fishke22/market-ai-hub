@@ -2,6 +2,26 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-02 (night) stall-recovery budget: stop thrashing the venue session
+
+- **Regression caused by the earlier liveness fix**: the connected-but-silent escalation had
+  no cumulative limit, so a venue-side feed outage produced **100 full runtime replacements
+  in 8.2 h** (`stall_recoveries=100`, `reconnect_successes=102`, `quote_age=30046 s`). Each
+  replacement logs in again, which is the worst possible response to a feed the venue is
+  simply not pushing.
+- **Fix**: the stall budget is now part of the single decision point `_feed_stalled(...)`
+  via `recoveries`/`max_recoveries` (default 3, `recording.max_stall_recoveries`). Past the
+  budget the process stops escalating, stays connected and keeps reporting DEGRADED. The
+  budget resets to 0 the moment callbacks flow again, so a later unrelated outage gets a
+  fresh budget. Additive status only: `max_stall_recoveries`, `stall_recovery_state`
+  (`IDLE`/`EXHAUSTED`) — `health_reasons` stays a frozen consumer contract.
+- **Evidence the loop was the cause**: after a clean stop+start with the cap in place,
+  callbacks resumed immediately (`quote_age 0.009 s`, `health_reasons []`,
+  `stall_recoveries 0`, `reconnect_successes 0`). Repeated logins, not the venue session
+  itself, were suppressing the feed.
+- Verified: full offline profile **2299 passed, 2 skipped, 35 deselected, exit 0**.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-02 (night) microstructure night-window feature pre-registration (extraction only)
 
 - **Pre-registration frozen before any result**:
