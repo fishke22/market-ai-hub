@@ -2,6 +2,22 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-02 (night) stall threshold + sustained-health reset (flapping feed)
+
+- **Second-order defect in the same recovery path**: the budget reset on ANY callbacks, so a
+  flapping feed (a burst, then silence, then a burst) refilled the budget forever and the cap
+  never engaged. The trigger was also too eager: 180 s of silence happens legitimately in a
+  thin weekend session (measured: `session_open=True`, `five_tick` callbacks arriving, yet a
+  175 s quiet gap at 01:20 JST Saturday).
+- **Fix**: `_stall_budget_reset(...)` requires SUSTAINED health — silence below the threshold
+  AND at least `stale_healthy_reset_seconds` (default 900 s) since the last recovery attempt.
+  The default `stale_recovery_seconds` is raised 180 s -> 600 s, and the effective value is
+  now surfaced in status as `stale_recovery_seconds` so the operator can see the threshold.
+- Both knobs stay config-backed: `recording.stale_recovery_seconds`,
+  `recording.stale_healthy_reset_seconds`, `recording.max_stall_recoveries`.
+- Verified: full offline profile **2301 passed, 2 skipped, 35 deselected, exit 0**.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-02 (night) stall-recovery budget: stop thrashing the venue session
 
 - **Regression caused by the earlier liveness fix**: the connected-but-silent escalation had

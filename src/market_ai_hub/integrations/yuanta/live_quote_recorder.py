@@ -85,8 +85,26 @@ _MARKET_SESSION_VENUE = {
     203: "CME", 204: "CME", 207: "OSE_DERIVATIVES", 215: "CBOE",
 }
 # A connected-but-silent feed is a fault only when a subscribed venue is verified OPEN.
-_DEFAULT_STALE_RECOVERY_SECONDS = 180.0
+_DEFAULT_STALE_RECOVERY_SECONDS = 600.0
 _DEFAULT_STALE_RECOVERY_COOLDOWN_SECONDS = 300.0
+# The stall budget only resets after this much continuous health, so a flapping feed that
+# emits an occasional burst cannot keep refilling the budget and defeat the cap.
+_DEFAULT_STALE_HEALTHY_RESET_SECONDS = 900.0
+
+
+def _stall_budget_reset(
+    *, callback_silence: float, stale_seconds: float,
+    since_last_recovery: float, healthy_reset_seconds: float,
+) -> bool:
+    """True when SUSTAINED health should refill the stall budget.
+
+    A flapping feed that emits an occasional burst must not be able to refill the budget and
+    defeat the cap, so the budget only resets after this much continuous health.
+    """
+    return bool(
+        callback_silence < stale_seconds
+        and since_last_recovery >= healthy_reset_seconds
+    )
 
 
 def _feed_stalled(
@@ -1196,6 +1214,8 @@ def _run_locked(
         raise ValueError("stale_recovery_seconds must be finite and >= 30")
     stale_recovery_cooldown_seconds = float(
         rec.get("stale_recovery_cooldown_seconds", _DEFAULT_STALE_RECOVERY_COOLDOWN_SECONDS))
+    stale_healthy_reset_seconds = float(
+        rec.get("stale_healthy_reset_seconds", _DEFAULT_STALE_HEALTHY_RESET_SECONDS))
     last_stall_recovery_at = 0.0
     stall_recoveries = 0
     stall_recovery_exhausted = False
@@ -1408,9 +1428,14 @@ def _run_locked(
             if now - last_status >= 5:
                 last_quote = max((x.get("received_at", "") for x in latest.values()), default="")
                 age = (_utcnow() - datetime.fromisoformat(last_quote)).total_seconds() if last_quote else None
-                if callback_silence < stale_recovery_seconds:
-                    # Callbacks are flowing again: the previous recovery worked, so the
-                    # stall budget is fresh for the next unrelated outage.
+                if _stall_budget_reset(
+                        callback_silence=callback_silence,
+                        stale_seconds=stale_recovery_seconds,
+                        since_last_recovery=monotonic_now - last_stall_recovery_at,
+                        healthy_reset_seconds=stale_healthy_reset_seconds):
+                    # Sustained health (not a momentary burst) means the previous recovery
+                    # really worked, so the stall budget is fresh for the next unrelated
+                    # outage. A flapping feed must not be able to refill it.
                     stall_recoveries = 0
                     stall_recovery_exhausted = False
                 reasons = []
@@ -1432,7 +1457,9 @@ def _run_locked(
                     "dynamic_subscriptions": len(dynamic_subscribed),
                     "last_quote_at": last_quote, "quote_age_seconds": age,
                     "health_reasons": reasons, "pending_records": pending, "dropped_records": dropped,
-                    "session_open": session_open, "callback_silence_seconds": (
+                    "session_open": session_open,
+                    "stale_recovery_seconds": stale_recovery_seconds,
+                    "callback_silence_seconds": (
                         None if not last_quote else round(
                             (time.monotonic() - liveness["last_callback_monotonic"]), 3)),
                     "stall_recoveries": stall_recoveries,

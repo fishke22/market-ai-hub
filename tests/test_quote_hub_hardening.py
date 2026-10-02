@@ -522,3 +522,29 @@ def test_stall_recovery_budget_is_visible_and_resettable():
     assert "stall_recovery_exhausted" in src
     # the budget resets once callbacks flow again, so a later outage gets a fresh budget
     assert "stall_recoveries = 0" in src
+
+
+def test_stall_budget_only_resets_after_sustained_health():
+    """A flapping feed must not refill the stall budget and defeat the cap."""
+    kw = dict(stale_seconds=600, healthy_reset_seconds=900)
+    # momentary burst shortly after a recovery -> budget stays spent
+    assert not R._stall_budget_reset(callback_silence=5, since_last_recovery=5, **kw)
+    # still silent -> no reset
+    assert not R._stall_budget_reset(callback_silence=700, since_last_recovery=99999, **kw)
+    # sustained health -> budget refilled
+    assert R._stall_budget_reset(callback_silence=5, since_last_recovery=1000, **kw)
+    # no recovery has ever happened -> reset immediately
+    assert R._stall_budget_reset(callback_silence=5, since_last_recovery=10 ** 9, **kw)
+
+
+def test_thin_session_silence_threshold_is_tolerant():
+    """A thin weekend session can be quiet for minutes; the default must exceed 5 minutes."""
+    from decimal import Decimal
+
+    src = (Path(__file__).resolve().parents[1] / "src" / "market_ai_hub" / "integrations"
+           / "yuanta" / "live_quote_recorder.py").read_text(encoding="utf-8")
+    marker = "_DEFAULT_STALE_RECOVERY_SECONDS = "
+    value = Decimal(src.split(marker, 1)[1].split("\n", 1)[0].strip())
+    assert value >= 300, value
+    assert "_DEFAULT_STALE_HEALTHY_RESET_SECONDS = " in src
+    assert "stale_recovery_seconds" in src          # surfaced in status for the operator
