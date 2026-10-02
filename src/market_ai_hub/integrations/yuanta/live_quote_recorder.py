@@ -182,6 +182,35 @@ def _disk_build_id() -> str:
     return str(_compute_build_id())
 
 
+_LIFECYCLE_MAX_LINES = 5000
+
+
+def lifecycle_path(root: Path) -> Path:
+    return Path(root) / "runtime" / "lifecycle.jsonl"
+
+
+def _append_lifecycle(root: Path, event: str, **fields) -> None:
+    """Append one START/STOP line. Cheap (2 lines per run) and crash-tolerant.
+
+    Gap audit needs to know whether this process was running when data was missing, which is
+    otherwise unrecoverable after the fact.
+    """
+    import json
+
+    path = lifecycle_path(root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({"event": event, "at": _utcnow().isoformat(), **fields},
+                          ensure_ascii=False, sort_keys=True)
+        with path.open("a", encoding="utf-8", newline="") as fh:
+            fh.write(line + "\n")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if len(lines) > _LIFECYCLE_MAX_LINES:
+            path.write_text("\n".join(lines[-_LIFECYCLE_MAX_LINES:]) + "\n", encoding="utf-8")
+    except Exception:
+        pass  # never let bookkeeping break recording
+
+
 def _atomic_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -1127,6 +1156,8 @@ def _run_locked(
     status_path = _within(root, str(cfg["storage"].get("status_file", "status.json")))
     latest_path = _within(root, str(cfg["storage"].get("latest_file", "latest.json")))
     started_at = _utcnow()
+    _append_lifecycle(root, "START", pid=os.getpid(), build=runtime_build_id,
+                      provider="SPARK_SECURITIES_PROFILE")
     spool_cfg = cfg.get("durable_spool", {})
     spool = None
     if spool_cfg.get("enabled", False):
@@ -1542,6 +1573,8 @@ def _run_locked(
                 jnu_session_materializer.flush()
             except Exception as exc:
                 materializer_state["error"] = type(exc).__name__
+        _append_lifecycle(root, "STOP", pid=os.getpid(), build=runtime_build_id,
+                          startup_stage=startup_stage, fatal_error=fatal_error)
         durability = buffer.durability_status()
         _atomic_json(status_path, {
             "status": (
