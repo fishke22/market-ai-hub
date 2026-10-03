@@ -1,5 +1,14 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+## 2026-10-03 (night) W3.4 新高+放量前向假說（operator authorized 施工）
+
+- 預先登記協議：`research/phase3/JNU_NH_VOL_BREAKOUT_PREREGISTRATION_v1.yaml`（JNU-NH-VOL-BREAKOUT-1 v1，凍結於 2026-10-03，早於任何結果；任何變更需要新檔+版號）。核心參數 60/20/1.5、horizons 5d/20d、立場常數 0.5（UNCALIBRATED）、promotion FORBIDDEN。
+- 引擎 `research/v2/breakout_forward.py`（W3.4 / W3.4-EP1）接入既有 PredictionAuditDB 前向循環：觸發（官方結算 60 日新高＋契約日量 >1.5×20 日均量）→ 每 horizon 一筆 EVENT_PROBABILITY 預登記 → 目標日官方結算對答案（嚴格大於）。錯過 origin 即 MISSED、永不補登。
+- 成交量資料線修復：JPX open_interest.xlsx 正確路徑 token t13vrt0000026aes-att；解析規則凍結為 W3.4-OI-1（右欄帶，已對帳驗證）；新增落盤 data/raw/jpx/open_interest/OSE/all/**。接線在既有 19:00 JPX sync（fail-soft、不新增排程）。
+- 測試：test_w34_breakout_forward.py 13 個全綠；phase2g2 parser fixture 已更換為新規則。agent 殼的廣範圍合跑仍會踩到兩個既有環境地雷（phase2qc 原生中止；recorder owner-mutex 掛住），與本次變更無關——分群全綠為證。
+- 待 operator 決策：①MCP 服務程序仍在修復前 build（19:56 啟動、21:00 才合併），建議重啟讓預設目標直接走新政策；②lateness cap=2 在週末排程下的第一筆登記窗口（週日 19:00 若開機即登記 10-02 事件，週一則永久錯過——此為凍結政策、勿補登）；③45 天以上成交量回填未嘗試（官方歷史檔可得性未驗證）。
+- Predicate claims 不變：PREDICTIVE_GAIN/CALIBRATED/TRADING_EDGE 全 false。
+
 ## 2026-10-02 (night) event calendar automation + agent data-channel policy
 
 - Dated event store now populated and self-refreshing: zero-key FOMC (federalreserve.gov, real-page verified) + BLS (empsit/cpi schedule pages) collector; `EventStore` moved to `data_root()/events` (fixes registry mismatch); per-source `replace_scheduled_for` keeps other sources' last-known rows when one source fails; `_event_snapshot` returns SCHEDULED rows when data exists.

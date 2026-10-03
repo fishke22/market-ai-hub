@@ -17,7 +17,10 @@ from pydantic import BaseModel
 
 from market_ai_hub.targets.jpx_daily import atomic_write
 
-MARKET_BASE = "https://www.jpx.co.jp/markets/derivatives/trading-volume/tvdivq00000014nn-att"
+# 2026-10-03 實測：open_interest.xlsx 的正確路徑 token 是 t13vrt0000026aes-att
+# （tvdivq00000014nn-att 已失效，會回 404 HTML）。whole_day xlsx 的現行公開路徑
+# 尚未實測；fetch_whole_day 在路徑核實前不該被當成可靠的成交量來源。
+MARKET_BASE = "https://www.jpx.co.jp/markets/derivatives/trading-volume/t13vrt0000026aes-att"
 
 SESSION_MAP = {"夜間": "night", "前場": "morning", "後場": "afternoon", "合計": "total"}
 
@@ -111,42 +114,68 @@ def parse_whole_day_volumes(xlsx_bytes: bytes, date: str = "", source_url: str =
     return out
 
 
-def parse_open_interest(xlsx_bytes: bytes, date: str = "", source_url: str = "") -> list[ContractOI]:
-    """best-effort 解析 open_interest.xlsx 的 per-contract volume + OI。
+# 凍結解析規則 W3.4-OI-1（2026-10-03 以 20261002open_interest.xlsx 實測驗證）：
+#   sheet = デリバティブ建玉残高状況；只用「右欄帶」（column index 7-11）。
+#   col7 = 產品名（僅區塊第一列有值；「日経225マイクロ」= Micro 區塊開頭）
+#   col8 = 限月 token（YYYY年M月限）或「合計」（區塊結束）
+#   col9 = 取引高（成交量）／col10 = 当日建玉残高／col11 = 前日比
+#   驗證：2026-10-02 檔 Micro 區塊 202610=75668, 202611=2028, 202612=861495,
+#   202703=10439，與官方合計列 949630 完全相符。
+OI_BAND_PRODUCT_COL = 7
+OI_BAND_MONTH_COL = 8
+OI_BAND_VOLUME_COL = 9
+OI_BAND_OI_COL = 10
+OI_BAND_CHANGE_COL = 11
 
-    產品 section header 有商品名；契約月 token 為「YYYY年MM月限」。
-    只歸屬到日經相關產品（Micro/mini/Large），遇到其他產品 header 即停止歸屬。
+
+def parse_open_interest(xlsx_bytes: bytes, date: str = "", source_url: str = "",
+                        product: str | None = None) -> list[ContractOI]:
+    """依 W3.4-OI-1 凍結規則解析 open_interest.xlsx 的 per-contract volume + OI。
+
+    - 只讀右欄帶（col 7-11）；產品記號不認識時立即停止歸屬（不會把
+      ミニTOPIX 等其他產品的月份列誤歸到日經產品）。
+    - (product, contract_month) 只取檔案內第一次出現。
+    - `product` 傳入時只回傳該產品的列（如 Nikkei 225 Micro Futures）。
     """
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes), data_only=True)
     ws = wb["デリバティブ建玉残高状況"]
     out: list[ContractOI] = []
-    current_product = None
+
+    def cell(i: int):
+        return row[i] if len(row) > i else None
+
+    current: str | None = None
+    seen: set[tuple[str, str]] = set()
     for row in ws.iter_rows(values_only=True):
-        cells = ["" if c is None else str(c).strip() for c in row]
-        for cell in cells:
-            if not cell:
-                continue
-            p = _nikkei_product(cell)
-            if p:
-                current_product = p
-                continue
-            # 其他產品 header（含 Futures/先物/オプション 但不是日經）→ 停止歸屬
-            if _is_non_nikkei_header(cell):
-                current_product = None
-        if current_product is None:
+        marker = str(cell(OI_BAND_PRODUCT_COL)).strip() if cell(OI_BAND_PRODUCT_COL) else ""
+        if marker:
+            current = _nikkei_product(marker)  # 不認識 → None，停止歸屬
+        if current is None:
             continue
-        for i, cell in enumerate(cells):
-            if cell.endswith("月限"):
-                month = _contract_month(cell)
-                if month is None:
-                    continue
-                vol = _i(cells[i + 1]) if i + 1 < len(cells) else None
-                oi = _i(cells[i + 2]) if i + 2 < len(cells) else None
-                chg = _i(cells[i + 3]) if i + 3 < len(cells) else None
-                out.append(ContractOI(product=current_product, contract_month=month,
-                                      volume=vol, open_interest=oi, oi_change=chg,
-                                      date=date, source_url=source_url))
+        month_cell = str(cell(OI_BAND_MONTH_COL)).strip() if cell(OI_BAND_MONTH_COL) else ""
+        if not month_cell:
+            continue
+        if month_cell == "合計":
+            current = None
+            continue
+        month = _contract_month(month_cell)
+        if month is None:
+            continue
+        if (current, month) in seen:
+            continue
+        seen.add((current, month))
+        if product is not None and current != product:
+            continue
+        out.append(ContractOI(
+            product=current,
+            contract_month=month,
+            volume=_i(cell(OI_BAND_VOLUME_COL)),
+            open_interest=_i(cell(OI_BAND_OI_COL)),
+            oi_change=_i(cell(OI_BAND_CHANGE_COL)),
+            date=date,
+            source_url=source_url,
+        ))
     return out
 
 
@@ -194,10 +223,23 @@ class JPXMarketDataProvider:
         raw = getter(self.whole_day_url(d))
         return parse_whole_day_volumes(raw, date=d, source_url=self.whole_day_url(d))
 
-    def fetch_open_interest(self, d: str, getter=None) -> list[ContractOI]:
+    def fetch_open_interest(self, d: str, getter=None,
+                            product: str | None = None) -> list[ContractOI]:
         if getter is None:
             import httpx
             def getter(u):
                 return httpx.get(u, timeout=30, follow_redirects=True).content
         raw = getter(self.open_interest_url(d))
-        return parse_open_interest(raw, date=d, source_url=self.open_interest_url(d))
+        return parse_open_interest(raw, date=d, source_url=self.open_interest_url(d),
+                                   product=product)
+
+    def save_open_interest(self, d: str, rows: list[ContractOI]) -> Path:
+        df = pd.DataFrame([r.model_dump() for r in rows])
+        path = self.lake.raw_path("jpx", "open_interest", "OSE", "all",
+                                  int(d[:4]), int(d[4:6]), f"open_interest_{d}.parquet")
+        atomic_write(path, df.to_parquet(index=False))
+        return path
+
+    def open_interest_path(self, d: str) -> Path:
+        return self.lake.raw_path("jpx", "open_interest", "OSE", "all",
+                                  int(d[:4]), int(d[4:6]), f"open_interest_{d}.parquet")
