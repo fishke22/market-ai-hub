@@ -2,6 +2,23 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-03 void the mis-bound canonical forward sample (operator decision, executed)
+
+- **Append-only void mechanism added** to `PredictionAuditDB`: a new `void_events` table
+  (prediction_id, reason, voided_at) plus `void_prediction()`, `voided_prediction_ids()`,
+  `is_voided()`. No UPDATE/DELETE on predictions/factor_lineage/outcomes - the frozen-row
+  contract is preserved; the void lives in its own append-only table.
+- P5 `p5_forward_evidence_summary` excludes voided ids from `canonical_prediction_count`.
+- **Executed (operator-authorized)**: `v2h_pred_65c4a158258e0334` (canonical P5 precommit,
+  origin 2026-10-02 00:05Z, bound to JNU2610/202610) was voided with reason
+  `BOUND_TO_UNTRADABLE_CONTRACT_MONTH_202610_JNU2610_OPERATOR_VOID_DECISION`. The row is
+  preserved for audit; `canonical_prediction_count` went 1 -> 0, coverage 0.0. That origin
+  is permanently lost (no backfill, no re-precommit after the fact).
+- The other two forward predictions (2026-09-30 origin, bound to JNU2612/202612) are
+  unaffected and remain valid.
+- Verified: full offline profile **2312 passed, 2 skipped, 35 deselected, exit 0**.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-03 contract-month misalignment: broker-tradable month wins
 
 - **Real defect found via operator review**: the target-contract policy selected the

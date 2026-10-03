@@ -482,3 +482,50 @@ def test_forward_summary_counts_only_p5_and_never_promotes(db):
     assert summary["TRADING_EDGE"] is False
     assert summary["automatic_model_promotion"] is False
     assert summary["strong_direction_allowed"] is False
+
+
+def test_void_prediction_marks_row_and_scope_excludes_it(tmp_path):
+    """Operator intervention: a wrong-contract prediction is voided, not deleted."""
+    from datetime import datetime, timezone
+
+    import pandas as pd
+
+    from market_ai_hub.research.v2 import prediction_audit as PA
+    from market_ai_hub.research import accuracy_v2_p5_engine as P5
+
+    db = PA.PredictionAuditDB(tmp_path / "audit.duckdb")
+    lin = PA.make_lineage(
+        economic_factor_id="JP_EQUITY", representation_id="OSE_MICRO_FUTURES",
+        instrument_type="FUTURE", representation_relation="DIRECT",
+        temporal_role="PREVIOUS_SESSION_REFERENCE", resolved_role="PREVIOUS_SESSION_REFERENCE",
+        venue_id="OSE_DERIVATIVES", session_status="CLOSED", trading_date="2026-10-01",
+        event_timestamp=datetime(2026, 10, 1, 6, 45, tzinfo=timezone.utc),
+        available_at=datetime(2026, 10, 2, 0, 4, tzinfo=timezone.utc),
+        contract_code="JNU2610", contract_month="202610",
+    )
+    art = PA.make_forecast_artifact(
+        prediction_id="", artifact_type="POINT", value=68850.0,
+        calibration_domain="PRICE", label_type="RETURN_1D",
+        generated_at=datetime(2026, 10, 2, 0, 0, tzinfo=timezone.utc))
+    pred = PA.make_prediction(
+        [lin], [art],
+        target_family="OSAKA_MICRO", instrument="JNU",
+        horizon="NEXT_PUBLISHED_OBSERVATION", forecast_origin=datetime(2026, 10, 2, 0, 5, tzinfo=timezone.utc),
+        feature_cutoff_timestamp=datetime(2026, 10, 2, 0, 5, tzinfo=timezone.utc),
+        model="accuracy_v2_p4_baseline", model_version="v1",
+        sample_origin="FORWARD_PRECOMMITTED")
+    from dataclasses import replace
+
+    db.append_prediction_bundle(pred, [lin], [replace(art, prediction_id=pred.prediction_id)])
+
+    db.void_prediction(pred.prediction_id, reason="BOUND_TO_UNTRADABLE_CONTRACT_MONTH_202610")
+
+    # append-only: the row is preserved, identity intact; the void lives in void_events
+    assert db.is_voided(pred.prediction_id) is True
+    assert db.voided_prediction_ids() == [pred.prediction_id]
+    preserved = db.get_prediction(pred.prediction_id)
+    assert preserved.prediction_id == pred.prediction_id
+    with pytest.raises(PA.PredictionAuditError):
+        db.void_prediction(pred.prediction_id, reason="again")  # no double void
+    with pytest.raises(PA.UnknownPredictionError):
+        db.void_prediction("v2h_pred_missing", reason="x")

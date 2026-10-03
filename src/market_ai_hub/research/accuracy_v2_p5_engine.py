@@ -200,6 +200,7 @@ def _p5_scope(pred: PA.PredictionRecord) -> bool:
         and pred.model == MODEL_NAME
         and pred.model_version == MODEL_VERSION
         and pred.sample_origin == SAMPLE_ORIGIN
+        and pred.status != "VOID"
     )
 
 
@@ -685,10 +686,12 @@ def p5_forward_evidence_summary(
     else:
         audit_path = PA.default_audit_db_path()
         audit = PA.PredictionAuditDB(audit_path, read_only=True) if audit_path.exists() else None
+    voided = set(audit.voided_prediction_ids()) if audit is not None else set()
     predictions = (
         [
             pred for pid in audit.list_prediction_ids()
-            if (pred := audit.get_prediction(pid)) is not None and _p5_scope(pred)
+            if (pred := audit.get_prediction(pid)) is not None
+            and _p5_scope(pred) and pid not in voided
         ]
         if audit is not None else []
     )

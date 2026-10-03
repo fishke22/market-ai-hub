@@ -596,6 +596,15 @@ class PredictionAuditDB:
                     forecast_artifact_id VARCHAR,
                     payload_json VARCHAR NOT NULL, created_at TIMESTAMP NOT NULL
                 )""")
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS void_events (
+                    prediction_id VARCHAR PRIMARY KEY,
+                    reason VARCHAR NOT NULL,
+                    voided_at TIMESTAMP NOT NULL
+                )
+                """
+            )
 
     # ── validation helpers ──
     @staticmethod
@@ -836,6 +845,42 @@ class PredictionAuditDB:
                 "SELECT prediction_id FROM predictions ORDER BY created_at, prediction_id").fetchall()]
 
     # ── integrity ──
+    def void_prediction(self, prediction_id: str, *, reason: str) -> str:
+        """Operator-only evidence intervention: mark a prediction VOID with a recorded reason.
+
+        Append-only: the prediction row itself is never modified. A row in void_events makes
+        the prediction stop counting as evidence wherever voided ids are excluded. Used when a
+        prediction was bound to the wrong contract month and must never be graded.
+        """
+        if not str(reason or "").strip():
+            raise PredictionAuditError("void reason is required")
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT prediction_id FROM predictions WHERE prediction_id = ?",
+                [prediction_id]).fetchone()
+            if row is None:
+                raise UnknownPredictionError(
+                    f"{BLOCKED_UNKNOWN_PREDICTION}: {prediction_id}")
+            if con.execute("SELECT 1 FROM void_events WHERE prediction_id = ?",
+                           [prediction_id]).fetchone() is not None:
+                raise PredictionAuditError(f"PREDICTION_ALREADY_VOIDED: {prediction_id}")
+            con.execute(
+                "INSERT INTO void_events (prediction_id, reason, voided_at) VALUES (?, ?, ?)",
+                [prediction_id, str(reason), _utc_naive(datetime.now(timezone.utc))])
+        return prediction_id
+
+    def voided_prediction_ids(self) -> list[str]:
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT prediction_id FROM void_events ORDER BY voided_at").fetchall()
+        return [str(r[0]) for r in rows]
+
+    def is_voided(self, prediction_id: str) -> bool:
+        with self._conn() as con:
+            return con.execute(
+                "SELECT 1 FROM void_events WHERE prediction_id = ?",
+                [prediction_id]).fetchone() is not None
+
     def verify_prediction(self, prediction_id: str) -> bool:
         with self._conn() as con:
             row = con.execute("SELECT payload_json FROM predictions WHERE prediction_id = ?",
