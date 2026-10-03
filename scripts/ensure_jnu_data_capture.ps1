@@ -41,7 +41,10 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
         artifact_refresh = $artifactRefresh
     }
     $tmp = $StatePath + ".tmp"
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $tmp -Encoding UTF8
+    # BOM-free UTF-8: PowerShell 5.1 Set-Content -Encoding UTF8 prepends a BOM, which
+    # breaks strict JSON readers (Python json.load).
+    [System.IO.File]::WriteAllText($tmp, ($payload | ConvertTo-Json -Depth 6),
+                                   (New-Object System.Text.UTF8Encoding($false)))
     Move-Item -Force -LiteralPath $tmp -Destination $StatePath
 
     $runtimeBuild = ""
@@ -121,7 +124,10 @@ function Write-WatchdogState($Status, $Action, $Classification, $Reason) {
     }
 
     $tmp = $StatePath + ".tmp"
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $tmp -Encoding UTF8
+    # BOM-free UTF-8: PowerShell 5.1 Set-Content -Encoding UTF8 prepends a BOM, which
+    # breaks strict JSON readers (Python json.load).
+    [System.IO.File]::WriteAllText($tmp, ($payload | ConvertTo-Json -Depth 6),
+                                   (New-Object System.Text.UTF8Encoding($false)))
     Move-Item -Force -LiteralPath $tmp -Destination $StatePath
 }
 

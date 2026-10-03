@@ -2,6 +2,25 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-03 automation hygiene: no more terminal flashes, live watchdog
+
+- **Root cause of the auto-opening/closing terminals**: four scheduled tasks ran their
+  python/powershell payloads directly (no hidden wrapper), and a fifth pointed at a script
+  that did not exist. Fixed:
+  - all 7 MARKET_AI_HUB scheduled tasks now run through `scripts/run-hidden.vbs`
+    (wscript + SW_HIDE at process creation) and have `Settings.Hidden = true`;
+  - the missing `scripts/watch_yuanta_live_recorder.ps1` was recreated: it starts the
+    recorder only when `check_yuanta_recorder_owner` says `NO_RUNNING_OWNER`; all safety
+    stays inside `start_yuanta_live_recorder.ps1`, and the watchdog never stops, never
+    relogs in, and never touches a healthy/degraded owner (the recorder's own bounded
+    stall recovery owns that).
+- **UTF-8 BOM**: `ensure_jnu_data_capture.ps1` wrote `automation_watchdog.json` with
+  PowerShell 5.1's BOM, which breaks strict JSON readers. Both writers now emit BOM-free
+  UTF-8 and the existing file was rewritten once.
+- Verified: full offline profile **2310 passed, 2 skipped, 35 deselected, exit 0**;
+  watchdog dry-run returns `WATCHDOG_OK_*` with exit 0.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-02 (night) capture-gap audit + recorder lifecycle journal
 
 - **Missing capability**: the recorded store has holes, but nothing could tell a hole that
