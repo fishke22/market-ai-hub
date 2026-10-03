@@ -12,13 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # ── HIGH-5：contract selection determinism ──
 
-def test_front_contract_selection_deterministic():
+def test_front_contract_selection_prefers_broker_month(monkeypatch):
+    """Vendor-independent: pin the broker list, then prove the selector uses it."""
     from market_ai_hub.packet.builder import _select_front_contract
+    from market_ai_hub.integrations.yuanta import resolver
+
+    monkeypatch.setattr(resolver, "broker_tradable_contract_month",
+                        lambda asof=None: "202612")
 
     contracts = ["202703", "202610", "202612", "202611"]
     # Policy: the broker-tradable month wins, never the earliest official month. The broker
-    # (FunctionList) lists JNU2612/JNU2703, so the front is 202612 even though 202610/202611
-    # appear in the official file first.
+    # lists JNU2612/JNU2703, so the front is 202612 even though 202610/202611 appear first.
     assert _select_front_contract(contracts) == "202612"
     import random
 
@@ -27,9 +31,12 @@ def test_front_contract_selection_deterministic():
         assert _select_front_contract(contracts) == "202612"
 
 
-def test_front_contract_not_far_month():
+def test_front_contract_not_far_month(monkeypatch):
     from market_ai_hub.packet.builder import _select_front_contract
+    from market_ai_hub.integrations.yuanta import resolver
 
+    monkeypatch.setattr(resolver, "broker_tradable_contract_month",
+                        lambda asof=None: "202612")
     # Official months include untradable 202610/202611; the broker-tradable front is 202612.
     assert _select_front_contract(["202610", "202611", "202612", "202703"]) == "202612"
 
