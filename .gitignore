@@ -144,3 +144,5 @@ data/diagnostics/
 data/validation_samples/
 
 data/live/
+# P5 cloud-sync runtime state (refreshed by the scheduled task)
+data/cloud/
