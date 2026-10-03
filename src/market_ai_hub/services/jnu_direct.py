@@ -332,8 +332,13 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
     latest_date = str(df["date"].max())
     latest = df[df["date"].eq(latest_date)]
     if not contract_month:
-        valid = sorted(c for c in latest["contract_month"].unique() if len(c) == 6 and c.isdigit())
-        contract_month = valid[0] if valid else ""
+        # Target contract policy: the broker-tradable month wins. JPX publishes rows for
+        # months the broker never lists (202610/202611), so the old "earliest month" rule
+        # silently anchored the whole analysis on an untradable contract.
+        from market_ai_hub.integrations.yuanta.resolver import select_target_contract_month
+
+        contract_month, contract_source = select_target_contract_month(
+            latest["contract_month"].unique())
     exact = df[df["contract_month"].eq(str(contract_month))].copy()
     exact = exact.sort_values("date")
     if exact.empty:
@@ -341,6 +346,7 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
             "status": "CONTRACT_HISTORY_NOT_AVAILABLE",
             "contract_month": contract_month,
             "latest_official_date": latest_date,
+            "contract_source": contract_source,
         }
 
     idx = pd.to_datetime(exact["date"], errors="coerce")
@@ -352,6 +358,7 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
     series = pd.Series(exact["settlement"].astype(float).to_numpy(), index=pd.DatetimeIndex(idx), name="settlement")
     meta = {
         "status": "OK",
+        "contract_source": contract_source,
         "contract_month": str(contract_month),
         "quote_code": f"JNU{str(contract_month)[2:]}" if len(str(contract_month)) == 6 else "JNU",
         "sample_count": int(len(series)),

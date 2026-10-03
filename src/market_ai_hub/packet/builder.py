@@ -49,8 +49,12 @@ def _now() -> datetime:
 
 def _select_front_contract(contracts: list[str]) -> str:
     """FRONT_NEAREST_LISTED：選最早到期（YYYYMM 字串 min），deterministic，不依 row order。"""
-    valid = sorted({str(c) for c in contracts if str(c).isdigit() and len(str(c)) == 6})
-    return valid[0] if valid else ""
+    # Broker-tradable month wins; JPX also publishes months the broker never lists
+    # (202610/202611), so "earliest listed" anchored the packet on an untradable contract.
+    from market_ai_hub.integrations.yuanta.resolver import select_target_contract_month
+
+    month, _source = select_target_contract_month(contracts)
+    return month
 
 
 def _load_latest_micro_settlement() -> dict | None:

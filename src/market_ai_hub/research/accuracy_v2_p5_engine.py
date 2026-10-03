@@ -183,11 +183,13 @@ def _select_contract_month(receipts: pd.DataFrame) -> str:
     if not target:
         return ""
     target_date = pd.Timestamp(target).date()
-    for month in months:
-        expiry = ose_last_trading_date(int(month[:4]), int(month[4:]))
-        if target_date <= expiry:
-            return month
-    return ""
+    from market_ai_hub.integrations.yuanta.resolver import select_target_contract_month
+
+    # Broker-tradable month wins; the old earliest-month rule anchored forward registration
+    # on official months (202610/202611) the broker never lists.
+    month, _source = select_target_contract_month(latest["contract_month"].unique(),
+                                                  asof=target_date)
+    return month
 
 
 def _p5_scope(pred: PA.PredictionRecord) -> bool:

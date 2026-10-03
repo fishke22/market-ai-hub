@@ -117,6 +117,59 @@ def select_nearest_valid(codes, pattern: str, last_trading_date_fn, asof: date |
 
 
 # ── authoritative source loading ──
+def broker_tradable_contract_month(asof: date | None = None) -> str | None:
+    """YYYYMM of the nearest broker-listed OSE Micro contract whose expiry >= asof.
+
+    The broker list (FunctionList) is the ground truth for what is actually tradable. JPX may
+    publish settlement rows for months the broker never lists (e.g. 202610/202611), so "earliest
+    month in the official file" is NOT a valid target-selection policy. None when the vendor
+    file is unavailable.
+    """
+    codes = load_ose_quote_codes()
+    code = select_nearest_valid(
+        codes, OSE_QUOTE_CODE_PATTERNS["OSE_NIKKEI225_MICRO_FUTURES"],
+        ose_last_trading_date, asof)
+    if not code:
+        return None
+    m = re.fullmatch(OSE_QUOTE_CODE_PATTERNS["OSE_NIKKEI225_MICRO_FUTURES"], code)
+    return f"20{m.group(1)}{m.group(2)}"
+
+
+def select_target_contract_month(official_months, asof: date | None = None) -> tuple[str, str]:
+    """(month, source) - the SINGLE target-contract selection policy.
+
+    The settlement anchor, research history, forward registration and intraday quotes must all
+    bind the same month, and it must be one the broker actually lists. Rules, in order:
+
+    1. Broker FunctionList available and it lists a month that also exists in the official
+       file -> that month (BROKER_TRADABLE_FUNCTIONLIST).
+    2. Broker list available but its month is not in the official file yet -> nearest unexpired
+       official month, flagged BROKER_MONTH_NOT_YET_IN_FILE.
+    3. Broker list unavailable -> nearest unexpired official month, flagged
+       FUNCTIONLIST_UNAVAILABLE (tradability unverified).
+
+    "Nearest unexpired" replaces the old "earliest month" rule, which wrongly selected official
+    months (202610/202611) that the broker never listed.
+    """
+    asof = asof or date.today()
+    months = sorted({str(m) for m in official_months if len(str(m)) == 6 and str(m).isdigit()})
+    if not months:
+        return "", "NO_OFFICIAL_MONTHS"
+
+    def _nearest_unexpired() -> str:
+        for month in months:
+            if ose_last_trading_date(int(month[:4]), int(month[4:])) >= asof:
+                return month
+        return months[-1]  # all expired: keep the last published one, explicitly flagged
+
+    tradable = broker_tradable_contract_month(asof)
+    if tradable is not None:
+        if tradable in months:
+            return tradable, "BROKER_TRADABLE_FUNCTIONLIST"
+        return _nearest_unexpired(), "OFFICIAL_NEAREST_UNEXPIRED_BROKER_MONTH_NOT_YET_IN_FILE"
+    return _nearest_unexpired(), "OFFICIAL_NEAREST_UNEXPIRED_FUNCTIONLIST_UNAVAILABLE"
+
+
 def function_list_path() -> Path | None:
     """Locate the newest vendor FunctionList.xlsx (read-only)."""
     root = Path(__file__).resolve().parents[4] / "vendor" / "yuanta_spark"
