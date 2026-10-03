@@ -757,7 +757,7 @@ def run_ts_validation(symbol: str = "^N225", period: str = "1y", n_folds: int = 
 def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "public") -> dict:
     """大阪日經225微型期貨（JNU）直接分析。
 
-    JNU / JNU2610 / JNU2612 都是大阪日經225微型期貨。
+    JNU 是大阪日經225微型期货；目标合約月以元大掛牌的可交易月為準（目前 JNU2612/JNU2703）。JPX官方檔中的其他到期月（例如 JNU2610）不一定是元大掛牌可交易的月份。
     public 模式只回一般使用者看得懂的中文摘要；audit 才回技術欄位。
     價格模型優先使用 JPX/OSE 官方 Micro 實際限月清算價，不用 ^N225 冒充 Micro。
     """

@@ -2,6 +2,34 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-03 contract-month misalignment: broker-tradable month wins
+
+- **Real defect found via operator review**: the target-contract policy selected the
+  EARLIEST month in the official JPX settlement file, so the whole settlement anchor +
+  model input were bound to 202610 (October, untradable at Yuanta) while the broker only
+  lists JNU2612 (December) and JNU2703 (March) and the recorder's tick line subscribes the
+  December contracts. The model stance even flipped (bearish on October vs neutral on
+  December) — a direct proof that the month choice corrupts model inputs.
+- **Fix**: single policy in `integrations/yuanta/resolver.py`:
+  `broker_tradable_contract_month()` (nearest FunctionList-listed OSE Micro contract whose
+  expiry >= asof) and `select_target_contract_month(official_months, asof)` which returns
+  `(month, source)` with an explicit source tag: `BROKER_TRADABLE_FUNCTIONLIST` /
+  `OFFICIAL_NEAREST_UNEXPIRED_BROKER_MONTH_NOT_YET_IN_FILE` /
+  `OFFICIAL_NEAREST_UNEXPIRED_FUNCTIONLIST_UNAVAILABLE`. All three selectors now use it:
+  `jnu_direct.load_direct_micro_settlements` (adds `contract_source` to meta),
+  `packet.builder._select_front_contract`, `accuracy_v2_p5_engine._select_contract_month`.
+- **Verified**: settlement anchor, quote_code and continuity now report 202612 / JNU2612 /
+  68,650 (was 202610 / JNU2610 / 68,485). Tool description no longer implies JNU2610 is a
+  usable target.
+- **Evidence state**: 3 forward predictions exist; two (last_price_naive,
+  beta_bernoulli_terminal_above_source_close, origin 2026-09-30) are correctly bound to
+  JNU2612; the canonical P5 precommit (v2h_pred_65c4a158258e0334, origin 2026-10-02 00:05Z,
+  model accuracy_v2_p4_baseline) is bound to JNU2610/202610. Its treatment (VOID vs
+  keep-and-flag vs supersede) is an operator evidence decision - DO NOT silently modify
+  audit rows.
+- Verified: full offline profile **2311 passed, 2 skipped, 35 deselected, exit 0**.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-03 automation hygiene: no more terminal flashes, live watchdog
 
 - **Root cause of the auto-opening/closing terminals**: four scheduled tasks ran their

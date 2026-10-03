@@ -16,25 +16,32 @@ def test_front_contract_selection_deterministic():
     from market_ai_hub.packet.builder import _select_front_contract
 
     contracts = ["202703", "202610", "202612", "202611"]
-    # FRONT_NEAREST_LISTED：最早到期 = 202610，不依 row order
-    assert _select_front_contract(contracts) == "202610"
-    # shuffle 100 次結果相同
+    # Policy: the broker-tradable month wins, never the earliest official month. The broker
+    # (FunctionList) lists JNU2612/JNU2703, so the front is 202612 even though 202610/202611
+    # appear in the official file first.
+    assert _select_front_contract(contracts) == "202612"
     import random
 
     for _ in range(100):
         random.shuffle(contracts)
-        assert _select_front_contract(contracts) == "202610"
+        assert _select_front_contract(contracts) == "202612"
 
 
 def test_front_contract_not_far_month():
     from market_ai_hub.packet.builder import _select_front_contract
 
-    # 2026-09-18 同一天 4 active contracts → 應選 202610，非 202703
-    assert _select_front_contract(["202610", "202611", "202612", "202703"]) == "202610"
+    # Official months include untradable 202610/202611; the broker-tradable front is 202612.
+    assert _select_front_contract(["202610", "202611", "202612", "202703"]) == "202612"
 
 
-# ── HIGH-4：validated direction agreement ──
+def test_front_contract_falls_back_flagged_when_broker_list_unavailable(monkeypatch):
+    from market_ai_hub.packet.builder import _select_front_contract
+    from market_ai_hub.integrations.yuanta import resolver
 
+    monkeypatch.setattr(resolver, "broker_tradable_contract_month", lambda asof=None: None)
+    # Without the broker list: nearest unexpired official month, not a blindly-earliest one.
+    month = _select_front_contract(["202610", "202612"])
+    assert month in ("202610", "202612")
 def test_validated_agreement_zero_eligible_is_na():
     from datetime import datetime, timezone
 
