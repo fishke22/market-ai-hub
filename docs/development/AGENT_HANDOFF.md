@@ -2,6 +2,48 @@
 
 ## Latest design: Accuracy v2 (2026-09-27)
 
+### 2026-10-03 (night) W3.4 preregistered pattern hypothesis: 新高+放量 → 5/20d 續漲
+
+- **Frozen preregistration**: `research/phase3/JNU_NH_VOL_BREAKOUT_PREREGISTRATION_v1.yaml`
+  (protocol_id `JNU-NH-VOL-BREAKOUT-1`, version 1, frozen BEFORE any W3.4 results; any change
+  requires a new file + incremented version). Frozen parameters: new-high lookback = **60
+  sessions**（exact-contract settlement history is only ~74 sessions, so the external 200d
+  descriptive study could not be extended literally — the 60 is this protocol's formal
+  parameter, documented in the yaml）、volume MA = 20、multiple = 1.5、horizons 5d/20d、
+  frozen stance value = 0.5 (UNCALIBRATED, NOT a fitted probability)、strictly-greater
+  success (tie = failure, matches W3.2-EP1)、lateness cap = 2 Tokyo calendar days past the
+  event session、discussion threshold = 20 settled origins per horizon、
+  promotion/calibration/production = FORBIDDEN.
+- **Engine**: `research/v2/breakout_forward.py` (schema W3.4, producer W3.4-EP1): frozen
+  trigger (`evaluate_trigger`, past-only official records), `precommit_breakout` (one
+  EVENT_PROBABILITY artifact per horizon, sealed label window = [origin, target 15:45 JST],
+  idempotent), `settle_breakout` (official settlement of the target date → TERMINAL 1/0),
+  `w34_evidence_summary` (counts only, status UNPROVEN, promotion FORBIDDEN). All rows enter
+  the shared PredictionAuditDB as FORWARD_PRECOMMITTED; nothing touches P5/W3.2 internals.
+- **Volume pipeline (was broken, now fixed + frozen)**: stale JPX URL token corrected
+  (`tvdivq00000014nn-att` → `t13vrt0000026aes-att`, verified by live download);
+  `parse_open_interest` rewritten to the frozen band rule **W3.4-OI-1** (right band cols 7-12;
+  verified: 20261002 file Micro block 202610=75,668 / 202611=2,028 / 202612=861,495 /
+  202703=10,439 sums exactly to the official 合計 949,630). New
+  `JPXMarketDataProvider.save_open_interest/open_interest_path` → parquet at
+  `data/raw/jpx/open_interest/OSE/all/<yyyy>/<mm>/open_interest_<d>.parquet`.
+- **Wiring**: `scripts/update_jpx_micro_direct.py`（daily 19:00 Taipei JPX sync; no new
+  scheduled task）now also (a) collects/backfills open_interest up to 45 calendar days,
+  (b) runs W3.4 settle→trigger→precommit; contract month via the single
+  `select_target_contract_month` policy. Both steps are fail-soft — the sync's exit-code
+  gate is unchanged. NOTE: no live network run was executed from the agent shell (its TLS
+  abort environment); first real exercise = next 19:00 sync in the scheduled env. Expected
+  first registerable event = trade date 2026-10-02 (Sunday run = D+2, cap 2) if the PC is
+  on; a Monday run would be D+3 → MISSED_ORIGIN by design (no reconstruction).
+- **Tests**: new `tests/test_w34_breakout_forward.py` (13 tests: frozen fields, 7 trigger
+  branches, precommit idempotency + artifact facts, settle up/down/immature, sync-script
+  fail-soft) + updated `tests/test_phase2g2.py` open-interest fixture to the band rule.
+  Agent-shell focused runs all green: w32/c23=47, w34=13, phase2g2=16, accuracy_v2/p5=119,
+  jnu=73. The combined broad run in the agent shell still trips the two known environmental
+  landmines (test_phase2qc native abort; recorder owner-mutex test hang while the live
+  recorder holds the mutex) — pre-existing, untouched by this change.
+- Claims unchanged: `PREDICTIVE_GAIN=false`, `CALIBRATED=false`, `TRADING_EDGE=false`.
+
 ### 2026-10-03 void the mis-bound canonical forward sample (operator decision, executed)
 
 - **Append-only void mechanism added** to `PredictionAuditDB`: a new `void_events` table

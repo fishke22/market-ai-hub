@@ -46,14 +46,15 @@ def _make_whole_day_xlsx() -> bytes:
 
 
 def _make_oi_xlsx() -> bytes:
+    # W3.4-OI-1 凍結規則：右欄帶 col7=產品, col8=限月, col9=取引高, col10=建玉, col11=前日比
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "デリバティブ建玉残高状況"
-    ws.append(["日経225マイクロ先物", None, None, None])
-    ws.append(["2026年12月限", 687327, 54688, -5472, 60160])
-    ws.append(["2026年10月限", 58673, 7368, -390, 7758])
-    ws.append(["TOPIX Futures", None, None, None])  # 非日經 header → 停止歸屬
-    ws.append(["2026年12月限", 999, 999, 0, 0])
+    ws.append([None] * 7 + ["日経225マイクロ", "2026年10月限", 75668, 8353, 351, 8002])
+    ws.append([None] * 7 + [None, "2026年12月限", 861495, 58201, -8460, 66661])
+    ws.append([None] * 7 + [None, "合計", None, None, None, None])
+    ws.append([None] * 7 + ["ミニTOPIX", "2026年12月限", 999, 999, 0, 0])  # 非日經 → 停止歸屬
+    ws.append([None] * 7 + [None, "2027年03月限", 5, 37, 1, 37])
     buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
 
 
@@ -107,8 +108,10 @@ def test_JPX_xlsx_whole_day_parser():
 def test_JPX_open_interest_parser():
     ois = parse_open_interest(_make_oi_xlsx(), date="20260918")
     micro = [o for o in ois if "Micro" in o.product]
-    assert len(micro) == 2  # 2 個契約月；TOPIX 之後停止歸屬
-    assert micro[0].open_interest == 54688
+    assert len(micro) == 2  # 2 個契約月；ミニTOPIX 之後停止歸屬、不誤認
+    assert micro[0].contract_month == "202610" and micro[0].volume == 75668
+    assert micro[1].contract_month == "202612" and micro[1].open_interest == 58201
+    assert len(ois) == 2  # 非日經產品整塊被排除
 
 
 # ---------- 4: investor flow ----------

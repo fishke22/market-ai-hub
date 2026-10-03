@@ -1,0 +1,102 @@
+# JNU 新高+放量正向延續假說 — 前向預先登記 v1（FROZEN BEFORE ANY RESULTS）
+# 任何參數/定義/policy 變更都必須開新檔案並把 protocol_version 加 1。
+# 本檔案凍結於 2026-10-03：任何 W3.4 前向結果都不得回改此檔。
+protocol_version: 1
+protocol_id: JNU-NH-VOL-BREAKOUT-1
+title: "JNU new-high + volume-expansion positive-continuation hypothesis (forward)"
+frozen_at: "2026-10-03"
+owner_package: market_ai_hub.research.v2.breakout_forward
+schema: "W3.4-EP1"
+
+purpose: >
+  預先登記的「研究假說」（HYPOTHESIS_ONLY）。假說內容：當正規目標
+  （大阪日經 225 微型期貨、契約月由 select_target_contract_month 單一政策決定、
+  即元大券商可交易月＝目前 202612）的官方結算價創「過去 N 個交易日新高」，
+  且當日該契約官方成交量放大到「過去 M 日均量」的 k 倍以上，
+  則 5 個與 20 個 OSE 衍生性商品交易日之後的官方結算價，
+  高於事件日結算價的機率（以實際對答案計）會高於零變動／擲硬幣基準。
+  證據以 FORWARD_PRECOMMITTED 稽核列累積；本假說不產生任何 promotion、
+  不產生校准機率、不產生交易建議。
+
+status:
+  validation_status: HYPOTHESIS_ONLY
+  calibrated_probability: FORBIDDEN
+  production_use: FORBIDDEN
+  trading_edge_claims: FORBIDDEN
+  ensemble_membership: FORBIDDEN
+
+definition:
+  instrument:
+    target_family: OSAKA_MICRO
+    instrument: JNU
+    contract_selection: select_target_contract_month   # 券商可交易月優先單一政策
+  price_series:
+    kind: OFFICIAL_SETTLEMENT
+    primary: "JPX rb 結算價 CSV → data/raw/jpx/settlement/OSE/all/**/rb*.parquet"
+    fallback_history: "JPX OSE 日報 micro 結算 → data/raw/jpx/ose_daily/OSE/Nikkei 225 Micro/**/micro_settlement_*.parquet"
+    dedupe_rule: 同一交易日以 rb CSV 為準；fallback 僅補史
+  volume_series:
+    kind: PER_CONTRACT_DAILY_VOLUME
+    source: "JPX デリバティブ建玉残高状況 open_interest.xlsx（官方、零付費）"
+    storage: "data/raw/jpx/open_interest/OSE/all/**/open_interest_*.parquet"
+    parser_rule: >
+      W3.4-OI-1：sheet=デリバティブ建玉残高状況；右欄帶 col7=產品名、
+      col8=限月 token（YYYY年M月限）或「合計」（區塊結束）、col9=取引高（成交量）、
+      col10=当日建玉残高、col11=前日比。產品記號不認識即停止歸屬；
+      (product, contract_month) 取檔案內第一次出現。
+    verified_example: >
+      20261002 檔 Micro 區塊：202610=75668、202611=2028、202612=861495、
+      202703=10439，與官方合計列 949630 完全相符。
+  event:
+    new_high_lookback_sessions: 60
+      # 說明：外部描述性研究常以 200 日（52 週）新高為準，但正規目標契約
+      # （元大可交易月）自身官方結算史只有 ~74 個交易日，200 日視窗不可行。
+      # 因此凍結為 60 個交易日（約一季）。此為本協議的正式參數，
+      # 並非外部 200 日研究的直接延伸。
+    volume_mean_sessions: 20
+    volume_multiple: 1.5
+    event_session_rule: >
+      事件日 = 當次夜間同步最新採集到的官方結算日；只允許該日為事件日，
+      其餘歷史全部必須早於事件日。錯過即永久錯過（MISSED_ORIGIN 記錄於狀態檔），
+      禁止事後補登。
+  horizons:
+    - sessions: 5
+      horizon_code: "5d"
+      event_definition_id: NH_VOL_BREAKOUT_POSITIVE_5D
+      label_type: TERMINAL_POSITIVE_5D
+    - sessions: 20
+      horizon_code: "20d"
+      event_definition_id: NH_VOL_BREAKOUT_POSITIVE_20D
+      label_type: TERMINAL_POSITIVE_20D
+  forecast:
+    stance: positive_continuation
+    artifact: EVENT_PROBABILITY
+    frozen_value: 0.5             # 未校准立場常數；不是擬合機率
+    calibration_status_at_origin: UNCALIBRATED
+    event_threshold_value: 事件日官方結算價
+    comparison: 嚴格大於才算成功（target settlement > threshold；平手算失敗），與 W3.2-EP1 一致
+  origin:
+    cadence: 每日 19:00 台北 JPX 同步執行（事件日結算與成交量都採集到的第一次執行）
+    lateness_cap_days: 2          # 事件日（東京日曆）起算，超過則不登記
+    label_window: "[origin_time, 目標交易日 15:45 JST 收盤]"
+
+evaluation:
+  metrics:
+    - settled_count_by_horizon
+    - hit_rate_by_horizon         # 正向 outcome / 已結算
+  baseline: zero_return_naive     # 無方向 edge 假設
+  discussion_threshold_settled_origins: 20   # 每 horizon；僅「可以討論」，絕不是 promotion
+  no_new_holdout: NONE            # 所有未來觀測都是前向證據
+  promotion_policy: FORBIDDEN     # 本假說永不自動晉升；任何後續決定需 operator 另行授權
+
+leakage_rules:
+  point_in_time: 觸發與預測所使用的一切輸入，都必須是 origin 之前已官方發布且已採集落盤的資料
+  no_future_fill: FORBIDDEN
+  no_retroactive_registration: FORBIDDEN
+  fail_closed: 事件日成交量缺檔 → 不登記（VOLUME_MISSING_EVENT_DAY），不是放行
+
+data_quality_notes:
+  - open_interest.xlsx 是「概算」檔；對帳一致性以該檔自己的合計列為準（已驗證 20261002）
+  - 成交量採集回填最久 45 個日曆日（約 30 個交易日，> volume_mean_sessions 暖機需求）
+  - 系統內並無更長的 per-contract 成交量歷史；21 世紀更久的「新高+放量」統計
+    只能引用外部描述性研究（不屬於本協議）
