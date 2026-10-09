@@ -75,7 +75,7 @@ pycparser==3.0
 pydantic==2.13.5
 pydantic-core==2.46.5
 pygments==2.21.0
-pyjwt==2.14.0
+pyjwt==2.15.0
 pyluach==2.3.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
