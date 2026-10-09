@@ -823,6 +823,11 @@ def analyze_jnu(horizon: str = "1d", contract_month: str = "", view: str = "publ
         "context_confidence_grade": continuity.get("context_confidence_grade"),
         "not_probability": True,
     }
+    public["資料來源與錄製說明"] = (
+        "本工具（Settlement Forecast）使用官方發布的限月清算價，不是本機錄製的逐筆行情；"
+        "本機錄製的 session 行情另見 analyze_jnu_trading_path，其「資料覆蓋」欄位會明示"
+        "系統有錄到的時段與其餘漏錄。"
+    )
     public["產品分層"] = {
         "本工具": "Settlement Forecast：NEXT_PUBLISHED_SETTLEMENT_OBSERVATION",
         "交易路徑": "另用 analyze_jnu_trading_path；只讀真正 JNU Micro session quote，不與 settlement target 混算",

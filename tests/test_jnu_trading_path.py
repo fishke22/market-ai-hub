@@ -253,6 +253,22 @@ def test_user_summary_never_calls_partial_night_observation_a_close(monkeypatch)
     assert summary["TRADING_EDGE"] is False
 
 
+def test_user_summary_surfaces_recorded_coverage_caveat(monkeypatch):
+    _patch_common(monkeypatch, "202610")
+    rows = pd.DataFrame(_raw_session(pm=True, start_hour=17, n=13, base=66200.0))
+    out = tp.build_jnu_trading_path_context(
+        now=datetime(2026, 9, 27, 12, tzinfo=UTC),
+        trade_rows=rows,
+    )
+    summary = tp.jnu_trading_path_user_summary(out)
+    cov = summary["資料覆蓋"]
+    assert "系統有錄到的" in cov
+    assert "其餘時段未錄" in cov
+    # 夜盤沒觀測到 06:00 JST 收盤邊界 → 必須標「部分錄到」
+    assert "部分錄到" in cov
+    assert "非盤中即時價" in cov
+
+
 def test_recent_parquet_loader_is_bounded(tmp_path):
     for i in range(10):
         (tmp_path / f"part-wal-{i:020d}.parquet").touch()

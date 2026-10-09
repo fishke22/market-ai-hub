@@ -96,6 +96,7 @@ DATA ──> HISTORICAL ──> CAUSAL ──> ECONOMIC ──> FORWARD ──> 
 - 大阪日經 → `skills/osaka-micro-analysis/SKILL.md`
 - 台股 → `skills/taiwan-stock-v28/SKILL.md`
 - 模型驗證 → `skills/model-validation-audit/SKILL.md`
+- 金融分析代理（分析＋建議自我檢討＋維運）→ `skills/financial-analyst-agent/SKILL.md`
 
 優先遵守 Skill 內最新合法規則；Host 無法讀取 Skill 時，遵守本 prompt 等價原則。
 

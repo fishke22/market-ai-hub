@@ -5,12 +5,13 @@
 - **Skill**：固定分析流程（SKILL.md）。
 - **LLM**：理解與白話表達。
 
-## 三個 Skills
+## 四個 Skills
 | Skill | 用途 |
 |---|---|
 | `osaka-micro-analysis` | 大阪微型日經（TARGET = OSE Micro） |
 | `taiwan-stock-v28` | 台股（公司行動校正 + 證據分層） |
 | `model-validation-audit` | 模型驗證稽核 |
+| `financial-analyst-agent` | 金融分析代理（分析 + 建議帳本自我檢討，雙角色：分析／維運） |
 
 位置：`skills/{name}/SKILL.md`。
 

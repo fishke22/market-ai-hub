@@ -340,6 +340,8 @@ def test_analyze_jnu_mcp_refreshes_and_returns_human_view(monkeypatch):
     assert out["資料連續性"]["模式"] == "NORMAL_TARGET_DATA"
     assert "Settlement Forecast" in out["產品分層"]["本工具"]
     assert "analyze_jnu_trading_path" in out["產品分層"]["交易路徑"]
+    assert "官方發布的限月清算價" in out["資料來源與錄製說明"]
+    assert "analyze_jnu_trading_path" in out["資料來源與錄製說明"]
     assert "status" not in out
 
 

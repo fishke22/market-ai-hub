@@ -48,10 +48,10 @@ Live status: [docs/reference/current-status.md](docs/reference/current-status.md
   research ensemble.
 - **Validation** — chronological walk-forward, out-of-sample holdout, leakage guards, baselines,
   and honest metric semantics.
-- **MCP** — 21 tools (`health_check`, `get_analysis_packet`, `analyze_osaka_nikkei`,
-  `analyze_taiwan_stock`, `get_forward_test_status`, …).
-- **Skills** — 3 packaged agent skills (`osaka-micro-analysis`, `taiwan-stock-v28`,
-  `model-validation-audit`).
+- **MCP** — 27 tools (`health_check`, `get_analysis_packet`, `analyze_jnu`,
+  `analyze_osaka_nikkei`, `analyze_taiwan_stock`, `get_forward_test_status`, …).
+- **Skills** — 4 packaged agent skills (`osaka-micro-analysis`, `taiwan-stock-v28`,
+  `model-validation-audit`, `financial-analyst-agent`).
 
 ## Quick start
 

@@ -1240,6 +1240,49 @@ def build_jnu_trading_path_context(
     }
 
 
+def _compact_jst(iso: str | None) -> str:
+    """Format an ISO timestamp to a compact JST 'MM-DD HH:MM' string."""
+    if not iso:
+        return "?"
+    try:
+        ts = pd.Timestamp(iso)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize(JST)
+        return ts.tz_convert(JST).strftime("%m-%d %H:%M")
+    except Exception:
+        return str(iso)
+
+
+def _recorded_coverage(result: dict[str, Any]) -> str:
+    sessions = [
+        s
+        for s in (result.get("day_session"), result.get("night_session"))
+        if isinstance(s, dict) and s.get("last_event_at")
+    ]
+    if not sessions:
+        return "目前沒有錄到的 exact-Micro session 資料"
+    latest = max(sessions, key=lambda s: str(s.get("last_event_at") or ""))
+    label = "日盤" if str(latest.get("session")) == "DAY" else "夜盤"
+    text = (
+        f"系統有錄到的 {label}時段 "
+        f"{_compact_jst(latest.get('first_event_at'))}～{_compact_jst(latest.get('last_event_at'))}"
+        "（JST），其餘時段未錄"
+    )
+    if not bool(latest.get("coverage_complete")):
+        text += "；此為部分錄到，開／收盤邊界未必觀測到，不是完整 session"
+    return text
+
+
+def _coverage_caveat(result: dict[str, Any], *, live_verified: bool) -> str:
+    recorded = _recorded_coverage(result)
+    if live_verified:
+        return (
+            "最新價為經驗證的新鮮即時 callback；"
+            f"但市場結構（區間／前夜收盤）仍來自錄到的歷史時段——{recorded}"
+        )
+    return f"顯示值來自錄到的歷史 session observation，非盤中即時價——{recorded}"
+
+
 def jnu_trading_path_user_summary(result: dict[str, Any]) -> dict[str, Any]:
     """Plain-language view that keeps settlement and trading path separate."""
     settlement = result.get("settlement_forecast") or {}
@@ -1278,6 +1321,10 @@ def jnu_trading_path_user_summary(result: dict[str, Any]) -> dict[str, Any]:
             "目前有新鮮 exact-Micro callback"
             if price.get("TARGET_LATEST_PRICE_LIVE_NOW_VERIFIED")
             else "目前沒有經驗證的新鮮即時 callback；顯示值只能作歷史 session context"
+        ),
+        "資料覆蓋": _coverage_caveat(
+            result,
+            live_verified=bool(price.get("TARGET_LATEST_PRICE_LIVE_NOW_VERIFIED")),
         ),
         "前一夜收盤": (
             f"{float(night_close):,.0f} 點"
