@@ -467,8 +467,6 @@ def test_validate_history_degrades_when_a_model_is_governance_blocked(monkeypatc
 def test_explicit_contract_month_assigns_contract_source(monkeypatch):
     """#98 regression: 以非空 contract_month 呼叫 load_direct_micro_settlements
     不應拋 UnboundLocalError，且 meta.contract_source 應為 EXPLICIT_ARGUMENT。"""
-    import numpy as np
-
     from market_ai_hub.services import jnu_direct as jd
     from market_ai_hub.targets.jpx_daily import JPXOSEDailyReportProvider
 
