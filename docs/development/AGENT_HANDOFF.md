@@ -1,6 +1,6 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
-## Latest design: Accuracy v2 (2026-09-27)
+## Latest design: Accuracy v2 (2026-10-03)
 
 ### 2026-10-03 (night) W3.4 preregistered pattern hypothesis: 新高+放量 → 5/20d 續漲
 
@@ -500,7 +500,7 @@ Next bounded Taiwan work: accumulate genuinely new observation periods over time
 ## Historical PR72 handoff — superseded where contradicted above
 
 Facts below are verified against the repo, not chat memory. If they disagree with the repo, the repo
-wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-09-27 JNU historical prequential replay MERGED_POSTMERGE_VERIFIED on product build `03f1971c29d2f394`. Protocol/engine were preregistered and pushed first as commit `49f46ec6abc51723c18fe393ee90659f014c6e30`; the first one-use replay then sealed evidence `3f28cec82268445d7d377356` with 131 pseudo-forward origins (43 development / 40 validation / 48 final holdout). Feature commit `ea5805eb238c4b4d9246092b52c7719ccb600741` passed PR #72 CI #228 (`36294200271`) and merged to main `94d95f3a49521f666c1cc14d0006d13085669de0`; post-merge CherryStudio-style stdio public/audit smoke PASS on the same build and sealed evidence. Real W3.2 forward/event-probability settled samples remain 0 and market calibrated probability remains unavailable.
+wins. Refresh with `scripts/agent_bootstrap.ps1`. Last updated: 2026-10-03（W3.4 new-high+volume preregistration，見文首章節；本文件記錄的 build_id 為 `9834abbfdcb7fbee` @ HEAD `63a242a`）。Earlier update 2026-09-27: JNU historical prequential replay MERGED_POSTMERGE_VERIFIED on product build `03f1971c29d2f394`. Protocol/engine were preregistered and pushed first as commit `49f46ec6abc51723c18fe393ee90659f014c6e30`; the first one-use replay then sealed evidence `3f28cec82268445d7d377356` with 131 pseudo-forward origins (43 development / 40 validation / 48 final holdout). Feature commit `ea5805eb238c4b4d9246092b52c7719ccb600741` passed PR #72 CI #228 (`36294200271`) and merged to main `94d95f3a49521f666c1cc14d0006d13085669de0`; post-merge CherryStudio-style stdio public/audit smoke PASS on the same build and sealed evidence. Real W3.2 forward/event-probability settled samples remain 0 and market calibrated probability remains unavailable.
 
 ## Current repair checkpoint
 

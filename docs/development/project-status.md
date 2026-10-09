@@ -1,5 +1,7 @@
 # MARKET_AI_HUB — PROJECT STATUS
 
+- build_id：**9834abbfdcb7fbee**（2026-10-09 @ HEAD `63a242a` 記錄。build_id 是 src/config 內容 hash，任何 src/config 變更都會讓此值過期 — 實際現行值以 `scripts/agent_bootstrap.ps1` 的 runtime identity 區塊為準，本列僅供 bootstrap 取樣。）
+
 ## 2026-10-03 (night) W3.4 新高+放量前向假說（operator authorized 施工）
 
 - 預先登記協議：`research/phase3/JNU_NH_VOL_BREAKOUT_PREREGISTRATION_v1.yaml`（JNU-NH-VOL-BREAKOUT-1 v1，凍結於 2026-10-03，早於任何結果；任何變更需要新檔+版號）。核心參數 60/20/1.5、horizons 5d/20d、立場常數 0.5（UNCALIBRATED）、promotion FORBIDDEN。
@@ -170,7 +172,7 @@
 
 [Accuracy v2](accuracy-v2-20260927/ACCURACY_V2_PROJECT_SOURCE.md) supersedes vNext model priorities. P0/P1/P2/P3-A/P3-B/P4/P5/P7 engineering is now **IMPLEMENTED**. P6 is conditional and remains blocked until its prerequisites exist; it is not required for engineering completion. P2 remains **NO_IMPROVEMENT / BASELINE_RETAINED**. The system currently passes the end-to-end readiness path for analysis and governed prediction, but there are still 0 settled P5 canonical origins, so predictive gain/calibration/trading-edge promotion remains unavailable.
 
-## Current override — 2026-09-27 Accuracy v2 product closeout
+## 歷史 override — 2026-09-27 Accuracy v2 product closeout（已 superseded，保留供稽核；下方 Current phase / Gate 各列為當時快照，非現行狀態）
 
 - Current phase: **DATA_CONTINUITY_READY / CAPABILITY_REGISTRY_READY / GOLDEN_ANSWER_GUARDS_READY / ACCURACY_V2_P7_ENGINEERING_PASS / READY_FOR_ANALYSIS_AND_GOVERNED_PREDICTION / P6_CONDITIONAL_BLOCKED_NONBLOCKING / IMMUTABLE_FORWARD_MONITOR_READY / WAITING_FOR_2026-09-28_CANONICAL_ORIGIN / BASELINE_RETAINED / FORWARD_ORIGIN_ACCUMULATION_REQUIRED / AUTO_PROMOTION_BLOCKED / P2_FINAL_NOT_OPENED / HPQ1_SEALED_BLOCKED_HORIZON_MISMATCH**.
 - 2026-10-02 修復：live recorder 連線中斷後的靜默死亡（session-aware liveness + bounded recovery）、無界 flush 迴圈、6.7e38 sentinel 誤判為價格；BLS 403 改為 typed provider block（不繞過）
