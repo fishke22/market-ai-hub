@@ -169,16 +169,37 @@ def test_mlflow_recording(tmp_path, monkeypatch):
 
 
 def test_v1_build_unchanged():
-    """V1 correctness contract：build_id 為 src/config 內容 hash，須格式合法且進程內自洽。
+    """V1 correctness contract：build_id 為 src/config 內容 hash，須格式合法且可獨立重算。
 
-    此處不釘死具體 hash：build_id 是 content-hash，任何 src/config 變更都會改變它，
+    不釘死 hash 的理由：build_id 是 content-hash，任何 src/config 變更都會改變它，
     硬編碼會讓每次合法改動都誤紅 CI（歷史已同步 3 次：871eb00/75d1f46/b13bba2）。
-    契約本身（16 位 hex、等於模組級 BUILD_ID、可被外部 Agent 校驗）才是要守護的。
-    """
-    from market_ai_hub.services.build_info import BUILD_ID, build_fingerprint
 
-    fp = build_fingerprint()
-    assert fp["build_id"] == BUILD_ID
+    但「不釘死值」不等於「不比對內容」——若只寫 build_fingerprint()["build_id"] == BUILD_ID，
+    兩邊同源自同一模組同一進程，結構上永遠為真，等於空斷言（指紋路徑全空也照樣綠）。
+    因此這裡對真實樹做獨立重算，確保指紋真的覆蓋 src/*.py 與 config/*，且與模組值一致。
+    """
+    import hashlib
+
+    from market_ai_hub.services import build_info as bi
+
+    fp = bi.build_fingerprint()
+
+    # 格式契約（外部 Agent 據此校驗）
     assert len(fp["build_id"]) == 16
     assert all(c in "0123456789abcdef" for c in fp["build_id"])
     assert fp["runtime_build_id"] == fp["build_id"]
+
+    # 內容契約：真實樹必須被指紋覆蓋，且 id 確實由其內容決定
+    paths = bi._fingerprint_paths()
+    assert paths, "fingerprint covers no source/config files"
+    assert any(p.suffix == ".py" for p in paths), "no src/**/*.py in fingerprint"
+    assert any(p.parent.name == "config" for p in paths), "no config/* in fingerprint"
+
+    # 獨立重算真實樹（複刻 _compute_build_id 的演算法，但不呼叫它）
+    h = hashlib.sha256()
+    for p in sorted(paths):
+        rel = p.relative_to(bi.SOURCE_ROOT).as_posix()
+        h.update(rel.encode("utf-8"))
+        h.update(p.read_bytes().replace(b"\r\n", b"\n"))
+    assert h.hexdigest()[:16] == fp["build_id"]
+    assert fp["build_id"] == bi.BUILD_ID

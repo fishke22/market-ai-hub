@@ -198,14 +198,11 @@ def test_sample_size_report():
 
 
 def test_v1_build_unchanged():
-    """V1 correctness contract：build_id 為 src/config 內容 hash，須格式合法且進程內自洽。
+    """V1 correctness contract：build_id 為 src/config 內容 hash。
 
-    不釘死具體 hash：見 tests/test_research.py::test_v1_build_unchanged 的說明。
+    不在本檔重複實作：契約斷言集中在 tests/test_research.py::test_v1_build_unchanged，
+    此處委託呼叫，維持單一維護點。
     """
-    from market_ai_hub.services.build_info import BUILD_ID, build_fingerprint
+    from tests.test_research import test_v1_build_unchanged as _contract
 
-    fp = build_fingerprint()
-    assert fp["build_id"] == BUILD_ID
-    assert len(fp["build_id"]) == 16
-    assert all(c in "0123456789abcdef" for c in fp["build_id"])
-    assert fp["runtime_build_id"] == fp["build_id"]
+    _contract()
