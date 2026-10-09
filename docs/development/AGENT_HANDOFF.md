@@ -1,5 +1,23 @@
 # MARKET_AI_HUB — AGENT HANDOFF (durable)
 
+## Standing rule: never hardcode the build_id in tests (2026-10-09, issue #92)
+
+- **Never pin a literal build_id in an assertion.** `build_id` is a sha256 over
+  `src/market_ai_hub/**/*.py` + `config/**/*.{yaml,yml,json}` (`services/build_info.py`), so
+  **every legitimate src/config change moves it**. A pinned literal turns each real fix into a
+  red CI run. This exact mistake was re-synced four times before being removed
+  (`871eb00` → `75d1f46` → `b13bba2` → removed by `b380387`, hardened by `fd7f9e9`).
+- **Assert the contract, not the value.** The correct shape
+  (`tests/test_research.py::test_v1_build_unchanged`, delegated to by `test_challengers_2d1.py`
+  and `test_tournament.py`): 16-char lowercase hex, `runtime_build_id == build_id`, the real
+  fingerprint paths are non-empty and cover `src/**/*.py` plus `config/*`, and the hash
+  **independently recomputes** to the module value.
+- **A self-comparison is not a test.** `build_fingerprint()["build_id"] == BUILD_ID` compares two
+  reads of the same module constant in the same process — it can never fail, even if the
+  fingerprint covers zero files. Always recompute from the source of truth.
+- **When a source change moves the build_id, change nothing in tests.** If a test goes red on a
+  build_id change, the test is wrong, not the build.
+
 ## Latest design: Accuracy v2 (2026-10-03)
 
 ### 2026-10-03 (night) W3.4 preregistered pattern hypothesis: 新高+放量 → 5/20d 續漲
