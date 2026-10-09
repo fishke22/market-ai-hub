@@ -169,7 +169,16 @@ def test_mlflow_recording(tmp_path, monkeypatch):
 
 
 def test_v1_build_unchanged():
-    """build_id 凍結：Phase 2H MCP 整合後新 build_id（含 V1 correctness contract）。"""
-    from market_ai_hub.services.build_info import build_fingerprint
+    """V1 correctness contract：build_id 為 src/config 內容 hash，須格式合法且進程內自洽。
 
-    assert build_fingerprint()["build_id"] == "a1e5775405ecc18c"
+    此處不釘死具體 hash：build_id 是 content-hash，任何 src/config 變更都會改變它，
+    硬編碼會讓每次合法改動都誤紅 CI（歷史已同步 3 次：871eb00/75d1f46/b13bba2）。
+    契約本身（16 位 hex、等於模組級 BUILD_ID、可被外部 Agent 校驗）才是要守護的。
+    """
+    from market_ai_hub.services.build_info import BUILD_ID, build_fingerprint
+
+    fp = build_fingerprint()
+    assert fp["build_id"] == BUILD_ID
+    assert len(fp["build_id"]) == 16
+    assert all(c in "0123456789abcdef" for c in fp["build_id"])
+    assert fp["runtime_build_id"] == fp["build_id"]

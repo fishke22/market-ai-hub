@@ -223,6 +223,14 @@ def test_gpu_cleanup():
 # ── V1 / Phase2A-C 相容 ──
 
 def test_v1_build_unchanged():
-    from market_ai_hub.services.build_info import build_fingerprint
+    """V1 correctness contract：build_id 為 src/config 內容 hash，須格式合法且進程內自洽。
 
-    assert build_fingerprint()["build_id"] == "a1e5775405ecc18c"
+    不釘死具體 hash：見 tests/test_research.py::test_v1_build_unchanged 的說明。
+    """
+    from market_ai_hub.services.build_info import BUILD_ID, build_fingerprint
+
+    fp = build_fingerprint()
+    assert fp["build_id"] == BUILD_ID
+    assert len(fp["build_id"]) == 16
+    assert all(c in "0123456789abcdef" for c in fp["build_id"])
+    assert fp["runtime_build_id"] == fp["build_id"]
