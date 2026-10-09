@@ -462,3 +462,34 @@ def test_validate_history_degrades_when_a_model_is_governance_blocked(monkeypatc
     assert out["models"]["timesfm-3.0"]["mase"] is None
     assert out["overall"] == "HISTORICAL_UNVALIDATED"
     assert out["all_models_beat_last_price_naive"] is False
+
+
+def test_explicit_contract_month_assigns_contract_source(monkeypatch):
+    """#98 regression: 以非空 contract_month 呼叫 load_direct_micro_settlements
+    不應拋 UnboundLocalError，且 meta.contract_source 應為 EXPLICIT_ARGUMENT。"""
+    import numpy as np
+
+    from market_ai_hub.services import jnu_direct as jd
+    from market_ai_hub.targets.jpx_daily import JPXOSEDailyReportProvider
+
+    daily = pd.DataFrame([{
+        "product": "Nikkei 225 Micro",
+        "contract_month": "202612",
+        "date": "20261009",
+        "open": None, "high": None, "low": None, "close": None,
+        "volume": None, "settlement": 65000.0,
+        "source_url": "https://example.invalid/test",
+        "source_hash": "abc123",
+    }])
+    monkeypatch.setattr(
+        JPXOSEDailyReportProvider, "load",
+        lambda self, product="": daily,
+    )
+    monkeypatch.setattr(jd, "_current_settlement_frame",
+                        lambda: pd.DataFrame())
+
+    series, meta = jd.load_direct_micro_settlements("202612")
+    assert meta["contract_source"] == "EXPLICIT_ARGUMENT"
+    assert meta["contract_month"] == "202612"
+    assert meta["status"] == "OK"
+    assert len(series) == 1

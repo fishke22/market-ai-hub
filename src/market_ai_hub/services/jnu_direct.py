@@ -339,6 +339,8 @@ def load_direct_micro_settlements(contract_month: str = "") -> tuple[pd.Series, 
 
         contract_month, contract_source = select_target_contract_month(
             latest["contract_month"].unique())
+    else:
+        contract_source = "EXPLICIT_ARGUMENT"
     exact = df[df["contract_month"].eq(str(contract_month))].copy()
     exact = exact.sort_values("date")
     if exact.empty:
