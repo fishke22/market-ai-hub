@@ -16,3 +16,17 @@ Read this before doing anything. Do not trust stale chat memory (old HEAD / test
 
 Also: quote-only for Yuanta (NO ORDER / NO TRADING), never persist secrets, keep reports honest
 (cutoff/leakage gates machine-enforced, no fabricated values).
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live as GitHub issues on `fishke22/market-ai-hub` via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage roles use their default label strings (`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+single-context — one shared `CONTEXT.md` at the repo root + `docs/adr/`. See `docs/agents/domain.md`.
